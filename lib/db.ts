@@ -15,7 +15,7 @@ import {
   type UnitStatus,
 } from "@/lib/format"
 
-const SEED_VERSION = "1"
+const SEED_VERSION = "2"
 const DB_PATH = path.join(process.cwd(), "data", "deskulpt.sqlite")
 
 export type SessionUser = {
@@ -29,6 +29,7 @@ export type SessionUser = {
   serviceArea: string | null
   providerVerified: boolean
   tenantName: string | null
+  tenantKind: "landlord" | "platform" | null
 }
 
 export type UnitRecord = {
@@ -106,6 +107,7 @@ function mapUser(row: Record<string, unknown>): SessionUser {
     serviceArea: str(row, "service_area"),
     providerVerified: Number(row.provider_verified) === 1,
     tenantName: str(row, "tenant_name"),
+    tenantKind: (str(row, "tenant_kind") as "landlord" | "platform" | null) ?? null,
   }
 }
 
@@ -131,7 +133,7 @@ function mapUnit(row: Record<string, unknown>): UnitRecord {
 
 const USER_SQL = `
   SELECT u.id, u.name, u.email, u.role, u.tenant_id, u.company, u.trade,
-         u.service_area, u.provider_verified, t.name AS tenant_name
+         u.service_area, u.provider_verified, t.name AS tenant_name, t.kind AS tenant_kind
   FROM users u
   LEFT JOIN tenants t ON t.id = u.tenant_id
 `
@@ -142,7 +144,8 @@ function createSchema(db: Sql) {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       slug TEXT NOT NULL UNIQUE,
-      city TEXT NOT NULL
+      city TEXT NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'landlord'
     );
     CREATE TABLE users (
       id TEXT PRIMARY KEY,
@@ -332,14 +335,22 @@ type UnitSeed = {
 }
 
 function seed(db: Sql) {
-  const tenant = db.prepare("INSERT INTO tenants (id, name, slug, city) VALUES (?, ?, ?, ?)")
-  tenant.run("t_bbm", "BBM Waterman Inc.", "bbm-waterman", "Toronto")
-  tenant.run("t_harbour", "Harbourline Yards", "harbourline-yards", "Toronto")
+  const tenant = db.prepare(
+    "INSERT INTO tenants (id, name, slug, city, kind) VALUES (?, ?, ?, ?, ?)",
+  )
+  tenant.run("t_deskulpt", "DeSkulpt Inc.", "deskulpt", "Toronto", "platform")
+  tenant.run("t_bbm", "BBM Waterman Inc.", "bbm-waterman", "Toronto", "landlord")
+  tenant.run("t_harbour", "Harbourline Yards", "harbourline-yards", "Toronto", "landlord")
 
   const user = db.prepare(
     `INSERT INTO users (id, name, email, role, tenant_id, company, trade, service_area, provider_verified)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
+  user.run("u_avery", "Avery Quinn", "avery@deskulpt.example", "super_admin", "t_deskulpt", "DeSkulpt Inc.", null, null, 0)
+  user.run("u_sam", "Sam Rivera", "sam@deskulpt.example", "account_manager", "t_deskulpt", "DeSkulpt Inc.", null, null, 0)
+  user.run("u_priya", "Priya Nair", "priya@deskulpt.example", "service_manager", "t_deskulpt", "DeSkulpt Inc.", null, null, 0)
+  user.run("u_chris", "Chris Vogel", "chris@deskulpt.example", "property_manager", "t_deskulpt", "DeSkulpt Inc.", null, null, 0)
+  user.run("u_jordan", "Jordan Blake", "jordan@deskulpt.example", "merchandiser", "t_deskulpt", "DeSkulpt Inc.", null, null, 0)
   user.run("u_maya", "Maya Chen", "maya@apexlogistics.example", "applicant", null, "Apex Logistics", null, null, 0)
   user.run("u_devon", "Devon Hale", "devon@northline.example", "applicant", null, "Northline Distribution", null, null, 0)
   user.run("u_nadia", "Nadia Okonkwo", "nadia@bbmwaterman.example", "landlord_admin", "t_bbm", null, null, null, 0)
@@ -585,7 +596,13 @@ export function listSessionUsers() {
   return asRows(
     getDb()
       .prepare(
-        `${USER_SQL} ORDER BY CASE u.role WHEN 'applicant' THEN 0 WHEN 'landlord_admin' THEN 1 ELSE 2 END, u.name`,
+        `${USER_SQL}
+         ORDER BY CASE
+           WHEN u.role IN ('super_admin','account_manager','service_manager','property_manager','merchandiser') THEN 0
+           WHEN u.role = 'applicant' THEN 1
+           WHEN u.role = 'landlord_admin' THEN 2
+           ELSE 3
+         END, u.name`,
       )
       .all(),
   ).map(mapUser)
@@ -1539,3 +1556,428 @@ export function openApplicationTenants(userId: string) {
       .all(userId),
   ).map((row) => String(row.id))
 }
+
+export type ListingFilters = {
+  q?: string
+  tenantId?: string
+  area?: string
+  statuses?: UnitStatus[]
+  minSqft?: number
+  maxSqft?: number
+  minRate?: number
+  maxRate?: number
+  minDocks?: number
+  minDriveIns?: number
+  minClearHeight?: number
+  power?: string
+  hasFloorPlan?: boolean
+  hasMatterport?: boolean
+  hasPano?: boolean
+  sort?: "rate_asc" | "rate_desc" | "sqft_asc" | "sqft_desc" | "name"
+}
+
+export type ListingCard = {
+  unitId: string
+  code: string
+  status: UnitStatus
+  sqft: number
+  clearHeight: string
+  clearHeightFeet: number
+  docks: number
+  driveIns: number
+  power: string
+  ratePsf: number
+  monthlyCents: number
+  description: string
+  matterportUrl: string | null
+  hasPano: boolean
+  propertyId: string
+  propertyName: string
+  propertySlug: string
+  address: string
+  area: string
+  cityLine: string
+  floorPlanPath: string | null
+  tenantId: string
+  tenantName: string
+}
+
+export function listingFacets() {
+  const db = getDb()
+  const areas = asRows(
+    db.prepare("SELECT DISTINCT area FROM properties ORDER BY area").all(),
+  ).map((row) => String(row.area))
+  const landlords = asRows(
+    db
+      .prepare(
+        `SELECT id, name FROM tenants WHERE kind = 'landlord' ORDER BY name`,
+      )
+      .all(),
+  ).map((row) => ({ id: String(row.id), name: String(row.name) }))
+  return { areas, landlords }
+}
+
+/**
+ * Public listings search. Cookie-free on purpose.
+ */
+export function searchListings(filters: ListingFilters = {}): ListingCard[] {
+  const rows = asRows(
+    getDb()
+      .prepare(
+        `SELECT
+           u.id AS unit_id, u.code, u.status, u.sqft, u.clear_height, u.docks, u.drive_ins,
+           u.power, u.rate_psf, u.description, u.matterport_url,
+           p.id AS property_id, p.name AS property_name, p.slug AS property_slug,
+           p.address, p.area, p.city_line, p.floor_plan_path,
+           t.id AS tenant_id, t.name AS tenant_name,
+           EXISTS(SELECT 1 FROM unit_media m WHERE m.unit_id = u.id AND m.kind = 'pano') AS has_pano
+         FROM units u
+         JOIN properties p ON p.id = u.property_id
+         JOIN tenants t ON t.id = u.tenant_id AND t.kind = 'landlord'`,
+      )
+      .all(),
+  )
+
+  const q = filters.q?.trim().toLowerCase() ?? ""
+  const statuses = filters.statuses?.length ? new Set(filters.statuses) : null
+
+  let cards = rows.map((row): ListingCard => {
+    const clearHeight = String(row.clear_height)
+    const feet = Number((clearHeight.match(/(\d+(?:\.\d+)?)/) ?? [0, "0"])[1])
+    const ratePsf = Number(row.rate_psf)
+    const sqftVal = Number(row.sqft)
+    return {
+      unitId: String(row.unit_id),
+      code: String(row.code),
+      status: String(row.status) as UnitStatus,
+      sqft: sqftVal,
+      clearHeight,
+      clearHeightFeet: feet,
+      docks: Number(row.docks),
+      driveIns: Number(row.drive_ins),
+      power: String(row.power),
+      ratePsf,
+      monthlyCents: monthlyRentCents(ratePsf, sqftVal),
+      description: String(row.description),
+      matterportUrl: str(row, "matterport_url"),
+      hasPano: Number(row.has_pano) === 1,
+      propertyId: String(row.property_id),
+      propertyName: String(row.property_name),
+      propertySlug: String(row.property_slug),
+      address: String(row.address),
+      area: String(row.area),
+      cityLine: String(row.city_line),
+      floorPlanPath: str(row, "floor_plan_path"),
+      tenantId: String(row.tenant_id),
+      tenantName: String(row.tenant_name),
+    }
+  })
+
+  cards = cards.filter((card) => {
+    if (statuses && !statuses.has(card.status)) return false
+    if (filters.tenantId && card.tenantId !== filters.tenantId) return false
+    if (filters.area && card.area !== filters.area) return false
+    if (filters.minSqft != null && card.sqft < filters.minSqft) return false
+    if (filters.maxSqft != null && card.sqft > filters.maxSqft) return false
+    if (filters.minRate != null && card.ratePsf < filters.minRate) return false
+    if (filters.maxRate != null && card.ratePsf > filters.maxRate) return false
+    if (filters.minDocks != null && card.docks < filters.minDocks) return false
+    if (filters.minDriveIns != null && card.driveIns < filters.minDriveIns) return false
+    if (filters.minClearHeight != null && card.clearHeightFeet < filters.minClearHeight) return false
+    if (filters.power) {
+      const needle = filters.power.trim().toLowerCase()
+      if (needle && !card.power.toLowerCase().includes(needle)) return false
+    }
+    if (filters.hasFloorPlan && !card.floorPlanPath) return false
+    if (filters.hasMatterport && !card.matterportUrl) return false
+    if (filters.hasPano && !card.hasPano) return false
+    if (q) {
+      const hay = [
+        card.propertyName,
+        card.address,
+        card.area,
+        card.cityLine,
+        card.code,
+        card.description,
+        card.tenantName,
+        card.power,
+      ]
+        .join(" ")
+        .toLowerCase()
+      if (!hay.includes(q)) return false
+    }
+    return true
+  })
+
+  const sort = filters.sort ?? "name"
+  cards.sort((a, b) => {
+    if (sort === "rate_asc") return a.ratePsf - b.ratePsf
+    if (sort === "rate_desc") return b.ratePsf - a.ratePsf
+    if (sort === "sqft_asc") return a.sqft - b.sqft
+    if (sort === "sqft_desc") return b.sqft - a.sqft
+    return `${a.propertyName} ${a.code}`.localeCompare(`${b.propertyName} ${b.code}`)
+  })
+  return cards
+}
+
+export type CmsPersona = {
+  id: string
+  name: string
+  email: string | null
+  role: Role
+  roleLabel: string
+  company: string | null
+  trade: string | null
+  serviceArea: string | null
+  providerVerified: boolean
+  tenantId: string | null
+  tenantName: string | null
+  meta: string
+}
+
+function redactEmail(email: string, mode: "full" | "masked" | "none") {
+  if (mode === "none") return null
+  if (mode === "masked") {
+    const at = email.indexOf("@")
+    if (at <= 0) return "••••"
+    return `••••@${email.slice(at + 1)}`
+  }
+  return email
+}
+
+export function cmsPlatformStaff(actor: SessionUser): CmsPersona[] {
+  if (actor.role !== "super_admin") return []
+  return asRows(
+    getDb()
+      .prepare(
+        `${USER_SQL} WHERE t.kind = 'platform' ORDER BY u.role, u.name`,
+      )
+      .all(),
+  ).map((row) => {
+    const user = mapUser(row)
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      roleLabel: user.role,
+      company: user.company,
+      trade: null,
+      serviceArea: null,
+      providerVerified: false,
+      tenantId: user.tenantId,
+      tenantName: user.tenantName,
+      meta: "Platform staff",
+    }
+  })
+}
+
+export function cmsLandlords(actor: SessionUser): {
+  orgs: { id: string; name: string; slug: string; city: string; adminCount: number; propertyCount: number }[]
+  admins: CmsPersona[]
+} {
+  if (actor.role !== "super_admin" && actor.role !== "account_manager") {
+    return { orgs: [], admins: [] }
+  }
+  const db = getDb()
+  const orgs = asRows(
+    db
+      .prepare(
+        `SELECT t.id, t.name, t.slug, t.city,
+                (SELECT COUNT(*) FROM users u WHERE u.tenant_id = t.id AND u.role = 'landlord_admin') AS admin_count,
+                (SELECT COUNT(*) FROM properties p WHERE p.tenant_id = t.id) AS property_count
+         FROM tenants t WHERE t.kind = 'landlord' ORDER BY t.name`,
+      )
+      .all(),
+  ).map((row) => ({
+    id: String(row.id),
+    name: String(row.name),
+    slug: String(row.slug),
+    city: String(row.city),
+    adminCount: Number(row.admin_count),
+    propertyCount: Number(row.property_count),
+  }))
+  const admins = asRows(
+    db.prepare(`${USER_SQL} WHERE u.role = 'landlord_admin' ORDER BY t.name, u.name`).all(),
+  ).map((row) => {
+    const user = mapUser(row)
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      roleLabel: "Landlord admin",
+      company: user.tenantName,
+      trade: null,
+      serviceArea: null,
+      providerVerified: false,
+      tenantId: user.tenantId,
+      tenantName: user.tenantName,
+      meta: `${user.tenantName ?? "Landlord"} · ${user.email}`,
+    }
+  })
+  return { orgs, admins }
+}
+
+export function cmsApplicants(actor: SessionUser): CmsPersona[] {
+  if (
+    actor.role !== "super_admin" &&
+    actor.role !== "account_manager" &&
+    actor.role !== "property_manager"
+  ) {
+    return []
+  }
+  const emailMode = actor.role === "property_manager" ? "masked" : "full"
+  return asRows(
+    getDb().prepare(`${USER_SQL} WHERE u.role = 'applicant' ORDER BY u.name`).all(),
+  ).map((row) => {
+    const user = mapUser(row)
+    const apps = asRow(
+      getDb()
+        .prepare(
+          `SELECT COUNT(*) AS c,
+                  SUM(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END) AS open_c,
+                  SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) AS approved_c
+           FROM applications WHERE applicant_id = ?`,
+        )
+        .get(user.id),
+    )
+    const email = redactEmail(user.email, emailMode)
+    return {
+      id: user.id,
+      name: user.name,
+      email,
+      role: user.role,
+      roleLabel: "Applicant",
+      company: user.company,
+      trade: null,
+      serviceArea: null,
+      providerVerified: false,
+      tenantId: null,
+      tenantName: null,
+      meta: `${Number(apps?.c ?? 0)} application(s) · ${Number(apps?.open_c ?? 0)} in review · ${Number(apps?.approved_c ?? 0)} approved`,
+    }
+  })
+}
+
+export function cmsProviders(actor: SessionUser): (CmsPersona & {
+  approvals: { tenantId: string; tenantName: string; status: string }[]
+})[] {
+  if (actor.role !== "super_admin" && actor.role !== "service_manager") return []
+  const db = getDb()
+  return asRows(
+    db.prepare(`${USER_SQL} WHERE u.role = 'service_provider' ORDER BY u.service_area, u.name`).all(),
+  ).map((row) => {
+    const user = mapUser(row)
+    const approvals = asRows(
+      db
+        .prepare(
+          `SELECT pa.tenant_id, t.name AS tenant_name, pa.status
+           FROM provider_approvals pa
+           JOIN tenants t ON t.id = pa.tenant_id
+           WHERE pa.user_id = ?
+           ORDER BY t.name`,
+        )
+        .all(user.id),
+    ).map((item) => ({
+      tenantId: String(item.tenant_id),
+      tenantName: String(item.tenant_name),
+      status: String(item.status),
+    }))
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      roleLabel: "Service provider",
+      company: null,
+      trade: user.trade,
+      serviceArea: user.serviceArea,
+      providerVerified: user.providerVerified,
+      tenantId: null,
+      tenantName: null,
+      meta: `${user.trade ?? "trade"} · ${user.serviceArea ?? "area"} · ${user.providerVerified ? "verified" : "unverified"}`,
+      approvals,
+    }
+  })
+}
+
+export function cmsListingReadiness(actor: SessionUser) {
+  if (
+    actor.role !== "super_admin" &&
+    actor.role !== "property_manager" &&
+    actor.role !== "merchandiser"
+  ) {
+    return []
+  }
+  return searchListings({ sort: "name" }).map((card) => {
+    const gaps = [
+      !card.floorPlanPath ? "No floor plan" : null,
+      !card.hasPano ? "No 360 photo" : null,
+      !card.matterportUrl ? "No walkthrough URL" : null,
+    ].filter(Boolean) as string[]
+    return {
+      ...card,
+      ready: gaps.length === 0,
+      gaps,
+    }
+  })
+}
+
+export function inviteLandlord(input: {
+  companyName: string
+  city: string
+  adminName: string
+  adminEmail: string
+}) {
+  const db = getDb()
+  const slugBase = input.companyName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 40) || "landlord"
+  let slug = slugBase
+  let n = 1
+  while (asRow(db.prepare("SELECT id FROM tenants WHERE slug = ?").get(slug))) {
+    n += 1
+    slug = `${slugBase}-${n}`
+  }
+  const existingUser = asRow(db.prepare("SELECT id FROM users WHERE email = ?").get(input.adminEmail))
+  if (existingUser) return { ok: false as const, error: "That email already has a demo identity." }
+
+  const tenantId = `t_${slug}`.slice(0, 40)
+  const userId = crypto.randomUUID()
+  db.prepare(
+    "INSERT INTO tenants (id, name, slug, city, kind) VALUES (?, ?, ?, ?, 'landlord')",
+  ).run(tenantId, input.companyName, slug, input.city)
+  db.prepare(
+    `INSERT INTO users (id, name, email, role, tenant_id, company, trade, service_area, provider_verified)
+     VALUES (?, ?, ?, 'landlord_admin', ?, NULL, NULL, NULL, 0)`,
+  ).run(userId, input.adminName, input.adminEmail, tenantId)
+  db.prepare(
+    "INSERT INTO late_fee_rules (tenant_id, grace_days, flat_cents, percent_bps) VALUES (?, 5, 15000, 150)",
+  ).run(tenantId)
+  return { ok: true as const, tenantId, userId, companyName: input.companyName }
+}
+
+export function setProviderVerified(providerId: string, verified: boolean) {
+  const row = asRow(
+    getDb()
+      .prepare("SELECT id FROM users WHERE id = ? AND role = 'service_provider'")
+      .get(providerId),
+  )
+  if (!row) return { ok: false as const, error: "Provider not found." }
+  getDb()
+    .prepare("UPDATE users SET provider_verified = ? WHERE id = ?")
+    .run(verified ? 1 : 0, providerId)
+  return { ok: true as const }
+}
+
+export function landlordTenants() {
+  return asRows(
+    getDb()
+      .prepare("SELECT id, name FROM tenants WHERE kind = 'landlord' ORDER BY name")
+      .all(),
+  ).map((row) => ({ id: String(row.id), name: String(row.name) }))
+}
+

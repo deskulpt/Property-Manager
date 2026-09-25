@@ -1,10 +1,32 @@
-export type Role = "applicant" | "landlord_admin" | "service_provider"
+export type MarketRole = "applicant" | "landlord_admin" | "service_provider"
+export type StaffRole =
+  | "super_admin"
+  | "account_manager"
+  | "service_manager"
+  | "property_manager"
+  | "merchandiser"
+export type Role = MarketRole | StaffRole
 export type UnitStatus = "available" | "pending" | "leased"
 export type ApplicationStatus = "submitted" | "approved" | "denied"
 export type JobStatus = "open" | "assigned" | "accepted" | "complete"
 export type Trade = "electrician" | "plumber" | "courier" | "cleaning"
+export type TenantKind = "landlord" | "platform"
 
 export const TRADES: Trade[] = ["electrician", "plumber", "courier", "cleaning"]
+
+export const STAFF_ROLES: StaffRole[] = [
+  "super_admin",
+  "account_manager",
+  "service_manager",
+  "property_manager",
+  "merchandiser",
+]
+
+export const MARKET_ROLES: MarketRole[] = ["applicant", "landlord_admin", "service_provider"]
+
+export function isStaffRole(role: string): role is StaffRole {
+  return (STAFF_ROLES as string[]).includes(role)
+}
 
 export function money(cents: number) {
   return new Intl.NumberFormat("en-CA", {
@@ -59,6 +81,11 @@ export function formatDay(iso: string | null) {
 export function roleLabel(role: Role) {
   if (role === "landlord_admin") return "Landlord admin"
   if (role === "service_provider") return "Service provider"
+  if (role === "super_admin") return "Super Admin"
+  if (role === "account_manager") return "Account Manager"
+  if (role === "service_manager") return "Service Manager"
+  if (role === "property_manager") return "Property Manager"
+  if (role === "merchandiser") return "Merchandiser"
   return "Applicant"
 }
 
@@ -69,6 +96,9 @@ export function identityLabel(user: {
   trade?: string | null
   serviceArea?: string | null
 }) {
+  if (isStaffRole(user.role)) {
+    return `${user.name} · DeSkulpt · ${roleLabel(user.role)}`
+  }
   if (user.role === "landlord_admin") {
     return `${user.name} · ${user.tenantName ?? "Landlord"} admin`
   }
@@ -91,6 +121,8 @@ export function statusLabel(status: string) {
   if (status === "complete") return "Complete"
   if (status === "due") return "Due"
   if (status === "paid") return "Paid"
+  if (status === "rejected") return "Rejected"
+  if (status === "verified") return "Verified"
   return status
 }
 
@@ -100,4 +132,16 @@ export function lateFeeCents(
 ) {
   const percent = Math.round((rentCents * rule.percentBps) / 10000)
   return Math.max(rule.flatCents, percent)
+}
+
+export function parseClearHeightFeet(value: string) {
+  const match = value.match(/(\d+(?:\.\d+)?)/)
+  return match ? Number(match[1]) : 0
+}
+
+export function maskEmail(email: string | null | undefined) {
+  if (!email) return null
+  const at = email.indexOf("@")
+  if (at <= 0) return "••••"
+  return `••••@${email.slice(at + 1)}`
 }

@@ -1,8 +1,10 @@
 # DeSkulpt
 
-Open-source, multi-tenant property desk for industrial landlords. Applicants browse bays and apply. Landlord admins approve them, place units on a floor plan, and assign concierge jobs. Service providers accept work only after that landlord has approved them for the building’s area.
+Open-source, multi-tenant property desk for industrial landlords, plus a **SaaS Super Admin Org** (DeSkulpt Inc.) that onboard landlords, verify providers, and merchandise listings through a role-scoped persona CMS.
 
-The visual system — paper ground, blueprint grid, Archivo and Newsreader — follows the BBM Waterman leasing proposal. The running app is the product that proposal described, with two seeded landlord organisations so tenancy isolation is visible.
+Applicants browse a filterable listings directory and apply. Landlord admins approve them, place units on a floor plan, and assign concierge jobs. Service providers accept work only after that landlord has approved them for the building’s area. Platform staff open `/cms` with permissions that isolate PII by role.
+
+The visual system — paper ground, blueprint grid, Archivo and Newsreader — follows the BBM Waterman leasing proposal. Two seeded landlord organisations (BBM Waterman and Harbourline Yards) make tenancy isolation visible.
 
 ## Run it
 
@@ -13,7 +15,7 @@ npm install
 npm run dev
 ```
 
-Open [http://127.0.0.1:43123](http://127.0.0.1:43123). The first request creates `data/deskulpt.sqlite` and loads the demo portfolio.
+Open [http://127.0.0.1:43123](http://127.0.0.1:43123). The first request creates `data/deskulpt.sqlite` and loads the demo portfolio. The server binds dual-stack (`::`) on port **43123**.
 
 ## Demo identities
 
@@ -21,16 +23,27 @@ Use the **Demo** switcher in the header. There is no password.
 
 | Person | Role | What to try |
 | --- | --- | --- |
-| Maya Chen | Applicant | Apply, run the verification wizard |
+| Avery Quinn | Super Admin | Full CMS: staff, landlords, applicants, providers, listings |
+| Sam Rivera | Account Manager | Landlords + applicants; invite a demo landlord |
+| Priya Nair | Service Manager | Verify providers; approve for a landlord |
+| Chris Vogel | Property Manager | Applicants (masked email) + listing readiness |
+| Jordan Blake | Merchandiser | Listing readiness only — no emails |
+| Maya Chen | Applicant | Apply, verification wizard |
 | Devon Hale | Applicant | Ledger: rent due, late fee, paid |
 | Nadia Okonkwo | BBM Waterman admin | Inbox, floor plan, concierge, providers |
-| Jonah Ellis | Harbourline admin | Empty application inbox, his own jobs |
-| Luis Ortega | Electrician, East York | Accept the weather-seal job |
-| Amrita Singh | Plumber, Port Lands | Empty until Harbourline assigns her |
+| Jonah Ellis | Harbourline admin | Empty application inbox |
+| Luis Ortega | Electrician, East York | Accept / complete assigned jobs |
+
+## Key routes
+
+- `/listings` — unit search with full filters
+- `/properties` — building portfolio
+- `/cms` — persona CMS (platform staff only)
+- `/landlord`, `/provider`, `/account` — market desks
 
 ## What is real in this build, and what is simulated
 
-Real: browsing, applications, approve and deny, floor-plan upload and hotspots, provider approval filtered by area, job accept and complete, late-fee arithmetic, the ledger, the in-app inbox, the PWA manifest and service worker.
+Real: listings filters, applications, approve and deny, floor-plan upload and hotspots, provider approval filtered by area, job accept and complete, late-fee arithmetic, the ledger, the in-app inbox, the PWA, platform CMS with role redaction, demo landlord invite.
 
 Simulated, on purpose:
 

@@ -65,6 +65,7 @@ const tones: Record<string, string> = {
   leased: "bg-leased/20 text-ink-soft",
   denied: "bg-destructive/10 text-destructive",
   rejected: "bg-destructive/10 text-destructive",
+  verified: "bg-avail/15 text-[#1f6b38]",
   open: "bg-brand/10 text-brand",
 }
 

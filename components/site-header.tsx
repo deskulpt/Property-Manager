@@ -13,7 +13,9 @@ import { SessionSwitcher, type SwitchUser } from "@/components/session-switcher"
 const links = [
   { href: "/#context", label: "Context" },
   { href: "/#map", label: "Map" },
+  { href: "/listings", label: "Listings" },
   { href: "/properties", label: "Portfolio" },
+  { href: "/cms", label: "CMS" },
   { href: "/landlord", label: "Landlord" },
   { href: "/provider", label: "Providers" },
   { href: "/inbox", label: "Inbox" },

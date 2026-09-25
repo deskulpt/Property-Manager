@@ -13,6 +13,7 @@ import {
   createJob,
   decideApplication,
   getUser,
+  inviteLandlord,
   landlordIds,
   openApplicationTenants,
   payDue,
@@ -22,12 +23,14 @@ import {
   saveVerification,
   setAutopay,
   setProviderApproval,
+  setProviderVerified,
   transitionJob,
   upsertMethod,
 } from "@/lib/db"
 import { TRADES } from "@/lib/format"
 import { notify, notifyMany } from "@/lib/notifications"
 import { demoPayments } from "@/lib/payments"
+import { staffCapabilities } from "@/lib/permissions"
 import { getSessionUser, SESSION_COOKIE } from "@/lib/session"
 import { simulateMatch } from "@/lib/verification"
 
@@ -497,4 +500,94 @@ export async function markInboxRead() {
   const { markAllRead } = await import("@/lib/db")
   markAllRead(user.id)
   refresh(["/inbox"])
+}
+
+export type InviteState = { error: string | null; notice: string | null }
+
+export async function submitLandlordInvite(
+  _prev: InviteState,
+  formData: FormData,
+): Promise<InviteState> {
+  const user = await getSessionUser()
+  const caps = user ? staffCapabilities(user.role) : null
+  if (!user || !caps?.inviteLandlord) {
+    return { error: "Only Super Admins and Account Managers can invite landlords.", notice: null }
+  }
+  const schema = z.object({
+    companyName: z.string().trim().min(2, "Enter the company name"),
+    city: z.string().trim().min(2, "Enter a city"),
+    adminName: z.string().trim().min(2, "Enter the admin’s name"),
+    adminEmail: z
+      .string()
+      .trim()
+      .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Enter a work email"),
+  })
+  const parsed = schema.safeParse({
+    companyName: formData.get("companyName"),
+    city: formData.get("city"),
+    adminName: formData.get("adminName"),
+    adminEmail: formData.get("adminEmail"),
+  })
+  if (!parsed.success) {
+    return { error: Object.values(issues(parsed.error))[0] ?? "Check the form.", notice: null }
+  }
+  const result = inviteLandlord(parsed.data)
+  if (!result.ok) return { error: result.error, notice: null }
+  notify({
+    userId: result.userId,
+    title: "Welcome to DeSkulpt",
+    body: `${result.companyName} is on the platform. Switch to this identity in the demo header to open the landlord desk.`,
+    href: "/landlord",
+  })
+  notify({
+    userId: user.id,
+    title: "Landlord invited",
+    body: `${parsed.data.adminName} at ${result.companyName} can sign in from the demo switcher.`,
+    href: "/cms/landlords",
+  })
+  refresh(["/", "/cms", "/cms/landlords", "/inbox"])
+  return {
+    error: null,
+    notice: `${result.companyName} is ready. Pick ${parsed.data.adminName} in the demo header.`,
+  }
+}
+
+export async function submitProviderVerify(formData: FormData) {
+  const user = await getSessionUser()
+  const caps = user ? staffCapabilities(user.role) : null
+  if (!user || !caps?.verifyProvider) return
+  const providerId = String(formData.get("providerId") ?? "")
+  const verified = formData.get("verified") !== "0"
+  const result = setProviderVerified(providerId, verified)
+  if (!result.ok) return
+  notify({
+    userId: providerId,
+    title: verified ? "Provider verified" : "Verification removed",
+    body: verified
+      ? "DeSkulpt marked you verified. A landlord can now approve you for their area."
+      : "Your verified flag was cleared by platform staff.",
+    href: "/provider",
+  })
+  refresh(["/cms", "/cms/providers", "/landlord/providers", "/provider", "/inbox"])
+}
+
+export async function submitPlatformApproval(formData: FormData) {
+  const user = await getSessionUser()
+  const caps = user ? staffCapabilities(user.role) : null
+  if (!user || !caps?.approveProvider) return
+  const providerId = String(formData.get("providerId") ?? "")
+  const tenantId = String(formData.get("tenantId") ?? "")
+  const status = formData.get("status") === "rejected" ? "rejected" : "approved"
+  const result = setProviderApproval(tenantId, providerId, status)
+  if (!result.ok) return
+  notify({
+    userId: providerId,
+    title: status === "approved" ? "Approved for a landlord" : "Landlord approval removed",
+    body:
+      status === "approved"
+        ? "Platform staff approved you for assignments with a landlord in your service area."
+        : "Platform staff rejected an approval for one landlord.",
+    href: "/provider",
+  })
+  refresh(["/cms", "/cms/providers", "/landlord/providers", "/landlord/jobs", "/provider", "/inbox"])
 }
