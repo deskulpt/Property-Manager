@@ -1,0 +1,1541 @@
+import "server-only"
+import fs from "node:fs"
+import path from "node:path"
+import { DatabaseSync } from "node:sqlite"
+import {
+  addDays,
+  firstOfNextMonth,
+  lateFeeCents,
+  monthlyRentCents,
+  todayISO,
+  type ApplicationStatus,
+  type JobStatus,
+  type Role,
+  type Trade,
+  type UnitStatus,
+} from "@/lib/format"
+
+const SEED_VERSION = "1"
+const DB_PATH = path.join(process.cwd(), "data", "deskulpt.sqlite")
+
+export type SessionUser = {
+  id: string
+  name: string
+  email: string
+  role: Role
+  tenantId: string | null
+  company: string | null
+  trade: string | null
+  serviceArea: string | null
+  providerVerified: boolean
+  tenantName: string | null
+}
+
+export type UnitRecord = {
+  id: string
+  tenantId: string
+  propertyId: string
+  code: string
+  sqft: number
+  clearHeight: string
+  docks: number
+  driveIns: number
+  power: string
+  ratePsf: number
+  status: UnitStatus
+  hotspotX: number | null
+  hotspotY: number | null
+  matterportUrl: string | null
+  description: string
+}
+
+export type MediaRecord = {
+  id: string
+  kind: "photo" | "gif" | "video" | "pano"
+  url: string
+  caption: string
+  sortOrder: number
+}
+
+export type PropertyRecord = {
+  id: string
+  tenantId: string
+  tenantName: string
+  name: string
+  slug: string
+  address: string
+  area: string
+  cityLine: string
+  totalSqft: number
+  floorPlanPath: string | null
+  units: UnitRecord[]
+}
+
+type Sql = DatabaseSync
+
+const globalDb = globalThis as unknown as { deskulptDb?: Sql }
+
+function asRow(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object") return undefined
+  return { ...(value as object) }
+}
+
+function asRows(values: unknown[]) {
+  return values.map((value) => ({ ...(value as object) }) as Record<string, unknown>)
+}
+
+function str(row: Record<string, unknown>, key: string) {
+  const value = row[key]
+  return value == null ? null : String(value)
+}
+
+function num(row: Record<string, unknown>, key: string) {
+  const value = row[key]
+  return value == null ? null : Number(value)
+}
+
+function mapUser(row: Record<string, unknown>): SessionUser {
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    email: String(row.email),
+    role: String(row.role) as Role,
+    tenantId: str(row, "tenant_id"),
+    company: str(row, "company"),
+    trade: str(row, "trade"),
+    serviceArea: str(row, "service_area"),
+    providerVerified: Number(row.provider_verified) === 1,
+    tenantName: str(row, "tenant_name"),
+  }
+}
+
+function mapUnit(row: Record<string, unknown>): UnitRecord {
+  return {
+    id: String(row.id),
+    tenantId: String(row.tenant_id),
+    propertyId: String(row.property_id),
+    code: String(row.code),
+    sqft: Number(row.sqft),
+    clearHeight: String(row.clear_height),
+    docks: Number(row.docks),
+    driveIns: Number(row.drive_ins),
+    power: String(row.power),
+    ratePsf: Number(row.rate_psf),
+    status: String(row.status) as UnitStatus,
+    hotspotX: num(row, "hotspot_x"),
+    hotspotY: num(row, "hotspot_y"),
+    matterportUrl: str(row, "matterport_url"),
+    description: String(row.description),
+  }
+}
+
+const USER_SQL = `
+  SELECT u.id, u.name, u.email, u.role, u.tenant_id, u.company, u.trade,
+         u.service_area, u.provider_verified, t.name AS tenant_name
+  FROM users u
+  LEFT JOIN tenants t ON t.id = u.tenant_id
+`
+
+function createSchema(db: Sql) {
+  db.exec(`
+    CREATE TABLE tenants (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL UNIQUE,
+      city TEXT NOT NULL
+    );
+    CREATE TABLE users (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      role TEXT NOT NULL,
+      tenant_id TEXT,
+      company TEXT,
+      trade TEXT,
+      service_area TEXT,
+      provider_verified INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE provider_approvals (
+      tenant_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      PRIMARY KEY (tenant_id, user_id)
+    );
+    CREATE TABLE properties (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL UNIQUE,
+      address TEXT NOT NULL,
+      area TEXT NOT NULL,
+      city_line TEXT NOT NULL,
+      total_sqft INTEGER NOT NULL,
+      floor_plan_path TEXT
+    );
+    CREATE TABLE units (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      property_id TEXT NOT NULL,
+      code TEXT NOT NULL,
+      sqft INTEGER NOT NULL,
+      clear_height TEXT NOT NULL,
+      docks INTEGER NOT NULL,
+      drive_ins INTEGER NOT NULL,
+      power TEXT NOT NULL,
+      rate_psf REAL NOT NULL,
+      status TEXT NOT NULL,
+      hotspot_x REAL,
+      hotspot_y REAL,
+      matterport_url TEXT,
+      description TEXT NOT NULL,
+      UNIQUE (property_id, code)
+    );
+    CREATE TABLE unit_media (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      unit_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      url TEXT NOT NULL,
+      caption TEXT NOT NULL,
+      sort_order INTEGER NOT NULL
+    );
+    CREATE TABLE applications (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      unit_id TEXT NOT NULL,
+      applicant_id TEXT NOT NULL,
+      company TEXT NOT NULL,
+      contact_name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      intended_use TEXT NOT NULL,
+      notes TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE verifications (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      country TEXT NOT NULL,
+      region TEXT NOT NULL,
+      doc_type TEXT NOT NULL,
+      file_name TEXT,
+      face_name TEXT,
+      simulated_score REAL NOT NULL,
+      simulated_result TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE late_fee_rules (
+      tenant_id TEXT PRIMARY KEY,
+      grace_days INTEGER NOT NULL,
+      flat_cents INTEGER NOT NULL,
+      percent_bps INTEGER NOT NULL
+    );
+    CREATE TABLE payment_methods (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      tenant_id TEXT NOT NULL,
+      brand TEXT NOT NULL,
+      last4 TEXT NOT NULL,
+      autopay INTEGER NOT NULL DEFAULT 0,
+      provider_ref TEXT NOT NULL
+    );
+    CREATE TABLE ledger_entries (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      unit_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      description TEXT NOT NULL,
+      amount_cents INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      due_on TEXT,
+      created_at TEXT NOT NULL,
+      source_id TEXT
+    );
+    CREATE TABLE jobs (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      property_id TEXT NOT NULL,
+      unit_id TEXT,
+      title TEXT NOT NULL,
+      details TEXT NOT NULL,
+      trade TEXT NOT NULL,
+      status TEXT NOT NULL,
+      provider_id TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE notifications (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      href TEXT,
+      read_at TEXT,
+      created_at TEXT NOT NULL,
+      channel TEXT NOT NULL
+    );
+    CREATE TABLE meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+    CREATE INDEX idx_units_tenant ON units(tenant_id);
+    CREATE INDEX idx_units_property ON units(property_id);
+    CREATE INDEX idx_apps_tenant ON applications(tenant_id, status);
+    CREATE INDEX idx_apps_applicant ON applications(applicant_id);
+    CREATE INDEX idx_jobs_tenant ON jobs(tenant_id, status);
+    CREATE INDEX idx_jobs_provider ON jobs(provider_id);
+    CREATE INDEX idx_ledger_tenant ON ledger_entries(tenant_id);
+    CREATE INDEX idx_ledger_user ON ledger_entries(user_id);
+    CREATE INDEX idx_notes_user ON notifications(user_id, created_at);
+    CREATE INDEX idx_properties_tenant ON properties(tenant_id);
+    CREATE INDEX idx_media_unit ON unit_media(unit_id, sort_order);
+  `)
+}
+
+function reset(db: Sql) {
+  db.exec("PRAGMA foreign_keys = OFF")
+  for (const table of [
+    "notifications",
+    "ledger_entries",
+    "payment_methods",
+    "late_fee_rules",
+    "jobs",
+    "verifications",
+    "applications",
+    "unit_media",
+    "units",
+    "properties",
+    "provider_approvals",
+    "users",
+    "tenants",
+    "meta",
+  ]) {
+    db.exec(`DROP TABLE IF EXISTS ${table}`)
+  }
+  db.exec("PRAGMA foreign_keys = ON")
+  createSchema(db)
+  seed(db)
+  db.prepare("INSERT INTO meta (key, value) VALUES ('seed_version', ?)").run(SEED_VERSION)
+}
+
+type UnitSeed = {
+  code: string
+  sqft: number
+  h: string
+  dock: number
+  drive: number
+  pwr: string
+  rate: number
+  status: UnitStatus
+  x: number
+  y: number
+}
+
+function seed(db: Sql) {
+  const tenant = db.prepare("INSERT INTO tenants (id, name, slug, city) VALUES (?, ?, ?, ?)")
+  tenant.run("t_bbm", "BBM Waterman Inc.", "bbm-waterman", "Toronto")
+  tenant.run("t_harbour", "Harbourline Yards", "harbourline-yards", "Toronto")
+
+  const user = db.prepare(
+    `INSERT INTO users (id, name, email, role, tenant_id, company, trade, service_area, provider_verified)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+  user.run("u_maya", "Maya Chen", "maya@apexlogistics.example", "applicant", null, "Apex Logistics", null, null, 0)
+  user.run("u_devon", "Devon Hale", "devon@northline.example", "applicant", null, "Northline Distribution", null, null, 0)
+  user.run("u_nadia", "Nadia Okonkwo", "nadia@bbmwaterman.example", "landlord_admin", "t_bbm", null, null, null, 0)
+  user.run("u_jonah", "Jonah Ellis", "jonah@harbourline.example", "landlord_admin", "t_harbour", null, null, null, 0)
+  user.run("u_luis", "Luis Ortega", "luis@ortegaelectric.example", "service_provider", null, null, "electrician", "East York", 1)
+  user.run("u_rosa", "Rosa Delgado", "rosa@clearbay.example", "service_provider", null, null, "cleaning", "East York", 1)
+  user.run("u_kei", "Kei Watanabe", "kei@lanterncourier.example", "service_provider", null, null, "courier", "East York", 1)
+  user.run("u_hana", "Hana Berger", "hana@bergerpower.example", "service_provider", null, null, "electrician", "North York", 1)
+  user.run("u_amrita", "Amrita Singh", "amrita@southplumbers.example", "service_provider", null, null, "plumber", "Port Lands", 1)
+  user.run("u_idris", "Idris Cole", "idris@coleelectric.example", "service_provider", null, null, "electrician", "Port Lands", 1)
+
+  const approval = db.prepare(
+    "INSERT INTO provider_approvals (tenant_id, user_id, status) VALUES (?, ?, ?)",
+  )
+  approval.run("t_bbm", "u_luis", "approved")
+  approval.run("t_bbm", "u_rosa", "approved")
+  approval.run("t_bbm", "u_kei", "pending")
+  approval.run("t_bbm", "u_hana", "pending")
+  approval.run("t_harbour", "u_amrita", "approved")
+  approval.run("t_harbour", "u_idris", "pending")
+
+  const property = db.prepare(
+    `INSERT INTO properties (id, tenant_id, name, slug, address, area, city_line, total_sqft, floor_plan_path)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+  property.run("p_waterman", "t_bbm", "19 Waterman Ave", "waterman", "19 Waterman Ave, Toronto, ON", "East York", "EAST YORK · 214,000 SF", 214000, "/floorplans/waterman.svg")
+  property.run("p_bartley", "t_bbm", "161 Bartley Dr", "bartley", "161 Bartley Dr, Toronto, ON", "North York", "NORTH YORK · 96,000 SF", 96000, "/floorplans/bartley.svg")
+  property.run("p_cranfield", "t_bbm", "12 Cranfield Rd", "cranfield", "12 Cranfield Rd, Toronto, ON", "East York", "EAST YORK · 74,500 SF", 74500, "/floorplans/cranfield.svg")
+  property.run("p_commissioners", "t_harbour", "88 Commissioners St", "commissioners", "88 Commissioners Street, Toronto, ON", "Port Lands", "PORT LANDS · 86,000 SF", 86000, "/floorplans/commissioners.svg")
+
+  const unitStmt = db.prepare(
+    `INSERT INTO units (
+      id, tenant_id, property_id, code, sqft, clear_height, docks, drive_ins, power,
+      rate_psf, status, hotspot_x, hotspot_y, matterport_url, description
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+
+  function addUnits(
+    tenantId: string,
+    propertyId: string,
+    propertyName: string,
+    slug: string,
+    units: UnitSeed[],
+  ) {
+    for (const unit of units) {
+      const rich = slug === "waterman" && unit.code === "B1"
+      unitStmt.run(
+        `u_${slug}_${unit.code.toLowerCase()}`,
+        tenantId,
+        propertyId,
+        unit.code,
+        unit.sqft,
+        unit.h,
+        unit.dock,
+        unit.drive,
+        unit.pwr,
+        unit.rate,
+        unit.status,
+        unit.x,
+        unit.y,
+        rich ? "https://my.matterport.com/show/?m=SxQL3iGyoDo" : null,
+        rich
+          ? "Flagship bay at 19 Waterman Ave. Clear-span distribution space with a full media set: stills, a motion loop, a short clip, an equirectangular 360 photo, and a Matterport-compatible embed slot."
+          : `${unit.sqft.toLocaleString("en-CA")} SF bay at ${propertyName}. ${unit.h} clear, ${unit.dock} dock-level door${unit.dock === 1 ? "" : "s"}, ${unit.drive} drive-in, ${unit.pwr}.`,
+      )
+    }
+  }
+
+  addUnits("t_bbm", "p_waterman", "19 Waterman Ave", "waterman", [
+    { code: "A1", sqft: 38500, h: "28'", dock: 6, drive: 1, pwr: "600A / 600V", rate: 13.75, status: "leased", x: 22, y: 38 },
+    { code: "A2", sqft: 24200, h: "26'", dock: 4, drive: 1, pwr: "400A / 600V", rate: 14.25, status: "available", x: 46, y: 38 },
+    { code: "B1", sqft: 52000, h: "30'", dock: 8, drive: 2, pwr: "800A / 600V", rate: 13.5, status: "available", x: 22, y: 68 },
+    { code: "B2", sqft: 18900, h: "24'", dock: 3, drive: 1, pwr: "400A / 600V", rate: 14.75, status: "pending", x: 46, y: 68 },
+    { code: "C1", sqft: 31600, h: "28'", dock: 5, drive: 1, pwr: "600A / 600V", rate: 13.95, status: "leased", x: 74, y: 38 },
+    { code: "C2", sqft: 28800, h: "28'", dock: 5, drive: 2, pwr: "600A / 600V", rate: 14.1, status: "available", x: 74, y: 68 },
+  ])
+  addUnits("t_bbm", "p_bartley", "161 Bartley Dr", "bartley", [
+    { code: "01", sqft: 12400, h: "22'", dock: 2, drive: 1, pwr: "200A / 600V", rate: 15.5, status: "available", x: 22, y: 40 },
+    { code: "02", sqft: 21000, h: "24'", dock: 4, drive: 1, pwr: "400A / 600V", rate: 14.9, status: "leased", x: 46, y: 40 },
+    { code: "03", sqft: 16800, h: "24'", dock: 3, drive: 1, pwr: "400A / 600V", rate: 15.1, status: "pending", x: 74, y: 40 },
+    { code: "04", sqft: 30200, h: "26'", dock: 5, drive: 2, pwr: "600A / 600V", rate: 14.4, status: "available", x: 34, y: 70 },
+    { code: "05", sqft: 15600, h: "22'", dock: 2, drive: 1, pwr: "200A / 600V", rate: 15.75, status: "leased", x: 68, y: 70 },
+  ])
+  addUnits("t_bbm", "p_cranfield", "12 Cranfield Rd", "cranfield", [
+    { code: "U1", sqft: 9800, h: "20'", dock: 1, drive: 1, pwr: "200A / 600V", rate: 16.25, status: "available", x: 24, y: 42 },
+    { code: "U2", sqft: 14500, h: "22'", dock: 2, drive: 1, pwr: "400A / 600V", rate: 15.4, status: "leased", x: 50, y: 42 },
+    { code: "U3", sqft: 22300, h: "26'", dock: 4, drive: 2, pwr: "600A / 600V", rate: 14.8, status: "available", x: 28, y: 72 },
+    { code: "U4", sqft: 27900, h: "26'", dock: 4, drive: 1, pwr: "600A / 600V", rate: 14.6, status: "leased", x: 62, y: 72 },
+  ])
+  addUnits("t_harbour", "p_commissioners", "88 Commissioners St", "commissioners", [
+    { code: "H1", sqft: 22000, h: "28'", dock: 4, drive: 1, pwr: "600A / 600V", rate: 15.2, status: "available", x: 28, y: 40 },
+    { code: "H2", sqft: 18000, h: "24'", dock: 3, drive: 1, pwr: "400A / 600V", rate: 15.8, status: "leased", x: 62, y: 40 },
+    { code: "H3", sqft: 31000, h: "30'", dock: 6, drive: 2, pwr: "800A / 600V", rate: 14.4, status: "pending", x: 28, y: 70 },
+    { code: "H4", sqft: 15000, h: "22'", dock: 2, drive: 1, pwr: "400A / 600V", rate: 16.1, status: "available", x: 62, y: 70 },
+  ])
+
+  const media = db.prepare(
+    `INSERT INTO unit_media (id, tenant_id, unit_id, kind, url, caption, sort_order)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  )
+  const b1 = "u_waterman_b1"
+  media.run("m1", "t_bbm", b1, "photo", "/media/b1-dock.jpg", "Dock approach, demo still", 1)
+  media.run("m2", "t_bbm", b1, "photo", "/media/b1-aisle.jpg", "Rack aisle, demo still", 2)
+  media.run("m3", "t_bbm", b1, "photo", "/media/b1-yard.jpg", "Yard and trailer positions, demo still", 3)
+  media.run("m4", "t_bbm", b1, "gif", "/media/b1-loop.gif", "Motion loop across the bay stills", 4)
+  media.run("m5", "t_bbm", b1, "video", "/media/b1-walk.mp4", "Short walk-through clip", 5)
+  media.run("m6", "t_bbm", b1, "pano", "/media/b1-pano.jpg", "Equirectangular 360 photo — drag to look around", 6)
+
+  db.prepare(
+    `INSERT INTO applications (
+      id, tenant_id, unit_id, applicant_id, company, contact_name, email, intended_use, notes, status, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    "app_devon",
+    "t_bbm",
+    "u_waterman_a1",
+    "u_devon",
+    "Northline Distribution",
+    "Devon Hale",
+    "devon@northline.example",
+    "Regional distribution and cross-dock",
+    "Insurance certificate on file in the demo vault.",
+    "approved",
+    "2026-03-12T15:00:00.000Z",
+  )
+  db.prepare(
+    `INSERT INTO applications (
+      id, tenant_id, unit_id, applicant_id, company, contact_name, email, intended_use, notes, status, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    "app_maya",
+    "t_bbm",
+    "u_waterman_b2",
+    "u_maya",
+    "Apex Logistics",
+    "Maya Chen",
+    "maya@apexlogistics.example",
+    "Last-mile parcel sortation",
+    "Looking for a September occupancy. Trailer pool of 12.",
+    "submitted",
+    "2026-09-18T14:30:00.000Z",
+  )
+
+  db.prepare(
+    `INSERT INTO verifications (
+      id, user_id, country, region, doc_type, file_name, face_name, simulated_score, simulated_result, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    "v_devon",
+    "u_devon",
+    "Canada",
+    "Ontario",
+    "driving_licence",
+    "demo-licence.pdf",
+    "demo-face.jpg",
+    0.94,
+    "match",
+    "2026-03-02T18:00:00.000Z",
+  )
+
+  db.prepare(
+    "INSERT INTO late_fee_rules (tenant_id, grace_days, flat_cents, percent_bps) VALUES (?, ?, ?, ?)",
+  ).run("t_bbm", 5, 25000, 150)
+  db.prepare(
+    "INSERT INTO late_fee_rules (tenant_id, grace_days, flat_cents, percent_bps) VALUES (?, ?, ?, ?)",
+  ).run("t_harbour", 3, 10000, 200)
+
+  db.prepare(
+    `INSERT INTO payment_methods (id, user_id, tenant_id, brand, last4, autopay, provider_ref)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    "pm_devon",
+    "u_devon",
+    "t_bbm",
+    "Pre-authorized debit (demo)",
+    "4821",
+    1,
+    "demo_pad_4821_t_bbm",
+  )
+
+  const a1 = db.prepare("SELECT sqft, rate_psf FROM units WHERE id = ?").get("u_waterman_a1") as {
+    sqft: number
+    rate_psf: number
+  }
+  const rent = monthlyRentCents(a1.rate_psf, a1.sqft)
+  const fee = lateFeeCents(rent, { flatCents: 25000, percentBps: 150 })
+  const ledger = db.prepare(
+    `INSERT INTO ledger_entries (
+      id, tenant_id, unit_id, user_id, kind, description, amount_cents, status, due_on, created_at, source_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+  ledger.run("led_jun_rent", "t_bbm", "u_waterman_a1", "u_devon", "rent", "June rent · Unit A1", rent, "paid", "2026-06-01", "2026-06-01T12:00:00.000Z", null)
+  ledger.run("led_jun_pay", "t_bbm", "u_waterman_a1", "u_devon", "payment", "PAD payment · demo ····4821", rent, "paid", "2026-06-01", "2026-06-01T12:05:00.000Z", "led_jun_rent")
+  ledger.run("led_sep_rent", "t_bbm", "u_waterman_a1", "u_devon", "rent", "September rent · Unit A1", rent, "due", "2026-09-01", "2026-09-01T12:00:00.000Z", null)
+  ledger.run("led_sep_fee", "t_bbm", "u_waterman_a1", "u_devon", "late_fee", "Late fee · September rent past 5-day grace", fee, "due", "2026-09-06", "2026-09-06T12:00:00.000Z", "led_sep_rent")
+  ledger.run("led_oct_rent", "t_bbm", "u_waterman_a1", "u_devon", "rent", "October rent · Unit A1", rent, "due", "2026-10-01", "2026-09-20T12:00:00.000Z", null)
+
+  const job = db.prepare(
+    `INSERT INTO jobs (id, tenant_id, property_id, unit_id, title, details, trade, status, provider_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+  job.run("j_seal", "t_bbm", "p_waterman", "u_waterman_b1", "Weather seal on the north drive-in", "The north drive-in seal is torn along the bottom corner. Trailer doors are catching.", "electrician", "assigned", "u_luis", "2026-09-20T16:00:00.000Z")
+  job.run("j_dock", "t_bbm", "p_waterman", "u_waterman_a2", "Dock leveler sticks at the top of travel", "Bay 3 leveler pauses six inches short. Occupant is not in the unit yet — treat it as a make-ready.", "electrician", "open", null, "2026-09-22T15:00:00.000Z")
+  job.run("j_panel", "t_bbm", "p_bartley", "u_bartley_04", "Panel schedule labels missing in unit 04", "The 600V panel is live and labeled only at the main. Print and install a directory before showings.", "electrician", "open", null, "2026-09-23T15:00:00.000Z")
+  job.run("j_sweep", "t_bbm", "p_cranfield", "u_cranfield_u1", "Pre-showing sweep of unit U1", "Dust and pallet scraps along the south wall before Thursday's tour.", "cleaning", "complete", "u_rosa", "2026-09-10T15:00:00.000Z")
+  job.run("j_sump", "t_harbour", "p_commissioners", "u_commissioners_h1", "Sump alarm chirping in H1", "The pit alarm cycles every few minutes. No standing water this morning.", "plumber", "open", null, "2026-09-21T15:00:00.000Z")
+
+  const note = db.prepare(
+    `INSERT INTO notifications (id, user_id, title, body, href, read_at, created_at, channel)
+     VALUES (?, ?, ?, ?, ?, NULL, ?, ?)`,
+  )
+  note.run("n1", "u_maya", "Application received", "Apex Logistics is in review for Unit B2 at 19 Waterman Ave.", "/account", "2026-09-18T14:31:00.000Z", "in_app")
+  note.run("n1e", "u_maya", "Application received", "Apex Logistics is in review for Unit B2 at 19 Waterman Ave.", "/account", "2026-09-18T14:31:00.000Z", "email_demo")
+  note.run("n2", "u_nadia", "New application", "Maya Chen at Apex Logistics applied for Unit B2.", "/landlord/applications", "2026-09-18T14:31:00.000Z", "in_app")
+  note.run("n3", "u_devon", "September rent is past grace", "A late fee was assessed on Unit A1. The October rent is still inside the grace window.", "/account/payments", "2026-09-06T12:10:00.000Z", "in_app")
+  note.run("n3p", "u_devon", "September rent is past grace", "A late fee was assessed on Unit A1.", "/account/payments", "2026-09-06T12:10:00.000Z", "push_demo")
+  note.run("n4", "u_luis", "Job assigned", "Weather seal on the north drive-in at 19 Waterman Ave is waiting for you to accept.", "/provider", "2026-09-20T16:05:00.000Z", "in_app")
+  note.run("n5", "u_jonah", "Open concierge job", "Sump alarm in H1 has no provider yet. Amrita Singh is approved for Port Lands.", "/landlord/jobs", "2026-09-21T15:05:00.000Z", "in_app")
+}
+
+function openDatabase() {
+  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true })
+  const db = new DatabaseSync(DB_PATH)
+  db.exec("PRAGMA foreign_keys = ON")
+  const meta = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'meta'",
+  ).get()
+  if (!meta) {
+    reset(db)
+    return db
+  }
+  const version = asRow(db.prepare("SELECT value FROM meta WHERE key = 'seed_version'").get())
+  if (!version || version.value !== SEED_VERSION) reset(db)
+  return db
+}
+
+export function getDb() {
+  if (!globalDb.deskulptDb) globalDb.deskulptDb = openDatabase()
+  return globalDb.deskulptDb
+}
+
+export function listSessionUsers() {
+  return asRows(
+    getDb()
+      .prepare(
+        `${USER_SQL} ORDER BY CASE u.role WHEN 'applicant' THEN 0 WHEN 'landlord_admin' THEN 1 ELSE 2 END, u.name`,
+      )
+      .all(),
+  ).map(mapUser)
+}
+
+export function getUser(id: string) {
+  const row = asRow(getDb().prepare(`${USER_SQL} WHERE u.id = ?`).get(id))
+  return row ? mapUser(row) : null
+}
+
+export function unreadCount(userId: string) {
+  const row = asRow(
+    getDb()
+      .prepare(
+        "SELECT COUNT(*) AS c FROM notifications WHERE user_id = ? AND channel = 'in_app' AND read_at IS NULL",
+      )
+      .get(userId),
+  )
+  return Number(row?.c ?? 0)
+}
+
+export type NoticeRecord = {
+  id: string
+  title: string
+  body: string
+  href: string | null
+  readAt: string | null
+  createdAt: string
+  channel: string
+}
+
+export function listNotifications(userId: string, channel: "in_app" | "email_demo" | "push_demo") {
+  return asRows(
+    getDb()
+      .prepare(
+        `SELECT id, title, body, href, read_at, created_at, channel
+         FROM notifications WHERE user_id = ? AND channel = ? ORDER BY created_at DESC`,
+      )
+      .all(userId, channel),
+  ).map(
+    (row): NoticeRecord => ({
+      id: String(row.id),
+      title: String(row.title),
+      body: String(row.body),
+      href: str(row, "href"),
+      readAt: str(row, "read_at"),
+      createdAt: String(row.created_at),
+      channel: String(row.channel),
+    }),
+  )
+}
+
+export function markAllRead(userId: string) {
+  getDb()
+    .prepare(
+      "UPDATE notifications SET read_at = ? WHERE user_id = ? AND channel = 'in_app' AND read_at IS NULL",
+    )
+    .run(new Date().toISOString(), userId)
+}
+
+function unitsFor(propertyId: string) {
+  return asRows(
+    getDb()
+      .prepare("SELECT * FROM units WHERE property_id = ? ORDER BY code")
+      .all(propertyId),
+  ).map(mapUnit)
+}
+
+function mapProperty(row: Record<string, unknown>): PropertyRecord {
+  return {
+    id: String(row.id),
+    tenantId: String(row.tenant_id),
+    tenantName: String(row.tenant_name),
+    name: String(row.name),
+    slug: String(row.slug),
+    address: String(row.address),
+    area: String(row.area),
+    cityLine: String(row.city_line),
+    totalSqft: Number(row.total_sqft),
+    floorPlanPath: str(row, "floor_plan_path"),
+    units: unitsFor(String(row.id)),
+  }
+}
+
+const PROPERTY_SQL = `
+  SELECT p.*, t.name AS tenant_name
+  FROM properties p
+  JOIN tenants t ON t.id = p.tenant_id
+`
+
+/**
+ * Public catalog read. Cookie-free on purpose so a later cache key can be
+ * the property slug alone. Do not read the session in this function.
+ */
+export function listPortfolio() {
+  return asRows(getDb().prepare(`${PROPERTY_SQL} ORDER BY t.name, p.name`).all()).map(mapProperty)
+}
+
+export function getPropertyBySlug(slug: string) {
+  const row = asRow(getDb().prepare(`${PROPERTY_SQL} WHERE p.slug = ?`).get(slug))
+  return row ? mapProperty(row) : null
+}
+
+export function getUnitPage(slug: string, code: string) {
+  const property = getPropertyBySlug(slug)
+  if (!property) return null
+  const unit = property.units.find((item) => item.code.toLowerCase() === code.toLowerCase())
+  if (!unit) return null
+  const mediaRows = asRows(
+    getDb()
+      .prepare(
+        "SELECT id, kind, url, caption, sort_order FROM unit_media WHERE unit_id = ? AND tenant_id = ? ORDER BY sort_order",
+      )
+      .all(unit.id, unit.tenantId),
+  ).map(
+    (row): MediaRecord => ({
+      id: String(row.id),
+      kind: String(row.kind) as MediaRecord["kind"],
+      url: String(row.url),
+      caption: String(row.caption),
+      sortOrder: Number(row.sort_order),
+    }),
+  )
+  return { property, unit, media: mediaRows }
+}
+
+export function landlordOverview(tenantId: string) {
+  const db = getDb()
+  const units = asRows(db.prepare("SELECT status, sqft, rate_psf FROM units WHERE tenant_id = ?").all(tenantId))
+  const leased = units.filter((unit) => unit.status === "leased")
+  const occupancy = units.length === 0 ? 0 : Math.round((leased.length / units.length) * 100)
+  const rentRoll = leased.reduce(
+    (sum, unit) => sum + monthlyRentCents(Number(unit.rate_psf), Number(unit.sqft)),
+    0,
+  )
+  const apps = asRow(
+    db.prepare(
+      "SELECT COUNT(*) AS c FROM applications WHERE tenant_id = ? AND status = 'submitted'",
+    ).get(tenantId),
+  )
+  const jobs = asRow(
+    db.prepare(
+      "SELECT COUNT(*) AS c FROM jobs WHERE tenant_id = ? AND status != 'complete'",
+    ).get(tenantId),
+  )
+  const due = asRow(
+    db.prepare(
+      "SELECT COALESCE(SUM(amount_cents), 0) AS c FROM ledger_entries WHERE tenant_id = ? AND status = 'due' AND kind != 'payment'",
+    ).get(tenantId),
+  )
+  return {
+    occupancy,
+    unitCount: units.length,
+    leasedCount: leased.length,
+    rentRollCents: rentRoll,
+    openApplications: Number(apps?.c ?? 0),
+    openJobs: Number(jobs?.c ?? 0),
+    dueCents: Number(due?.c ?? 0),
+  }
+}
+
+export function propertyForLandlord(tenantId: string, propertyId: string) {
+  const row = asRow(
+    getDb().prepare(`${PROPERTY_SQL} WHERE p.id = ? AND p.tenant_id = ?`).get(propertyId, tenantId),
+  )
+  return row ? mapProperty(row) : null
+}
+
+export type ApplicationRecord = {
+  id: string
+  tenantId: string
+  company: string
+  contactName: string
+  email: string
+  intendedUse: string
+  notes: string
+  status: ApplicationStatus
+  createdAt: string
+  unitId: string
+  unitCode: string
+  propertyId: string
+  propertyName: string
+  propertySlug: string
+  propertyArea: string
+  applicantId: string
+  verification: {
+    result: string
+    score: number
+    docType: string
+    country: string
+    region: string
+  } | null
+}
+
+function mapApplication(row: Record<string, unknown>): ApplicationRecord {
+  const result = str(row, "v_result")
+  return {
+    id: String(row.id),
+    tenantId: String(row.tenant_id),
+    company: String(row.company),
+    contactName: String(row.contact_name),
+    email: String(row.email),
+    intendedUse: String(row.intended_use),
+    notes: String(row.notes),
+    status: String(row.status) as ApplicationStatus,
+    createdAt: String(row.created_at),
+    unitId: String(row.unit_id),
+    unitCode: String(row.unit_code),
+    propertyId: String(row.property_id),
+    propertyName: String(row.property_name),
+    propertySlug: String(row.property_slug),
+    propertyArea: String(row.property_area),
+    applicantId: String(row.applicant_id),
+    verification: result
+      ? {
+          result,
+          score: Number(row.v_score),
+          docType: String(row.v_doc),
+          country: String(row.v_country),
+          region: String(row.v_region),
+        }
+      : null,
+  }
+}
+
+const APP_SQL = `
+  SELECT a.*, u.code AS unit_code, p.id AS property_id, p.name AS property_name,
+         p.slug AS property_slug, p.area AS property_area,
+         v.simulated_result AS v_result, v.simulated_score AS v_score,
+         v.doc_type AS v_doc, v.country AS v_country, v.region AS v_region
+  FROM applications a
+  JOIN units u ON u.id = a.unit_id
+  JOIN properties p ON p.id = u.property_id
+  LEFT JOIN verifications v ON v.id = (
+    SELECT id FROM verifications WHERE user_id = a.applicant_id ORDER BY created_at DESC LIMIT 1
+  )
+`
+
+export function applicationsForTenant(tenantId: string) {
+  return asRows(
+    getDb().prepare(`${APP_SQL} WHERE a.tenant_id = ? ORDER BY a.created_at DESC`).all(tenantId),
+  ).map(mapApplication)
+}
+
+export function applicationsForApplicant(userId: string) {
+  return asRows(
+    getDb().prepare(`${APP_SQL} WHERE a.applicant_id = ? ORDER BY a.created_at DESC`).all(userId),
+  ).map(mapApplication)
+}
+
+export type JobRecord = {
+  id: string
+  tenantId: string
+  tenantName: string
+  propertyId: string
+  propertyName: string
+  area: string
+  unitCode: string | null
+  title: string
+  details: string
+  trade: Trade
+  status: JobStatus
+  providerId: string | null
+  providerName: string | null
+  createdAt: string
+}
+
+function mapJob(row: Record<string, unknown>): JobRecord {
+  return {
+    id: String(row.id),
+    tenantId: String(row.tenant_id),
+    tenantName: String(row.tenant_name),
+    propertyId: String(row.property_id),
+    propertyName: String(row.property_name),
+    area: String(row.area),
+    unitCode: str(row, "unit_code"),
+    title: String(row.title),
+    details: String(row.details),
+    trade: String(row.trade) as Trade,
+    status: String(row.status) as JobStatus,
+    providerId: str(row, "provider_id"),
+    providerName: str(row, "provider_name"),
+    createdAt: String(row.created_at),
+  }
+}
+
+const JOB_SQL = `
+  SELECT j.*, p.name AS property_name, p.area, t.name AS tenant_name,
+         u.code AS unit_code, prov.name AS provider_name
+  FROM jobs j
+  JOIN properties p ON p.id = j.property_id
+  JOIN tenants t ON t.id = j.tenant_id
+  LEFT JOIN units u ON u.id = j.unit_id
+  LEFT JOIN users prov ON prov.id = j.provider_id
+`
+
+export function jobsForTenant(tenantId: string) {
+  return asRows(
+    getDb().prepare(`${JOB_SQL} WHERE j.tenant_id = ? ORDER BY j.created_at DESC`).all(tenantId),
+  ).map(mapJob)
+}
+
+export function jobsForProvider(userId: string) {
+  return asRows(
+    getDb().prepare(`${JOB_SQL} WHERE j.provider_id = ? ORDER BY j.created_at DESC`).all(userId),
+  ).map(mapJob)
+}
+
+export type ProviderRecord = {
+  id: string
+  name: string
+  email: string
+  trade: Trade
+  serviceArea: string
+  verified: boolean
+  approval: "approved" | "pending" | "rejected" | "none"
+}
+
+export function providersForTenant(tenantId: string) {
+  return asRows(
+    getDb()
+      .prepare(
+        `SELECT u.id, u.name, u.email, u.trade, u.service_area, u.provider_verified,
+                COALESCE(a.status, 'none') AS approval
+         FROM users u
+         LEFT JOIN provider_approvals a ON a.user_id = u.id AND a.tenant_id = ?
+         WHERE u.role = 'service_provider'
+           AND u.provider_verified = 1
+           AND u.service_area IN (SELECT area FROM properties WHERE tenant_id = ?)
+         ORDER BY u.service_area, u.trade, u.name`,
+      )
+      .all(tenantId, tenantId),
+  ).map(
+    (row): ProviderRecord => ({
+      id: String(row.id),
+      name: String(row.name),
+      email: String(row.email),
+      trade: String(row.trade) as Trade,
+      serviceArea: String(row.service_area),
+      verified: Number(row.provider_verified) === 1,
+      approval: String(row.approval) as ProviderRecord["approval"],
+    }),
+  )
+}
+
+export function eligibleProviders(tenantId: string, area: string, trade: string) {
+  return providersForTenant(tenantId).filter(
+    (provider) =>
+      provider.approval === "approved" &&
+      provider.serviceArea === area &&
+      provider.trade === trade,
+  )
+}
+
+export type LedgerRecord = {
+  id: string
+  tenantId: string
+  tenantName: string
+  unitId: string
+  unitCode: string
+  propertyName: string
+  userId: string
+  payerName: string
+  kind: "rent" | "late_fee" | "payment"
+  description: string
+  amountCents: number
+  status: "due" | "paid" | "waived"
+  dueOn: string | null
+  createdAt: string
+  sourceId: string | null
+}
+
+function mapLedger(row: Record<string, unknown>): LedgerRecord {
+  return {
+    id: String(row.id),
+    tenantId: String(row.tenant_id),
+    tenantName: String(row.tenant_name),
+    unitId: String(row.unit_id),
+    unitCode: String(row.unit_code),
+    propertyName: String(row.property_name),
+    userId: String(row.user_id),
+    payerName: String(row.payer_name),
+    kind: String(row.kind) as LedgerRecord["kind"],
+    description: String(row.description),
+    amountCents: Number(row.amount_cents),
+    status: String(row.status) as LedgerRecord["status"],
+    dueOn: str(row, "due_on"),
+    createdAt: String(row.created_at),
+    sourceId: str(row, "source_id"),
+  }
+}
+
+const LEDGER_SQL = `
+  SELECT l.*, t.name AS tenant_name, u.code AS unit_code, p.name AS property_name, usr.name AS payer_name
+  FROM ledger_entries l
+  JOIN tenants t ON t.id = l.tenant_id
+  JOIN units u ON u.id = l.unit_id
+  JOIN properties p ON p.id = u.property_id
+  JOIN users usr ON usr.id = l.user_id
+`
+
+export function ledgerForUser(userId: string) {
+  return asRows(
+    getDb().prepare(`${LEDGER_SQL} WHERE l.user_id = ? ORDER BY l.due_on DESC, l.created_at DESC`).all(userId),
+  ).map(mapLedger)
+}
+
+export function ledgerForTenant(tenantId: string) {
+  return asRows(
+    getDb().prepare(`${LEDGER_SQL} WHERE l.tenant_id = ? ORDER BY l.due_on DESC, l.created_at DESC`).all(tenantId),
+  ).map(mapLedger)
+}
+
+export type MethodRecord = {
+  id: string
+  tenantId: string
+  brand: string
+  last4: string
+  autopay: boolean
+  providerRef: string
+}
+
+export function methodsForUser(userId: string) {
+  return asRows(
+    getDb()
+      .prepare(
+        "SELECT id, tenant_id, brand, last4, autopay, provider_ref FROM payment_methods WHERE user_id = ?",
+      )
+      .all(userId),
+  ).map(
+    (row): MethodRecord => ({
+      id: String(row.id),
+      tenantId: String(row.tenant_id),
+      brand: String(row.brand),
+      last4: String(row.last4),
+      autopay: Number(row.autopay) === 1,
+      providerRef: String(row.provider_ref),
+    }),
+  )
+}
+
+export type LateFeeRule = {
+  tenantId: string
+  graceDays: number
+  flatCents: number
+  percentBps: number
+}
+
+export function ruleForTenant(tenantId: string): LateFeeRule {
+  const row = asRow(
+    getDb()
+      .prepare("SELECT tenant_id, grace_days, flat_cents, percent_bps FROM late_fee_rules WHERE tenant_id = ?")
+      .get(tenantId),
+  )
+  if (!row) return { tenantId, graceDays: 5, flatCents: 0, percentBps: 0 }
+  return {
+    tenantId: String(row.tenant_id),
+    graceDays: Number(row.grace_days),
+    flatCents: Number(row.flat_cents),
+    percentBps: Number(row.percent_bps),
+  }
+}
+
+export function latestVerification(userId: string) {
+  const row = asRow(
+    getDb()
+      .prepare(
+        `SELECT country, region, doc_type, file_name, face_name, simulated_score, simulated_result, created_at
+         FROM verifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 1`,
+      )
+      .get(userId),
+  )
+  if (!row) return null
+  return {
+    country: String(row.country),
+    region: String(row.region),
+    docType: String(row.doc_type),
+    fileName: str(row, "file_name"),
+    faceName: str(row, "face_name"),
+    score: Number(row.simulated_score),
+    result: String(row.simulated_result),
+    createdAt: String(row.created_at),
+  }
+}
+
+export function landlordIds(tenantId: string) {
+  return asRows(
+    getDb()
+      .prepare("SELECT id FROM users WHERE role = 'landlord_admin' AND tenant_id = ?")
+      .all(tenantId),
+  ).map((row) => String(row.id))
+}
+
+export function tenantsForApplicant(userId: string) {
+  return asRows(
+    getDb()
+      .prepare(
+        `SELECT DISTINCT t.id, t.name FROM (
+           SELECT tenant_id FROM applications WHERE applicant_id = ?
+           UNION
+           SELECT tenant_id FROM ledger_entries WHERE user_id = ?
+         ) src
+         JOIN tenants t ON t.id = src.tenant_id
+         ORDER BY t.name`,
+      )
+      .all(userId, userId),
+  ).map((row) => ({ id: String(row.id), name: String(row.name) }))
+}
+
+function transaction(work: (db: Sql) => void) {
+  const db = getDb()
+  db.exec("BEGIN")
+  try {
+    work(db)
+    db.exec("COMMIT")
+  } catch (error) {
+    db.exec("ROLLBACK")
+    throw error
+  }
+}
+
+export function createApplication(input: {
+  unitId: string
+  applicantId: string
+  company: string
+  contactName: string
+  email: string
+  intendedUse: string
+  notes: string
+}) {
+  const db = getDb()
+  const unitRow = asRow(db.prepare("SELECT * FROM units WHERE id = ?").get(input.unitId))
+  if (!unitRow) return { ok: false as const, error: "That bay is not listed." }
+  const unit = mapUnit(unitRow)
+  if (unit.status === "leased") {
+    return { ok: false as const, error: "This bay is leased. Choose an available one." }
+  }
+  const existing = asRow(
+    db.prepare(
+      "SELECT id FROM applications WHERE unit_id = ? AND applicant_id = ? AND status = 'submitted'",
+    ).get(unit.id, input.applicantId),
+  )
+  if (existing) {
+    return { ok: false as const, error: "You already have an open application on this bay." }
+  }
+  const property = asRow(db.prepare("SELECT slug, name FROM properties WHERE id = ?").get(unit.propertyId))
+  const id = crypto.randomUUID()
+  transaction((tx) => {
+    tx.prepare(
+      `INSERT INTO applications (
+        id, tenant_id, unit_id, applicant_id, company, contact_name, email, intended_use, notes, status, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?)`,
+    ).run(
+      id,
+      unit.tenantId,
+      unit.id,
+      input.applicantId,
+      input.company,
+      input.contactName,
+      input.email,
+      input.intendedUse,
+      input.notes,
+      new Date().toISOString(),
+    )
+    if (unit.status === "available") {
+      tx.prepare("UPDATE units SET status = 'pending' WHERE id = ? AND tenant_id = ?").run(unit.id, unit.tenantId)
+    }
+  })
+  return {
+    ok: true as const,
+    id,
+    tenantId: unit.tenantId,
+    code: unit.code,
+    slug: String(property?.slug ?? ""),
+    propertyName: String(property?.name ?? ""),
+  }
+}
+
+export function decideApplication(
+  tenantId: string,
+  applicationId: string,
+  decision: "approved" | "denied",
+) {
+  const db = getDb()
+  const row = asRow(
+    db.prepare(`${APP_SQL} WHERE a.id = ? AND a.tenant_id = ?`).get(applicationId, tenantId),
+  )
+  if (!row) return { ok: false as const, error: "That application is not in this organisation." }
+  const application = mapApplication(row)
+  if (application.status !== "submitted") {
+    return { ok: false as const, error: "That application is already decided." }
+  }
+  const deniedIds: string[] = []
+  transaction((tx) => {
+    tx.prepare("UPDATE applications SET status = ? WHERE id = ? AND tenant_id = ?").run(
+      decision,
+      application.id,
+      tenantId,
+    )
+    if (decision === "approved") {
+      tx.prepare("UPDATE units SET status = 'leased' WHERE id = ? AND tenant_id = ?").run(
+        application.unitId,
+        tenantId,
+      )
+      const others = asRows(
+        tx.prepare(
+          "SELECT id, applicant_id FROM applications WHERE unit_id = ? AND tenant_id = ? AND status = 'submitted' AND id != ?",
+        ).all(application.unitId, tenantId, application.id),
+      )
+      for (const other of others) {
+        deniedIds.push(String(other.applicant_id))
+        tx.prepare("UPDATE applications SET status = 'denied' WHERE id = ?").run(String(other.id))
+      }
+      const unit = asRow(tx.prepare("SELECT sqft, rate_psf, code FROM units WHERE id = ?").get(application.unitId))
+      const dueOn = firstOfNextMonth()
+      const amount = monthlyRentCents(Number(unit?.rate_psf), Number(unit?.sqft))
+      tx.prepare(
+        `INSERT INTO ledger_entries (
+          id, tenant_id, unit_id, user_id, kind, description, amount_cents, status, due_on, created_at, source_id
+        ) VALUES (?, ?, ?, ?, 'rent', ?, ?, 'due', ?, ?, NULL)`,
+      ).run(
+        crypto.randomUUID(),
+        tenantId,
+        application.unitId,
+        application.applicantId,
+        `Rent · Unit ${application.unitCode} · due ${dueOn}`,
+        amount,
+        dueOn,
+        new Date().toISOString(),
+      )
+    } else {
+      const remaining = asRow(
+        tx.prepare(
+          "SELECT COUNT(*) AS c FROM applications WHERE unit_id = ? AND status = 'submitted'",
+        ).get(application.unitId),
+      )
+      if (Number(remaining?.c ?? 0) === 0) {
+        tx.prepare(
+          "UPDATE units SET status = 'available' WHERE id = ? AND tenant_id = ? AND status = 'pending'",
+        ).run(application.unitId, tenantId)
+      }
+    }
+  })
+  return { ok: true as const, application, deniedIds }
+}
+
+export function setProviderApproval(tenantId: string, providerId: string, status: "approved" | "rejected") {
+  const provider = asRow(
+    getDb()
+      .prepare(
+        `SELECT id FROM users WHERE id = ? AND role = 'service_provider' AND provider_verified = 1
+         AND service_area IN (SELECT area FROM properties WHERE tenant_id = ?)`,
+      )
+      .get(providerId, tenantId),
+  )
+  if (!provider) return { ok: false as const, error: "That provider is not verified for this portfolio's area." }
+  getDb()
+    .prepare(
+      `INSERT INTO provider_approvals (tenant_id, user_id, status) VALUES (?, ?, ?)
+       ON CONFLICT(tenant_id, user_id) DO UPDATE SET status = excluded.status`,
+    )
+    .run(tenantId, providerId, status)
+  return { ok: true as const }
+}
+
+export function createJob(input: {
+  tenantId: string
+  propertyId: string
+  unitId: string | null
+  title: string
+  details: string
+  trade: Trade
+  providerId: string | null
+}) {
+  const db = getDb()
+  const property = asRow(
+    db.prepare("SELECT id, area, name, slug FROM properties WHERE id = ? AND tenant_id = ?").get(
+      input.propertyId,
+      input.tenantId,
+    ),
+  )
+  if (!property) return { ok: false as const, error: "That building is not in this organisation." }
+  if (input.unitId) {
+    const unit = asRow(
+      db.prepare("SELECT id FROM units WHERE id = ? AND property_id = ? AND tenant_id = ?").get(
+        input.unitId,
+        input.propertyId,
+        input.tenantId,
+      ),
+    )
+    if (!unit) return { ok: false as const, error: "That bay is not in the selected building." }
+  }
+  let providerId: string | null = null
+  if (input.providerId) {
+    const eligible = eligibleProviders(input.tenantId, String(property.area), input.trade)
+    if (!eligible.some((provider) => provider.id === input.providerId)) {
+      return {
+        ok: false as const,
+        error: "That provider is not approved for this trade and area.",
+      }
+    }
+    providerId = input.providerId
+  }
+  const id = crypto.randomUUID()
+  db.prepare(
+    `INSERT INTO jobs (id, tenant_id, property_id, unit_id, title, details, trade, status, provider_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id,
+    input.tenantId,
+    input.propertyId,
+    input.unitId,
+    input.title,
+    input.details,
+    input.trade,
+    providerId ? "assigned" : "open",
+    providerId,
+    new Date().toISOString(),
+  )
+  return {
+    ok: true as const,
+    id,
+    providerId,
+    propertyName: String(property.name),
+    slug: String(property.slug),
+  }
+}
+
+export function assignJob(tenantId: string, jobId: string, providerId: string) {
+  const db = getDb()
+  const job = asRow(
+    db.prepare(`${JOB_SQL} WHERE j.id = ? AND j.tenant_id = ?`).get(jobId, tenantId),
+  )
+  if (!job) return { ok: false as const, error: "That job is not in this organisation." }
+  const mapped = mapJob(job)
+  if (mapped.status === "complete") return { ok: false as const, error: "That job is already complete." }
+  const eligible = eligibleProviders(tenantId, mapped.area, mapped.trade)
+  if (!eligible.some((provider) => provider.id === providerId)) {
+    return { ok: false as const, error: "That provider is not approved for this trade and area." }
+  }
+  db.prepare(
+    "UPDATE jobs SET provider_id = ?, status = 'assigned' WHERE id = ? AND tenant_id = ?",
+  ).run(providerId, jobId, tenantId)
+  return { ok: true as const, job: { ...mapped, providerId } }
+}
+
+export function transitionJob(providerId: string, jobId: string, next: "accepted" | "complete") {
+  const db = getDb()
+  const job = asRow(db.prepare(`${JOB_SQL} WHERE j.id = ? AND j.provider_id = ?`).get(jobId, providerId))
+  if (!job) return { ok: false as const, error: "That job is not assigned to you." }
+  const mapped = mapJob(job)
+  if (next === "accepted" && mapped.status !== "assigned") {
+    return { ok: false as const, error: "Only an assigned job can be accepted." }
+  }
+  if (next === "complete" && mapped.status !== "accepted") {
+    return { ok: false as const, error: "Accept the job before marking it complete." }
+  }
+  db.prepare("UPDATE jobs SET status = ? WHERE id = ? AND provider_id = ?").run(next, jobId, providerId)
+  return { ok: true as const, job: mapped }
+}
+
+export function saveHotspots(
+  tenantId: string,
+  propertyId: string,
+  spots: { id: string; x: number | null; y: number | null }[],
+) {
+  const property = propertyForLandlord(tenantId, propertyId)
+  if (!property) return { ok: false as const, error: "Building not found in this organisation." }
+  const ids = new Set(property.units.map((unit) => unit.id))
+  transaction((tx) => {
+    const update = tx.prepare(
+      "UPDATE units SET hotspot_x = ?, hotspot_y = ? WHERE id = ? AND property_id = ? AND tenant_id = ?",
+    )
+    for (const spot of spots) {
+      if (!ids.has(spot.id)) continue
+      update.run(spot.x, spot.y, spot.id, propertyId, tenantId)
+    }
+  })
+  return { ok: true as const, slug: property.slug }
+}
+
+export function saveFloorPlan(tenantId: string, propertyId: string, publicPath: string) {
+  const property = propertyForLandlord(tenantId, propertyId)
+  if (!property) return { ok: false as const, error: "Building not found in this organisation." }
+  getDb()
+    .prepare("UPDATE properties SET floor_plan_path = ? WHERE id = ? AND tenant_id = ?")
+    .run(publicPath, propertyId, tenantId)
+  return { ok: true as const, slug: property.slug }
+}
+
+export function saveLateFeeRule(
+  tenantId: string,
+  rule: { graceDays: number; flatCents: number; percentBps: number },
+) {
+  getDb()
+    .prepare(
+      `INSERT INTO late_fee_rules (tenant_id, grace_days, flat_cents, percent_bps) VALUES (?, ?, ?, ?)
+       ON CONFLICT(tenant_id) DO UPDATE SET grace_days = excluded.grace_days, flat_cents = excluded.flat_cents, percent_bps = excluded.percent_bps`,
+    )
+    .run(tenantId, rule.graceDays, rule.flatCents, rule.percentBps)
+}
+
+export function assessLateFees(tenantId: string) {
+  const db = getDb()
+  const rule = ruleForTenant(tenantId)
+  const today = todayISO()
+  const rents = asRows(
+    db.prepare(
+      `SELECT id, unit_id, user_id, amount_cents, due_on, description
+       FROM ledger_entries WHERE tenant_id = ? AND kind = 'rent' AND status = 'due'`,
+    ).all(tenantId),
+  )
+  let created = 0
+  for (const rent of rents) {
+    const dueOn = str(rent, "due_on")
+    if (!dueOn) continue
+    if (today <= addDays(dueOn, rule.graceDays)) continue
+    const existing = asRow(
+      db.prepare(
+        "SELECT id FROM ledger_entries WHERE tenant_id = ? AND kind = 'late_fee' AND source_id = ?",
+      ).get(tenantId, String(rent.id)),
+    )
+    if (existing) continue
+    const amount = lateFeeCents(Number(rent.amount_cents), rule)
+    db.prepare(
+      `INSERT INTO ledger_entries (
+        id, tenant_id, unit_id, user_id, kind, description, amount_cents, status, due_on, created_at, source_id
+      ) VALUES (?, ?, ?, ?, 'late_fee', ?, ?, 'due', ?, ?, ?)`,
+    ).run(
+      crypto.randomUUID(),
+      tenantId,
+      String(rent.unit_id),
+      String(rent.user_id),
+      `Late fee · ${String(rent.description)}`,
+      amount,
+      addDays(dueOn, rule.graceDays),
+      new Date().toISOString(),
+      String(rent.id),
+    )
+    created += 1
+  }
+  return created
+}
+
+export function upsertMethod(input: {
+  userId: string
+  tenantId: string
+  brand: string
+  last4: string
+  autopay: boolean
+  providerRef: string
+}) {
+  const allowed = tenantsForApplicant(input.userId).some((tenant) => tenant.id === input.tenantId)
+  if (!allowed) return { ok: false as const, error: "You do not have an application or ledger with that landlord." }
+  const db = getDb()
+  db.prepare("DELETE FROM payment_methods WHERE user_id = ? AND tenant_id = ?").run(input.userId, input.tenantId)
+  db.prepare(
+    `INSERT INTO payment_methods (id, user_id, tenant_id, brand, last4, autopay, provider_ref)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    crypto.randomUUID(),
+    input.userId,
+    input.tenantId,
+    input.brand,
+    input.last4,
+    input.autopay ? 1 : 0,
+    input.providerRef,
+  )
+  return { ok: true as const }
+}
+
+export function setAutopay(userId: string, tenantId: string, enabled: boolean) {
+  const method = methodsForUser(userId).find((item) => item.tenantId === tenantId)
+  if (!method) return { ok: false as const, error: "Add a demo payment method first." }
+  getDb()
+    .prepare("UPDATE payment_methods SET autopay = ? WHERE user_id = ? AND tenant_id = ?")
+    .run(enabled ? 1 : 0, userId, tenantId)
+  return { ok: true as const, providerRef: method.providerRef }
+}
+
+export function payDue(userId: string, tenantId: string) {
+  const method = methodsForUser(userId).find((item) => item.tenantId === tenantId)
+  if (!method) return { ok: false as const, error: "Add a demo payment method first." }
+  const due = ledgerForUser(userId).filter(
+    (entry) => entry.tenantId === tenantId && entry.status === "due" && entry.kind !== "payment",
+  )
+  if (due.length === 0) return { ok: false as const, error: "Nothing is due." }
+  const amount = due.reduce((sum, entry) => sum + entry.amountCents, 0)
+  const now = new Date().toISOString()
+  transaction((tx) => {
+    for (const entry of due) {
+      tx.prepare(
+        "UPDATE ledger_entries SET status = 'paid' WHERE id = ? AND user_id = ? AND tenant_id = ?",
+      ).run(entry.id, userId, tenantId)
+    }
+    tx.prepare(
+      `INSERT INTO ledger_entries (
+        id, tenant_id, unit_id, user_id, kind, description, amount_cents, status, due_on, created_at, source_id
+      ) VALUES (?, ?, ?, ?, 'payment', ?, ?, 'paid', ?, ?, NULL)`,
+    ).run(
+      crypto.randomUUID(),
+      tenantId,
+      due[0].unitId,
+      userId,
+      `Demo PAD ····${method.last4} · ${due.length} open item${due.length === 1 ? "" : "s"}`,
+      amount,
+      todayISO(),
+      now,
+    )
+  })
+  return { ok: true as const, amountCents: amount, providerRef: method.providerRef, count: due.length }
+}
+
+export function saveVerification(input: {
+  userId: string
+  country: string
+  region: string
+  docType: string
+  fileName: string | null
+  faceName: string | null
+  score: number
+  result: string
+}) {
+  getDb()
+    .prepare(
+      `INSERT INTO verifications (
+        id, user_id, country, region, doc_type, file_name, face_name, simulated_score, simulated_result, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      crypto.randomUUID(),
+      input.userId,
+      input.country,
+      input.region,
+      input.docType,
+      input.fileName,
+      input.faceName,
+      input.score,
+      input.result,
+      new Date().toISOString(),
+    )
+}
+
+export function openApplicationTenants(userId: string) {
+  return asRows(
+    getDb()
+      .prepare(
+        `SELECT DISTINCT a.tenant_id AS id FROM applications a
+         WHERE a.applicant_id = ? AND a.status = 'submitted'`,
+      )
+      .all(userId),
+  ).map((row) => String(row.id))
+}
