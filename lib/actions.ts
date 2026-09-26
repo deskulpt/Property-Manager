@@ -407,7 +407,7 @@ export async function submitVerifyOtp(_prev: OtpState, formData: FormData): Prom
     body: `${result.phoneE164} is saved on your profile. No SMS was sent.`,
     href: "/account",
   })
-  refresh(["/account", "/landlord/settings", "/inbox"])
+  // Client refreshes after reading the success state so the banner is not wiped.
   return {
     error: null,
     message: `Verified ${result.phoneE164}.`,

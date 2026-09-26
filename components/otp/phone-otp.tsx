@@ -1,16 +1,10 @@
 "use client"
 
-import { useActionState, useState } from "react"
+import { useActionState, useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { submitRequestOtp, submitVerifyOtp, type OtpState } from "@/lib/actions"
 import { PHONE_COUNTRY_CODES, formatPhoneDisplay } from "@/lib/market"
 
@@ -27,21 +21,36 @@ export function PhoneOtpForm({
 }: {
   currentPhone: string | null
 }) {
+  const router = useRouter()
   const [requestState, requestAction] = useActionState(submitRequestOtp, initial)
   const [verifyState, verifyAction] = useActionState(submitVerifyOtp, initial)
   const [countryCode, setCountryCode] = useState("+91")
-  const codes = PHONE_COUNTRY_CODES.map((item) => ({
-    value: item.code,
-    label: item.label,
-  }))
+  const [onFile, setOnFile] = useState(currentPhone)
   const meta = PHONE_COUNTRY_CODES.find((item) => item.code === countryCode)
-  const state = verifyState.verified ? verifyState : requestState.error || requestState.message ? requestState : verifyState
+
+  useEffect(() => {
+    setOnFile(currentPhone)
+  }, [currentPhone])
+
+  useEffect(() => {
+    if (verifyState.verified && verifyState.phoneE164) {
+      setOnFile(verifyState.phoneE164)
+      router.refresh()
+    }
+  }, [verifyState, router])
+
+  const error = verifyState.error || requestState.error
+  const message = verifyState.verified
+    ? verifyState.message
+    : requestState.message && !verifyState.verified
+      ? requestState.message
+      : verifyState.message
 
   return (
     <div className="grid gap-4">
-      {currentPhone ? (
-        <p className="text-sm text-ink-soft">
-          On file: <span className="font-bold text-ink">{formatPhoneDisplay(currentPhone)}</span>
+      {onFile ? (
+        <p className="border border-brand/25 bg-accent px-3 py-2 text-sm text-brand" role="status" data-testid="otp-on-file">
+          Verified on file: <span className="font-bold">{formatPhoneDisplay(onFile)}</span>
         </p>
       ) : (
         <p className="text-sm text-ink-soft">No phone on file yet. International numbers are welcome.</p>
@@ -49,24 +58,20 @@ export function PhoneOtpForm({
 
       <form action={requestAction} className="grid gap-3 sm:grid-cols-[minmax(0,11rem)_1fr_auto]">
         <div className="grid gap-1">
-          <Label>Country code</Label>
-          <input type="hidden" name="countryCode" value={countryCode} />
-          <Select
-            items={codes}
+          <Label htmlFor="countryCode">Country code</Label>
+          <select
+            id="countryCode"
+            name="countryCode"
             value={countryCode}
-            onValueChange={(value) => value && setCountryCode(String(value))}
+            onChange={(event) => setCountryCode(event.target.value)}
+            className="h-9 w-full border border-input bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <SelectTrigger className="w-full bg-background">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {codes.map((item) => (
-                <SelectItem key={item.value} value={item.value}>
-                  {item.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            {PHONE_COUNTRY_CODES.map((item) => (
+              <option key={item.code} value={item.code}>
+                {item.label}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="grid gap-1">
           <Label htmlFor="national">Mobile number</Label>
@@ -87,7 +92,7 @@ export function PhoneOtpForm({
       </form>
 
       {requestState.demoCode ? (
-        <div className="border border-terra/40 bg-terra/10 px-4 py-3 text-sm">
+        <div className="border border-terra/40 bg-terra/10 px-4 py-3 text-sm" data-testid="otp-demo-code">
           <p className="font-bold">Demo OTP for {requestState.phoneE164}</p>
           <p className="mt-1 font-mono text-2xl tracking-[0.3em] text-brand">{requestState.demoCode}</p>
           <p className="mt-1 text-xs text-ink-soft">No SMS provider. The code is always shown here in this demo.</p>
@@ -104,10 +109,19 @@ export function PhoneOtpForm({
         </Button>
       </form>
 
-      {state.error ? <p className="text-sm text-destructive">{state.error}</p> : null}
-      {state.message ? (
-        <p className="text-sm text-brand" role="status">
-          {state.message}
+      {error ? (
+        <p className="text-sm text-destructive" role="alert" data-testid="otp-error">
+          {error}
+        </p>
+      ) : null}
+      {message ? (
+        <p className="text-sm font-bold text-brand" role="status" data-testid="otp-message">
+          {message}
+        </p>
+      ) : null}
+      {verifyState.verified ? (
+        <p className="border border-avail/40 bg-avail/10 px-3 py-2 text-sm font-bold text-avail" data-testid="otp-verified">
+          OTP verified for {verifyState.phoneE164}
         </p>
       ) : null}
     </div>
