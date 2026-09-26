@@ -2027,7 +2027,7 @@ export function inviteLandlord(input: {
      VALUES (?, ?, ?, 'landlord_admin', ?, NULL, NULL, NULL, 0)`,
   ).run(userId, input.adminName, input.adminEmail, tenantId)
   db.prepare(
-    "INSERT INTO late_fee_rules (tenant_id, grace_days, flat_cents, percent_bps) VALUES (?, 5, 15000, 150)",
+    "INSERT INTO late_fee_rules (tenant_id, grace_days, flat_cents, percent_bps) VALUES (?, 5, 1500000, 150)",
   ).run(tenantId)
   return { ok: true as const, tenantId, userId, companyName: input.companyName }
 }
