@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select"
 import { SubmitButton } from "@/components/submit-button"
 import { submitAutopay, submitMethod, submitPayment, type ApplyState } from "@/lib/actions"
+import { activeMarket, type PaymentMethodKind } from "@/lib/market"
 
 const initial: ApplyState = { error: null, fieldErrors: {} }
 
@@ -24,8 +25,15 @@ export function MethodForm({
 }) {
   const [state, action] = useActionState(submitMethod, initial)
   const [tenantId, setTenantId] = useState(tenants[0]?.id ?? "")
+  const [kind, setKind] = useState<PaymentMethodKind>("upi")
   const [autopay, setAutopay] = useState(true)
+  const market = activeMarket()
   const items = tenants.map((tenant) => ({ value: tenant.id, label: tenant.name }))
+  const methods = market.primaryPaymentMethods.map((item) => ({
+    value: item.kind,
+    label: item.label,
+  }))
+  const selected = market.primaryPaymentMethods.find((item) => item.kind === kind)
 
   if (tenants.length === 0) {
     return (
@@ -38,6 +46,7 @@ export function MethodForm({
   return (
     <form action={action} className="grid gap-3">
       <input type="hidden" name="tenantId" value={tenantId} />
+      <input type="hidden" name="kind" value={kind} />
       <input type="hidden" name="autopay" value={autopay ? "on" : ""} />
       <div className="grid gap-2">
         <Label>Landlord</Label>
@@ -51,14 +60,36 @@ export function MethodForm({
         </Select>
       </div>
       <div className="grid gap-2">
-        <Label htmlFor="last4">Last 4 digits</Label>
-        <Input id="last4" name="last4" inputMode="numeric" maxLength={4} placeholder="4821" aria-invalid={Boolean(state.fieldErrors.last4)} />
-        <p className="text-xs text-ink-soft">Demo only. Enter any 4 digits. No card number is stored and nothing is charged.</p>
+        <Label>Method</Label>
+        <Select
+          items={methods}
+          value={kind}
+          onValueChange={(value) => value && setKind(String(value) as PaymentMethodKind)}
+        >
+          <SelectTrigger className="w-full bg-background"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {methods.map((item) => (
+              <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {selected ? <p className="text-xs text-ink-soft">{selected.hint}</p> : null}
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="last4">{kind === "upi" ? "VPA last 4 characters" : "Mandate last 4 digits"}</Label>
+        <Input
+          id="last4"
+          name="last4"
+          inputMode="numeric"
+          maxLength={4}
+          placeholder={kind === "upi" ? "4321" : "4821"}
+          aria-invalid={Boolean(state.fieldErrors.last4)}
+        />
         {state.fieldErrors.last4 ? <p className="text-sm text-destructive">{state.fieldErrors.last4}</p> : null}
       </div>
       <label className="flex items-center gap-2 text-sm">
         <Checkbox checked={autopay} onCheckedChange={(checked) => setAutopay(checked === true)} />
-        Schedule autopay on the demo adapter
+        Schedule eNACH / UPI autopay on the demo adapter
       </label>
       {state.error ? <p className="text-sm text-destructive">{state.error}</p> : null}
       <Button type="submit">Save demo method</Button>
@@ -83,7 +114,7 @@ export function PayForm({ tenantId }: { tenantId: string }) {
   return (
     <form action={submitPayment}>
       <input type="hidden" name="tenantId" value={tenantId} />
-      <SubmitButton pendingLabel="Posting…">Record demo payment for open items</SubmitButton>
+      <SubmitButton pendingLabel="Posting…">Record demo UPI / eNACH payment</SubmitButton>
     </form>
   )
 }

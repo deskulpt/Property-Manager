@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select"
 import { completeVerification } from "@/lib/actions"
 
-const COUNTRIES = ["Canada", "United States", "India", "United Kingdom"] as const
+const COUNTRIES = ["India", "United Kingdom", "United States", "Canada"] as const
 const countries = COUNTRIES.map((country) => ({ value: country, label: country }))
 
 export function VerificationWizard({
@@ -29,7 +29,7 @@ export function VerificationWizard({
   } | null
 }) {
   const [step, setStep] = useState(0)
-  const [country, setCountry] = useState<string>(existing?.country ?? "Canada")
+  const [country, setCountry] = useState<string>(existing?.country ?? "India")
   const [region, setRegion] = useState(existing?.region ?? "")
   const [fileName, setFileName] = useState("")
   const [faceName, setFaceName] = useState("")

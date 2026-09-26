@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "DeSkulpt",
     short_name: "DeSkulpt",
-    description: "Multi-tenant industrial leasing and property desk.",
+    description: "Indian industrial leasing desk — INR, UPI, eNACH, GST.",
     start_url: "/",
     scope: "/",
     display: "standalone",

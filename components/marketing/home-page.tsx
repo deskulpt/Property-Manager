@@ -18,7 +18,7 @@ export function HomePage({
           A digital headquarters for <em className="font-serif font-light text-terra italic">industrial</em> real estate.
         </h1>
         <p className="hero-rise mt-6 max-w-[58ch] text-xl font-light text-ink-soft md:text-2xl">
-          DeSkulpt is the map-driven desk behind a portfolio like BBM Waterman — live bays, applications, a rent ledger, and a concierge board for trades. Two landlord organisations are seeded so you can see the books stay separate.
+          DeSkulpt is the map-driven desk behind Indian industrial parks — live bays in INR, UPI and eNACH demo payments, GST on the rent roll, and a concierge board for trades. Seeded landlord organisations keep the books separate; NRI landlords can view amounts in USD, CAD, or GBP.
         </p>
         <dl className="hero-rise mt-10 grid grid-cols-2 border border-ink/25 bg-paper-2 md:grid-cols-4">
           {[
@@ -39,7 +39,7 @@ export function HomePage({
         <p className="reveal font-mono text-xs uppercase tracking-[0.18em] text-terra">01 — The opportunity</p>
         <h2 className="reveal mt-4 max-w-[18ch] text-4xl font-black md:text-5xl">Today, a great portfolio sits behind a brochure.</h2>
         <p className="reveal mt-4 max-w-[62ch] text-lg font-light text-ink-soft">
-          BBM Waterman runs quality industrial space across East York — and the old pattern is familiar: availabilities stuck on “Coming Soon,” every lead in one inbox, tenants with no way to transact. Prospects can’t see a bay. Staff manage the rest by hand. The desk below closes that gap, and it hosts more than one landlord.
+          BBM Logistics Parks and Harbourline Yards India run quality industrial space across Bhiwandi, Whitefield, and Sriperumbudur — and the old pattern is familiar: availabilities stuck on “Coming Soon,” every lead in one WhatsApp thread, tenants with no way to transact. Prospects can’t see a bay. Staff manage the rest by hand. The desk below closes that gap, and it hosts more than one landlord.
         </p>
         <div className="reveal mt-10 grid border border-ink/25 md:grid-cols-2">
           <div className="bg-paper-2 p-6 md:p-9">
@@ -102,7 +102,7 @@ export function HomePage({
           <p className="reveal font-mono text-xs uppercase tracking-[0.18em] text-terra">03 — The centrepiece</p>
           <h2 className="reveal mt-4 max-w-[16ch] text-4xl font-black text-paper md:text-5xl">Select a building. Click a unit. See everything.</h2>
           <p className="reveal mt-4 max-w-[62ch] text-lg font-light text-paper/75">
-            A working preview of the leasing map. Vacant bays stay bright, leased bays dim. The numbers are the seeded portfolio — BBM Waterman and Harbourline Yards — not a static mock. <span className="text-[#E2A57E]">Open a bay to apply.</span>
+            A working preview of the leasing map. Vacant bays stay bright, leased bays dim. The numbers are the seeded India portfolio — BBM Logistics Parks, Harbourline Yards India, and Sahni Global Realty (NRI) — not a static mock. <span className="text-[#E2A57E]">Open a bay to apply.</span>
           </p>
           <div className="reveal">
             <LeasingMap properties={properties} />
@@ -118,9 +118,9 @@ export function HomePage({
             {[
               ["01", "Demo identity, not a password", "Pick Maya Chen or Devon Hale in the header. There is no auth provider and no secret."],
               ["02", "Online applications", "Company, use, and a note. The landlord sees it in an inbox scoped to their organisation."],
-              ["03", "Rent ledger", "Due rent, a late fee after the grace window, and a demo payment. No card is charged."],
-              ["04", "Verification wizard", "Country, Aadhaar or a driving licence, then a simulated face step. Labeled as a demo."],
-              ["05", "Notices", "An in-app inbox. Email and web push are logged by a demo sender."],
+              ["03", "Rent ledger", "Due rent, GST (18%), a late fee after grace, and a demo UPI or eNACH payment. No bank is contacted."],
+              ["04", "Verification wizard", "Defaults to India / Aadhaar. Other countries use a driving licence. Face match is simulated."],
+              ["05", "Notices", "An in-app inbox. Email, web push, and WhatsApp are logged by a demo sender."],
             ].map(([num, title, body]) => (
               <li key={num} className="grid grid-cols-[2.5rem_1fr] gap-3 border-b border-black/10 py-4">
                 <span className="font-mono text-xs font-bold text-terra">{num}</span>
@@ -141,9 +141,9 @@ export function HomePage({
             <div className="grid gap-3 p-5">
               <div className="grid grid-cols-3 gap-2">
                 {[
-                  ["Due", "Open rent"],
+                  ["Due", "Open rent + GST"],
                   ["1", "Late fee"],
-                  ["Demo", "PAD on file"],
+                  ["Demo", "eNACH on file"],
                 ].map(([n, l]) => (
                   <div key={l} className="border border-black/10 bg-paper-2 p-3">
                     <div className="font-sans text-xl font-black text-brand">{n}</div>
@@ -223,8 +223,8 @@ export function HomePage({
             ["F—02", "Floor-plan hotspots", "Click a pin on the public plan and land on that bay."],
             ["F—03", "Demo verification", "Aadhaar for India, a driving licence elsewhere. Simulated match only."],
             ["F—04", "Service providers", "Electricians, plumbers, couriers, cleaning. Approved per landlord, filtered by area."],
-            ["F—05", "Payments interface", "Late-fee rules and a demo PAD adapter. The ledger shows due, fee, and paid."],
-            ["F—06", "Installable PWA", "A manifest, a service worker, and an in-app inbox with demo email and push logs."],
+            ["F—05", "Payments interface", "Late-fee rules, GST, and a demo UPI / eNACH adapter. NRI landlords can display USD, CAD, or GBP."],
+            ["F—06", "Installable PWA", "A manifest, a service worker, and an inbox with demo email, push, and WhatsApp logs."],
           ].map(([num, title, body]) => (
             <article key={num} className="bg-paper p-6">
               <p className="font-mono text-[11px] tracking-widest text-terra">{num}</p>

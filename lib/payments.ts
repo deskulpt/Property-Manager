@@ -1,15 +1,17 @@
 import "server-only"
+import { activeMarket, type PaymentMethodKind } from "@/lib/market"
 
 /**
  * Payment provider boundary. The demo adapter never contacts a processor
- * and never stores a full card number. A live adapter can implement the
- * same methods later.
+ * and never stores a full card or UPI secret. A live adapter can implement
+ * the same methods later.
  */
 export interface PaymentProvider {
   readonly name: string
   attachMethod(input: {
     userId: string
     tenantId: string
+    kind: PaymentMethodKind
     last4: string
     autopay: boolean
   }): { providerRef: string; brand: string; last4: string }
@@ -25,11 +27,16 @@ export interface PaymentProvider {
 }
 
 export const demoPayments: PaymentProvider = {
-  name: "demo",
+  name: "demo-in",
   attachMethod(input) {
+    const market = activeMarket()
+    const method =
+      market.primaryPaymentMethods.find((item) => item.kind === input.kind) ??
+      market.primaryPaymentMethods[0]
+    const prefix = input.kind === "upi" ? "demo_upi" : "demo_enach"
     return {
-      providerRef: `demo_pad_${input.last4}_${input.tenantId}`,
-      brand: "Pre-authorized debit (demo)",
+      providerRef: `${prefix}_${input.last4}_${input.tenantId}`,
+      brand: method.label,
       last4: input.last4,
     }
   },

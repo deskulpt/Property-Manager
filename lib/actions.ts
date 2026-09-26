@@ -24,11 +24,14 @@ import {
   setAutopay,
   setProviderApproval,
   setProviderVerified,
+  setTenantDisplayCurrency,
   transitionJob,
   upsertMethod,
 } from "@/lib/db"
 import { TRADES } from "@/lib/format"
+import { toE164, type DisplayCurrency, type PaymentMethodKind } from "@/lib/market"
 import { notify, notifyMany } from "@/lib/notifications"
+import { demoOtpCode, requestDemoOtp, verifyDemoOtp } from "@/lib/otp"
 import { demoPayments } from "@/lib/payments"
 import { staffCapabilities } from "@/lib/permissions"
 import { getSessionUser, SESSION_COOKIE } from "@/lib/session"
@@ -308,21 +311,109 @@ export async function submitLateFeeRule(formData: FormData) {
   const parsed = z
     .object({
       graceDays: z.coerce.number().int().min(0).max(60),
-      flatDollars: z.coerce.number().min(0).max(100000),
+      flatRupees: z.coerce.number().min(0).max(10_000_000),
       percent: z.coerce.number().min(0).max(100),
     })
     .safeParse({
       graceDays: formData.get("graceDays"),
-      flatDollars: formData.get("flatDollars"),
+      flatRupees: formData.get("flatRupees") ?? formData.get("flatDollars"),
       percent: formData.get("percent"),
     })
   if (!parsed.success) return
   saveLateFeeRule(user.tenantId, {
     graceDays: parsed.data.graceDays,
-    flatCents: Math.round(parsed.data.flatDollars * 100),
+    flatCents: Math.round(parsed.data.flatRupees * 100),
     percentBps: Math.round(parsed.data.percent * 100),
   })
   refresh(["/landlord/ledger", "/account/payments"])
+}
+
+export async function submitDisplayCurrency(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) return
+  const currency = String(formData.get("displayCurrency") ?? "") as DisplayCurrency
+  if (!["INR", "USD", "CAD", "GBP"].includes(currency)) return
+  setTenantDisplayCurrency(user.tenantId, currency)
+  notify({
+    userId: user.id,
+    title: "Display currency updated",
+    body:
+      currency === "INR"
+        ? "Amounts show in INR only. The ledger charge currency stays INR."
+        : `Amounts now show ${currency} with the INR charge beside them. Demo FX table only — not a live rate.`,
+    href: "/landlord/settings",
+  })
+  refresh(["/landlord", "/landlord/ledger", "/landlord/settings", "/inbox"])
+}
+
+export type OtpState = {
+  error: string | null
+  message: string | null
+  demoCode: string | null
+  phoneE164: string | null
+  verified: boolean
+}
+
+export async function submitRequestOtp(_prev: OtpState, formData: FormData): Promise<OtpState> {
+  const user = await getSessionUser()
+  if (!user) {
+    return { error: "Pick a demo identity first.", message: null, demoCode: null, phoneE164: null, verified: false }
+  }
+  const countryCode = String(formData.get("countryCode") ?? "")
+  const national = String(formData.get("national") ?? "")
+  const e164 = toE164(countryCode, national)
+  if (!e164) {
+    return {
+      error: "Enter a valid number for that country code (E.164).",
+      message: null,
+      demoCode: null,
+      phoneE164: null,
+      verified: false,
+    }
+  }
+  const result = requestDemoOtp(user.id, e164)
+  if (!result.ok) {
+    return { error: result.error, message: null, demoCode: null, phoneE164: null, verified: false }
+  }
+  return {
+    error: null,
+    message: `Demo OTP sent to ${result.phoneE164}. No SMS provider — use the code shown.`,
+    demoCode: result.demoCode,
+    phoneE164: result.phoneE164,
+    verified: false,
+  }
+}
+
+export async function submitVerifyOtp(_prev: OtpState, formData: FormData): Promise<OtpState> {
+  const user = await getSessionUser()
+  if (!user) {
+    return { error: "Pick a demo identity first.", message: null, demoCode: null, phoneE164: null, verified: false }
+  }
+  const code = String(formData.get("code") ?? "")
+  const result = verifyDemoOtp(user.id, code)
+  if (!result.ok) {
+    return {
+      error: result.error,
+      message: null,
+      demoCode: demoOtpCode(),
+      phoneE164: null,
+      verified: false,
+    }
+  }
+  notify({
+    userId: user.id,
+    title: "Phone verified (demo OTP)",
+    body: `${result.phoneE164} is saved on your profile. No SMS was sent.`,
+    href: "/account",
+  })
+  refresh(["/account", "/landlord/settings", "/inbox"])
+  return {
+    error: null,
+    message: `Verified ${result.phoneE164}.`,
+    demoCode: null,
+    phoneE164: result.phoneE164,
+    verified: true,
+  }
 }
 
 export async function submitAssessment() {
@@ -348,18 +439,22 @@ export async function submitMethod(_prev: ApplyState, formData: FormData): Promi
   const parsed = z
     .object({
       tenantId: z.string().min(1, "Choose the landlord"),
-      last4: z.string().regex(/^\d{4}$/, "Enter any 4 digits. This is not a card charge."),
+      kind: z.enum(["upi", "enach"]),
+      last4: z.string().regex(/^\d{4}$/, "Enter the last 4 digits of the VPA or mandate."),
       autopay: z.string().optional(),
     })
     .safeParse({
       tenantId: formData.get("tenantId"),
+      kind: formData.get("kind") ?? "upi",
       last4: formData.get("last4"),
       autopay: formData.get("autopay") ?? "",
     })
   if (!parsed.success) return { error: "Check the payment method.", fieldErrors: issues(parsed.error) }
+  const kind = parsed.data.kind as PaymentMethodKind
   const attached = demoPayments.attachMethod({
     userId: user.id,
     tenantId: parsed.data.tenantId,
+    kind,
     last4: parsed.data.last4,
     autopay: parsed.data.autopay === "on",
   })
@@ -376,7 +471,7 @@ export async function submitMethod(_prev: ApplyState, formData: FormData): Promi
   notify({
     userId: user.id,
     title: "Demo payment method saved",
-    body: `Pre-authorized debit ····${attached.last4} is on file with the demo adapter. Nothing was charged.`,
+    body: `${attached.brand} ····${attached.last4} is on file. Demo adapter only — no NPCI or bank call.`,
     href: "/account/payments",
   })
   refresh(["/account/payments", "/inbox"])
@@ -416,14 +511,14 @@ export async function submitPayment(formData: FormData) {
   notify({
     userId: user.id,
     title: "Demo payment recorded",
-    body: `Reference ${charge.reference}. No card was charged.`,
+    body: `Reference ${charge.reference}. Demo UPI / eNACH only — no bank debit.`,
     href: "/account/payments",
   })
   notifyMany(
     landlordIds(tenantId).map((id) => ({
       userId: id,
       title: "Demo payment posted",
-      body: `${user.name} recorded a demo payment. Reference ${charge.reference}.`,
+      body: `${user.name} recorded a demo payment (INR). Reference ${charge.reference}.`,
       href: "/landlord/ledger",
     })),
   )

@@ -1,10 +1,10 @@
 # DeSkulpt
 
-Open-source, multi-tenant property desk for industrial landlords, plus a **SaaS Super Admin Org** (DeSkulpt Inc.) that onboard landlords, verify providers, and merchandise listings through a role-scoped persona CMS.
+Open-source, multi-tenant property desk for **Indian** industrial landlords, plus a **SaaS Super Admin Org** (DeSkulpt India Pvt Ltd) that onboards landlords, verifies providers, and merchandises listings through a role-scoped persona CMS.
 
 Applicants browse a filterable listings directory and apply. Landlord admins approve them, place units on a floor plan, and assign concierge jobs. Service providers accept work only after that landlord has approved them for the building’s area. Platform staff open `/cms` with permissions that isolate PII by role.
 
-The visual system — paper ground, blueprint grid, Archivo and Newsreader — follows the BBM Waterman leasing proposal. Two seeded landlord organisations (BBM Waterman and Harbourline Yards) make tenancy isolation visible.
+Market seam: India only for now (INR, UPI, eNACH, Aadhaar, PIN, +91). NRI landlords can **display** amounts in USD, CAD, or GBP — the ledger charge currency stays INR. OTP accepts international E.164 numbers.
 
 ## Run it
 
@@ -28,28 +28,31 @@ Use the **Demo** switcher in the header. There is no password.
 | Priya Nair | Service Manager | Verify providers; approve for a landlord |
 | Chris Vogel | Property Manager | Applicants (masked email) + listing readiness |
 | Jordan Blake | Merchandiser | Listing readiness only — no emails |
-| Maya Chen | Applicant | Apply, verification wizard |
-| Devon Hale | Applicant | Ledger: rent due, late fee, paid |
-| Nadia Okonkwo | BBM Waterman admin | Inbox, floor plan, concierge, providers |
-| Jonah Ellis | Harbourline admin | Empty application inbox |
-| Luis Ortega | Electrician, East York | Accept / complete assigned jobs |
+| Maya Chen | Applicant | Apply, Aadhaar verification, phone OTP |
+| Devon Hale | Applicant | Ledger: rent + GST due, late fee, eNACH paid |
+| Nadia Okonkwo | BBM Logistics Parks admin | Inbox, floor plan, concierge, providers |
+| Jonah Ellis | Harbourline Yards India admin | Empty application inbox |
+| Meera Sahni | Sahni Global Realty (NRI) | USD display currency, +1 phone, settings |
+| Luis Ortega | Electrician, Bhiwandi | Accept / complete assigned jobs |
 
 ## Key routes
 
 - `/listings` — unit search with full filters
 - `/properties` — building portfolio
 - `/cms` — persona CMS (platform staff only)
-- `/landlord`, `/provider`, `/account` — market desks
+- `/landlord`, `/landlord/settings`, `/provider`, `/account` — market desks
 
 ## What is real in this build, and what is simulated
 
-Real: listings filters, applications, approve and deny, floor-plan upload and hotspots, provider approval filtered by area, job accept and complete, late-fee arithmetic, the ledger, the in-app inbox, the PWA, platform CMS with role redaction, demo landlord invite.
+Real: listings filters, applications, approve and deny, floor-plan upload and hotspots, provider approval filtered by area, job accept and complete, late-fee and GST arithmetic, the INR ledger, landlord display-currency preference (demo FX table), international demo OTP, the in-app inbox, the PWA, platform CMS with role redaction, demo landlord invite.
 
 Simulated, on purpose:
 
 - Verification never calls UIDAI or any government API and does not store a biometric template.
-- Payments use a demo adapter. No card is charged.
-- Email and web push are logged in-app. No provider key is required.
+- Payments use a demo UPI / eNACH adapter. No bank is contacted.
+- FX conversion uses a labeled demo rate table in code — not a live FX API.
+- OTP send/verify is local demo only. No SMS provider.
+- Email, web push, and WhatsApp are logged in-app. No provider key is required.
 
 ## Stack
 

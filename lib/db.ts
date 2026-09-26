@@ -14,8 +14,9 @@ import {
   type Trade,
   type UnitStatus,
 } from "@/lib/format"
+import { gstCents, type DisplayCurrency } from "@/lib/market"
 
-const SEED_VERSION = "2"
+const SEED_VERSION = "3"
 const DB_PATH = path.join(process.cwd(), "data", "deskulpt.sqlite")
 
 export type SessionUser = {
@@ -30,6 +31,8 @@ export type SessionUser = {
   providerVerified: boolean
   tenantName: string | null
   tenantKind: "landlord" | "platform" | null
+  phone: string | null
+  displayCurrency: DisplayCurrency
 }
 
 export type UnitRecord = {
@@ -108,6 +111,8 @@ function mapUser(row: Record<string, unknown>): SessionUser {
     providerVerified: Number(row.provider_verified) === 1,
     tenantName: str(row, "tenant_name"),
     tenantKind: (str(row, "tenant_kind") as "landlord" | "platform" | null) ?? null,
+    phone: str(row, "phone"),
+    displayCurrency: (str(row, "display_currency") as DisplayCurrency | null) ?? "INR",
   }
 }
 
@@ -133,7 +138,8 @@ function mapUnit(row: Record<string, unknown>): UnitRecord {
 
 const USER_SQL = `
   SELECT u.id, u.name, u.email, u.role, u.tenant_id, u.company, u.trade,
-         u.service_area, u.provider_verified, t.name AS tenant_name, t.kind AS tenant_kind
+         u.service_area, u.provider_verified, u.phone, t.name AS tenant_name,
+         t.kind AS tenant_kind, COALESCE(t.display_currency, 'INR') AS display_currency
   FROM users u
   LEFT JOIN tenants t ON t.id = u.tenant_id
 `
@@ -145,7 +151,8 @@ function createSchema(db: Sql) {
       name TEXT NOT NULL,
       slug TEXT NOT NULL UNIQUE,
       city TEXT NOT NULL,
-      kind TEXT NOT NULL DEFAULT 'landlord'
+      kind TEXT NOT NULL DEFAULT 'landlord',
+      display_currency TEXT NOT NULL DEFAULT 'INR'
     );
     CREATE TABLE users (
       id TEXT PRIMARY KEY,
@@ -156,7 +163,17 @@ function createSchema(db: Sql) {
       company TEXT,
       trade TEXT,
       service_area TEXT,
-      provider_verified INTEGER NOT NULL DEFAULT 0
+      provider_verified INTEGER NOT NULL DEFAULT 0,
+      phone TEXT
+    );
+    CREATE TABLE otp_challenges (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      phone_e164 TEXT NOT NULL,
+      code TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      verified_at TEXT
     );
     CREATE TABLE provider_approvals (
       tenant_id TEXT NOT NULL,
@@ -299,6 +316,7 @@ function reset(db: Sql) {
   db.exec("PRAGMA foreign_keys = OFF")
   for (const table of [
     "notifications",
+    "otp_challenges",
     "ledger_entries",
     "payment_methods",
     "late_fee_rules",
@@ -336,31 +354,33 @@ type UnitSeed = {
 
 function seed(db: Sql) {
   const tenant = db.prepare(
-    "INSERT INTO tenants (id, name, slug, city, kind) VALUES (?, ?, ?, ?, ?)",
+    "INSERT INTO tenants (id, name, slug, city, kind, display_currency) VALUES (?, ?, ?, ?, ?, ?)",
   )
-  tenant.run("t_deskulpt", "DeSkulpt Inc.", "deskulpt", "Toronto", "platform")
-  tenant.run("t_bbm", "BBM Waterman Inc.", "bbm-waterman", "Toronto", "landlord")
-  tenant.run("t_harbour", "Harbourline Yards", "harbourline-yards", "Toronto", "landlord")
+  tenant.run("t_deskulpt", "DeSkulpt India Pvt Ltd", "deskulpt", "Bengaluru", "platform", "INR")
+  tenant.run("t_bbm", "BBM Logistics Parks", "bbm-parks", "Mumbai", "landlord", "INR")
+  tenant.run("t_harbour", "Harbourline Yards India", "harbourline-india", "Chennai", "landlord", "INR")
+  tenant.run("t_nri", "Sahni Global Realty (NRI)", "sahni-global", "Dubai / Mumbai", "landlord", "USD")
 
   const user = db.prepare(
-    `INSERT INTO users (id, name, email, role, tenant_id, company, trade, service_area, provider_verified)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO users (id, name, email, role, tenant_id, company, trade, service_area, provider_verified, phone)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
-  user.run("u_avery", "Avery Quinn", "avery@deskulpt.example", "super_admin", "t_deskulpt", "DeSkulpt Inc.", null, null, 0)
-  user.run("u_sam", "Sam Rivera", "sam@deskulpt.example", "account_manager", "t_deskulpt", "DeSkulpt Inc.", null, null, 0)
-  user.run("u_priya", "Priya Nair", "priya@deskulpt.example", "service_manager", "t_deskulpt", "DeSkulpt Inc.", null, null, 0)
-  user.run("u_chris", "Chris Vogel", "chris@deskulpt.example", "property_manager", "t_deskulpt", "DeSkulpt Inc.", null, null, 0)
-  user.run("u_jordan", "Jordan Blake", "jordan@deskulpt.example", "merchandiser", "t_deskulpt", "DeSkulpt Inc.", null, null, 0)
-  user.run("u_maya", "Maya Chen", "maya@apexlogistics.example", "applicant", null, "Apex Logistics", null, null, 0)
-  user.run("u_devon", "Devon Hale", "devon@northline.example", "applicant", null, "Northline Distribution", null, null, 0)
-  user.run("u_nadia", "Nadia Okonkwo", "nadia@bbmwaterman.example", "landlord_admin", "t_bbm", null, null, null, 0)
-  user.run("u_jonah", "Jonah Ellis", "jonah@harbourline.example", "landlord_admin", "t_harbour", null, null, null, 0)
-  user.run("u_luis", "Luis Ortega", "luis@ortegaelectric.example", "service_provider", null, null, "electrician", "East York", 1)
-  user.run("u_rosa", "Rosa Delgado", "rosa@clearbay.example", "service_provider", null, null, "cleaning", "East York", 1)
-  user.run("u_kei", "Kei Watanabe", "kei@lanterncourier.example", "service_provider", null, null, "courier", "East York", 1)
-  user.run("u_hana", "Hana Berger", "hana@bergerpower.example", "service_provider", null, null, "electrician", "North York", 1)
-  user.run("u_amrita", "Amrita Singh", "amrita@southplumbers.example", "service_provider", null, null, "plumber", "Port Lands", 1)
-  user.run("u_idris", "Idris Cole", "idris@coleelectric.example", "service_provider", null, null, "electrician", "Port Lands", 1)
+  user.run("u_avery", "Avery Quinn", "avery@deskulpt.example", "super_admin", "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+918012345678")
+  user.run("u_sam", "Sam Rivera", "sam@deskulpt.example", "account_manager", "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+918012345679")
+  user.run("u_priya", "Priya Nair", "priya@deskulpt.example", "service_manager", "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+919845551122")
+  user.run("u_chris", "Chris Vogel", "chris@deskulpt.example", "property_manager", "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+918022334455")
+  user.run("u_jordan", "Jordan Blake", "jordan@deskulpt.example", "merchandiser", "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+919900112233")
+  user.run("u_maya", "Maya Chen", "maya@apexlogistics.example", "applicant", null, "Apex Logistics India", null, null, 0, "+919876543210")
+  user.run("u_devon", "Devon Hale", "devon@northline.example", "applicant", null, "Northline Distribution India", null, null, 0, "+919811223344")
+  user.run("u_nadia", "Nadia Okonkwo", "nadia@bbmparks.example", "landlord_admin", "t_bbm", null, null, null, 0, "+912240012345")
+  user.run("u_jonah", "Jonah Ellis", "jonah@harbourline.example", "landlord_admin", "t_harbour", null, null, null, 0, "+914440056789")
+  user.run("u_meera", "Meera Sahni", "meera@sahniglobal.example", "landlord_admin", "t_nri", null, null, null, 0, "+14155550198")
+  user.run("u_luis", "Luis Ortega", "luis@ortegaelectric.example", "service_provider", null, null, "electrician", "Bhiwandi", 1, "+919820011122")
+  user.run("u_rosa", "Rosa Delgado", "rosa@clearbay.example", "service_provider", null, null, "cleaning", "Bhiwandi", 1, "+919820011133")
+  user.run("u_kei", "Kei Watanabe", "kei@lanterncourier.example", "service_provider", null, null, "courier", "Bhiwandi", 1, "+919820011144")
+  user.run("u_hana", "Hana Berger", "hana@bergerpower.example", "service_provider", null, null, "electrician", "Whitefield", 1, "+919845667788")
+  user.run("u_amrita", "Amrita Singh", "amrita@southplumbers.example", "service_provider", null, null, "plumber", "Sriperumbudur", 1, "+919444556677")
+  user.run("u_idris", "Idris Cole", "idris@coleelectric.example", "service_provider", null, null, "electrician", "Sriperumbudur", 1, "+919444556688")
 
   const approval = db.prepare(
     "INSERT INTO provider_approvals (tenant_id, user_id, status) VALUES (?, ?, ?)",
@@ -376,10 +396,11 @@ function seed(db: Sql) {
     `INSERT INTO properties (id, tenant_id, name, slug, address, area, city_line, total_sqft, floor_plan_path)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
-  property.run("p_waterman", "t_bbm", "19 Waterman Ave", "waterman", "19 Waterman Ave, Toronto, ON", "East York", "EAST YORK · 214,000 SF", 214000, "/floorplans/waterman.svg")
-  property.run("p_bartley", "t_bbm", "161 Bartley Dr", "bartley", "161 Bartley Dr, Toronto, ON", "North York", "NORTH YORK · 96,000 SF", 96000, "/floorplans/bartley.svg")
-  property.run("p_cranfield", "t_bbm", "12 Cranfield Rd", "cranfield", "12 Cranfield Rd, Toronto, ON", "East York", "EAST YORK · 74,500 SF", 74500, "/floorplans/cranfield.svg")
-  property.run("p_commissioners", "t_harbour", "88 Commissioners St", "commissioners", "88 Commissioners Street, Toronto, ON", "Port Lands", "PORT LANDS · 86,000 SF", 86000, "/floorplans/commissioners.svg")
+  property.run("p_waterman", "t_bbm", "BBM Bhiwandi Hub", "waterman", "Plot 19, Kalyan-Bhiwandi Road, Bhiwandi, Maharashtra 421302", "Bhiwandi", "BHIWANDI · PIN 421302 · 214,000 SF", 214000, "/floorplans/waterman.svg")
+  property.run("p_bartley", "t_bbm", "BBM Whitefield Sheds", "bartley", "161 ITPL Main Road, Whitefield, Bengaluru, Karnataka 560066", "Whitefield", "WHITEFIELD · PIN 560066 · 96,000 SF", 96000, "/floorplans/bartley.svg")
+  property.run("p_cranfield", "t_bbm", "BBM Andheri East", "cranfield", "12 MIDC Central Road, Andheri East, Mumbai, Maharashtra 400093", "Andheri East", "ANDHERI EAST · PIN 400093 · 74,500 SF", 74500, "/floorplans/cranfield.svg")
+  property.run("p_commissioners", "t_harbour", "Harbourline Sriperumbudur", "commissioners", "88 SIPCOT Industrial Park, Sriperumbudur, Tamil Nadu 602105", "Sriperumbudur", "SRIPERUMBUDUR · PIN 602105 · 86,000 SF", 86000, "/floorplans/commissioners.svg")
+  property.run("p_nri_thane", "t_nri", "Sahni Thane Warehouse", "thane", "45 Wagle Estate, Thane West, Maharashtra 400604", "Thane", "THANE · PIN 400604 · 42,000 SF", 42000, "/floorplans/cranfield.svg")
 
   const unitStmt = db.prepare(
     `INSERT INTO units (
@@ -413,38 +434,42 @@ function seed(db: Sql) {
         unit.y,
         rich ? "https://my.matterport.com/show/?m=SxQL3iGyoDo" : null,
         rich
-          ? "Flagship bay at 19 Waterman Ave. Clear-span distribution space with a full media set: stills, a motion loop, a short clip, an equirectangular 360 photo, and a Matterport-compatible embed slot."
-          : `${unit.sqft.toLocaleString("en-CA")} SF bay at ${propertyName}. ${unit.h} clear, ${unit.dock} dock-level door${unit.dock === 1 ? "" : "s"}, ${unit.drive} drive-in, ${unit.pwr}.`,
+          ? "Flagship bay at BBM Bhiwandi Hub. Clear-span distribution with stills, a motion loop, a short clip, a 360 photo, and a Matterport-compatible embed."
+          : `${unit.sqft.toLocaleString("en-IN")} SF bay at ${propertyName}. ${unit.h} clear, ${unit.dock} dock door${unit.dock === 1 ? "" : "s"}, ${unit.drive} drive-in, ${unit.pwr}.`,
       )
     }
   }
 
-  addUnits("t_bbm", "p_waterman", "19 Waterman Ave", "waterman", [
-    { code: "A1", sqft: 38500, h: "28'", dock: 6, drive: 1, pwr: "600A / 600V", rate: 13.75, status: "leased", x: 22, y: 38 },
-    { code: "A2", sqft: 24200, h: "26'", dock: 4, drive: 1, pwr: "400A / 600V", rate: 14.25, status: "available", x: 46, y: 38 },
-    { code: "B1", sqft: 52000, h: "30'", dock: 8, drive: 2, pwr: "800A / 600V", rate: 13.5, status: "available", x: 22, y: 68 },
-    { code: "B2", sqft: 18900, h: "24'", dock: 3, drive: 1, pwr: "400A / 600V", rate: 14.75, status: "pending", x: 46, y: 68 },
-    { code: "C1", sqft: 31600, h: "28'", dock: 5, drive: 1, pwr: "600A / 600V", rate: 13.95, status: "leased", x: 74, y: 38 },
-    { code: "C2", sqft: 28800, h: "28'", dock: 5, drive: 2, pwr: "600A / 600V", rate: 14.1, status: "available", x: 74, y: 68 },
+  addUnits("t_bbm", "p_waterman", "BBM Bhiwandi Hub", "waterman", [
+    { code: "A1", sqft: 38500, h: "28'", dock: 6, drive: 1, pwr: "600A / 415V", rate: 52, status: "leased", x: 22, y: 38 },
+    { code: "A2", sqft: 24200, h: "26'", dock: 4, drive: 1, pwr: "400A / 415V", rate: 55, status: "available", x: 46, y: 38 },
+    { code: "B1", sqft: 52000, h: "30'", dock: 8, drive: 2, pwr: "800A / 415V", rate: 48, status: "available", x: 22, y: 68 },
+    { code: "B2", sqft: 18900, h: "24'", dock: 3, drive: 1, pwr: "400A / 415V", rate: 58, status: "pending", x: 46, y: 68 },
+    { code: "C1", sqft: 31600, h: "28'", dock: 5, drive: 1, pwr: "600A / 415V", rate: 50, status: "leased", x: 74, y: 38 },
+    { code: "C2", sqft: 28800, h: "28'", dock: 5, drive: 2, pwr: "600A / 415V", rate: 51, status: "available", x: 74, y: 68 },
   ])
-  addUnits("t_bbm", "p_bartley", "161 Bartley Dr", "bartley", [
-    { code: "01", sqft: 12400, h: "22'", dock: 2, drive: 1, pwr: "200A / 600V", rate: 15.5, status: "available", x: 22, y: 40 },
-    { code: "02", sqft: 21000, h: "24'", dock: 4, drive: 1, pwr: "400A / 600V", rate: 14.9, status: "leased", x: 46, y: 40 },
-    { code: "03", sqft: 16800, h: "24'", dock: 3, drive: 1, pwr: "400A / 600V", rate: 15.1, status: "pending", x: 74, y: 40 },
-    { code: "04", sqft: 30200, h: "26'", dock: 5, drive: 2, pwr: "600A / 600V", rate: 14.4, status: "available", x: 34, y: 70 },
-    { code: "05", sqft: 15600, h: "22'", dock: 2, drive: 1, pwr: "200A / 600V", rate: 15.75, status: "leased", x: 68, y: 70 },
+  addUnits("t_bbm", "p_bartley", "BBM Whitefield Sheds", "bartley", [
+    { code: "01", sqft: 12400, h: "22'", dock: 2, drive: 1, pwr: "200A / 415V", rate: 72, status: "available", x: 22, y: 40 },
+    { code: "02", sqft: 21000, h: "24'", dock: 4, drive: 1, pwr: "400A / 415V", rate: 68, status: "leased", x: 46, y: 40 },
+    { code: "03", sqft: 16800, h: "24'", dock: 3, drive: 1, pwr: "400A / 415V", rate: 70, status: "pending", x: 74, y: 40 },
+    { code: "04", sqft: 30200, h: "26'", dock: 5, drive: 2, pwr: "600A / 415V", rate: 65, status: "available", x: 34, y: 70 },
+    { code: "05", sqft: 15600, h: "22'", dock: 2, drive: 1, pwr: "200A / 415V", rate: 74, status: "leased", x: 68, y: 70 },
   ])
-  addUnits("t_bbm", "p_cranfield", "12 Cranfield Rd", "cranfield", [
-    { code: "U1", sqft: 9800, h: "20'", dock: 1, drive: 1, pwr: "200A / 600V", rate: 16.25, status: "available", x: 24, y: 42 },
-    { code: "U2", sqft: 14500, h: "22'", dock: 2, drive: 1, pwr: "400A / 600V", rate: 15.4, status: "leased", x: 50, y: 42 },
-    { code: "U3", sqft: 22300, h: "26'", dock: 4, drive: 2, pwr: "600A / 600V", rate: 14.8, status: "available", x: 28, y: 72 },
-    { code: "U4", sqft: 27900, h: "26'", dock: 4, drive: 1, pwr: "600A / 600V", rate: 14.6, status: "leased", x: 62, y: 72 },
+  addUnits("t_bbm", "p_cranfield", "BBM Andheri East", "cranfield", [
+    { code: "U1", sqft: 9800, h: "20'", dock: 1, drive: 1, pwr: "200A / 415V", rate: 95, status: "available", x: 24, y: 42 },
+    { code: "U2", sqft: 14500, h: "22'", dock: 2, drive: 1, pwr: "400A / 415V", rate: 88, status: "leased", x: 50, y: 42 },
+    { code: "U3", sqft: 22300, h: "26'", dock: 4, drive: 2, pwr: "600A / 415V", rate: 82, status: "available", x: 28, y: 72 },
+    { code: "U4", sqft: 27900, h: "26'", dock: 4, drive: 1, pwr: "600A / 415V", rate: 80, status: "leased", x: 62, y: 72 },
   ])
-  addUnits("t_harbour", "p_commissioners", "88 Commissioners St", "commissioners", [
-    { code: "H1", sqft: 22000, h: "28'", dock: 4, drive: 1, pwr: "600A / 600V", rate: 15.2, status: "available", x: 28, y: 40 },
-    { code: "H2", sqft: 18000, h: "24'", dock: 3, drive: 1, pwr: "400A / 600V", rate: 15.8, status: "leased", x: 62, y: 40 },
-    { code: "H3", sqft: 31000, h: "30'", dock: 6, drive: 2, pwr: "800A / 600V", rate: 14.4, status: "pending", x: 28, y: 70 },
-    { code: "H4", sqft: 15000, h: "22'", dock: 2, drive: 1, pwr: "400A / 600V", rate: 16.1, status: "available", x: 62, y: 70 },
+  addUnits("t_harbour", "p_commissioners", "Harbourline Sriperumbudur", "commissioners", [
+    { code: "H1", sqft: 22000, h: "28'", dock: 4, drive: 1, pwr: "600A / 415V", rate: 42, status: "available", x: 28, y: 40 },
+    { code: "H2", sqft: 18000, h: "24'", dock: 3, drive: 1, pwr: "400A / 415V", rate: 45, status: "leased", x: 62, y: 40 },
+    { code: "H3", sqft: 31000, h: "30'", dock: 6, drive: 2, pwr: "800A / 415V", rate: 40, status: "pending", x: 28, y: 70 },
+    { code: "H4", sqft: 15000, h: "22'", dock: 2, drive: 1, pwr: "400A / 415V", rate: 46, status: "available", x: 62, y: 70 },
+  ])
+  addUnits("t_nri", "p_nri_thane", "Sahni Thane Warehouse", "thane", [
+    { code: "T1", sqft: 22000, h: "26'", dock: 4, drive: 1, pwr: "600A / 415V", rate: 78, status: "available", x: 35, y: 45 },
+    { code: "T2", sqft: 20000, h: "24'", dock: 3, drive: 1, pwr: "400A / 415V", rate: 80, status: "leased", x: 65, y: 55 },
   ])
 
   const media = db.prepare(
@@ -468,11 +493,11 @@ function seed(db: Sql) {
     "t_bbm",
     "u_waterman_a1",
     "u_devon",
-    "Northline Distribution",
+    "Northline Distribution India",
     "Devon Hale",
     "devon@northline.example",
-    "Regional distribution and cross-dock",
-    "Insurance certificate on file in the demo vault.",
+    "Regional distribution and cross-dock for West India",
+    "GSTIN and insurance certificate on file in the demo vault.",
     "approved",
     "2026-03-12T15:00:00.000Z",
   )
@@ -485,11 +510,11 @@ function seed(db: Sql) {
     "t_bbm",
     "u_waterman_b2",
     "u_maya",
-    "Apex Logistics",
+    "Apex Logistics India",
     "Maya Chen",
     "maya@apexlogistics.example",
-    "Last-mile parcel sortation",
-    "Looking for a September occupancy. Trailer pool of 12.",
+    "Last-mile parcel sortation for MMR",
+    "Looking for a September occupancy. Trailer pool of 12. PIN 400001 billing.",
     "submitted",
     "2026-09-18T14:30:00.000Z",
   )
@@ -501,10 +526,10 @@ function seed(db: Sql) {
   ).run(
     "v_devon",
     "u_devon",
-    "Canada",
-    "Ontario",
-    "driving_licence",
-    "demo-licence.pdf",
+    "India",
+    "Maharashtra",
+    "aadhaar",
+    "demo-aadhaar.pdf",
     "demo-face.jpg",
     0.94,
     "match",
@@ -513,10 +538,13 @@ function seed(db: Sql) {
 
   db.prepare(
     "INSERT INTO late_fee_rules (tenant_id, grace_days, flat_cents, percent_bps) VALUES (?, ?, ?, ?)",
-  ).run("t_bbm", 5, 25000, 150)
+  ).run("t_bbm", 5, 2500000, 150)
   db.prepare(
     "INSERT INTO late_fee_rules (tenant_id, grace_days, flat_cents, percent_bps) VALUES (?, ?, ?, ?)",
-  ).run("t_harbour", 3, 10000, 200)
+  ).run("t_harbour", 3, 1000000, 200)
+  db.prepare(
+    "INSERT INTO late_fee_rules (tenant_id, grace_days, flat_cents, percent_bps) VALUES (?, ?, ?, ?)",
+  ).run("t_nri", 5, 2000000, 150)
 
   db.prepare(
     `INSERT INTO payment_methods (id, user_id, tenant_id, brand, last4, autopay, provider_ref)
@@ -525,10 +553,10 @@ function seed(db: Sql) {
     "pm_devon",
     "u_devon",
     "t_bbm",
-    "Pre-authorized debit (demo)",
+    "eNACH / auto-debit (demo)",
     "4821",
     1,
-    "demo_pad_4821_t_bbm",
+    "demo_enach_4821_t_bbm",
   )
 
   const a1 = db.prepare("SELECT sqft, rate_psf FROM units WHERE id = ?").get("u_waterman_a1") as {
@@ -536,25 +564,29 @@ function seed(db: Sql) {
     rate_psf: number
   }
   const rent = monthlyRentCents(a1.rate_psf, a1.sqft)
-  const fee = lateFeeCents(rent, { flatCents: 25000, percentBps: 150 })
+  const gst = gstCents(rent)
+  const fee = lateFeeCents(rent, { flatCents: 2500000, percentBps: 150 })
   const ledger = db.prepare(
     `INSERT INTO ledger_entries (
       id, tenant_id, unit_id, user_id, kind, description, amount_cents, status, due_on, created_at, source_id
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
   ledger.run("led_jun_rent", "t_bbm", "u_waterman_a1", "u_devon", "rent", "June rent · Unit A1", rent, "paid", "2026-06-01", "2026-06-01T12:00:00.000Z", null)
-  ledger.run("led_jun_pay", "t_bbm", "u_waterman_a1", "u_devon", "payment", "PAD payment · demo ····4821", rent, "paid", "2026-06-01", "2026-06-01T12:05:00.000Z", "led_jun_rent")
+  ledger.run("led_jun_gst", "t_bbm", "u_waterman_a1", "u_devon", "gst", "GST (18%) · June rent · Unit A1", gst, "paid", "2026-06-01", "2026-06-01T12:00:00.000Z", "led_jun_rent")
+  ledger.run("led_jun_pay", "t_bbm", "u_waterman_a1", "u_devon", "payment", "eNACH demo ····4821", rent + gst, "paid", "2026-06-01", "2026-06-01T12:05:00.000Z", "led_jun_rent")
   ledger.run("led_sep_rent", "t_bbm", "u_waterman_a1", "u_devon", "rent", "September rent · Unit A1", rent, "due", "2026-09-01", "2026-09-01T12:00:00.000Z", null)
+  ledger.run("led_sep_gst", "t_bbm", "u_waterman_a1", "u_devon", "gst", "GST (18%) · September rent · Unit A1", gst, "due", "2026-09-01", "2026-09-01T12:00:00.000Z", "led_sep_rent")
   ledger.run("led_sep_fee", "t_bbm", "u_waterman_a1", "u_devon", "late_fee", "Late fee · September rent past 5-day grace", fee, "due", "2026-09-06", "2026-09-06T12:00:00.000Z", "led_sep_rent")
   ledger.run("led_oct_rent", "t_bbm", "u_waterman_a1", "u_devon", "rent", "October rent · Unit A1", rent, "due", "2026-10-01", "2026-09-20T12:00:00.000Z", null)
+  ledger.run("led_oct_gst", "t_bbm", "u_waterman_a1", "u_devon", "gst", "GST (18%) · October rent · Unit A1", gst, "due", "2026-10-01", "2026-09-20T12:00:00.000Z", "led_oct_rent")
 
   const job = db.prepare(
     `INSERT INTO jobs (id, tenant_id, property_id, unit_id, title, details, trade, status, provider_id, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
-  job.run("j_seal", "t_bbm", "p_waterman", "u_waterman_b1", "Weather seal on the north drive-in", "The north drive-in seal is torn along the bottom corner. Trailer doors are catching.", "electrician", "assigned", "u_luis", "2026-09-20T16:00:00.000Z")
-  job.run("j_dock", "t_bbm", "p_waterman", "u_waterman_a2", "Dock leveler sticks at the top of travel", "Bay 3 leveler pauses six inches short. Occupant is not in the unit yet — treat it as a make-ready.", "electrician", "open", null, "2026-09-22T15:00:00.000Z")
-  job.run("j_panel", "t_bbm", "p_bartley", "u_bartley_04", "Panel schedule labels missing in unit 04", "The 600V panel is live and labeled only at the main. Print and install a directory before showings.", "electrician", "open", null, "2026-09-23T15:00:00.000Z")
+  job.run("j_seal", "t_bbm", "p_waterman", "u_waterman_b1", "Weather seal on the north drive-in", "The north drive-in seal is torn. Trailer doors are catching in the monsoon.", "electrician", "assigned", "u_luis", "2026-09-20T16:00:00.000Z")
+  job.run("j_dock", "t_bbm", "p_waterman", "u_waterman_a2", "Dock leveler sticks at the top of travel", "Bay 3 leveler pauses six inches short. Treat it as a make-ready before handover.", "electrician", "open", null, "2026-09-22T15:00:00.000Z")
+  job.run("j_panel", "t_bbm", "p_bartley", "u_bartley_04", "Panel schedule labels missing in unit 04", "The 415V panel is live and labeled only at the main. Print a directory before showings.", "electrician", "open", null, "2026-09-23T15:00:00.000Z")
   job.run("j_sweep", "t_bbm", "p_cranfield", "u_cranfield_u1", "Pre-showing sweep of unit U1", "Dust and pallet scraps along the south wall before Thursday's tour.", "cleaning", "complete", "u_rosa", "2026-09-10T15:00:00.000Z")
   job.run("j_sump", "t_harbour", "p_commissioners", "u_commissioners_h1", "Sump alarm chirping in H1", "The pit alarm cycles every few minutes. No standing water this morning.", "plumber", "open", null, "2026-09-21T15:00:00.000Z")
 
@@ -562,13 +594,16 @@ function seed(db: Sql) {
     `INSERT INTO notifications (id, user_id, title, body, href, read_at, created_at, channel)
      VALUES (?, ?, ?, ?, ?, NULL, ?, ?)`,
   )
-  note.run("n1", "u_maya", "Application received", "Apex Logistics is in review for Unit B2 at 19 Waterman Ave.", "/account", "2026-09-18T14:31:00.000Z", "in_app")
-  note.run("n1e", "u_maya", "Application received", "Apex Logistics is in review for Unit B2 at 19 Waterman Ave.", "/account", "2026-09-18T14:31:00.000Z", "email_demo")
-  note.run("n2", "u_nadia", "New application", "Maya Chen at Apex Logistics applied for Unit B2.", "/landlord/applications", "2026-09-18T14:31:00.000Z", "in_app")
-  note.run("n3", "u_devon", "September rent is past grace", "A late fee was assessed on Unit A1. The October rent is still inside the grace window.", "/account/payments", "2026-09-06T12:10:00.000Z", "in_app")
+  note.run("n1", "u_maya", "Application received", "Apex Logistics India is in review for Unit B2 at BBM Bhiwandi Hub.", "/account", "2026-09-18T14:31:00.000Z", "in_app")
+  note.run("n1e", "u_maya", "Application received", "Apex Logistics India is in review for Unit B2 at BBM Bhiwandi Hub.", "/account", "2026-09-18T14:31:00.000Z", "email_demo")
+  note.run("n1w", "u_maya", "Application received", "Apex Logistics India is in review for Unit B2 at BBM Bhiwandi Hub.", "/account", "2026-09-18T14:31:00.000Z", "whatsapp_demo")
+  note.run("n2", "u_nadia", "New application", "Maya Chen at Apex Logistics India applied for Unit B2.", "/landlord/applications", "2026-09-18T14:31:00.000Z", "in_app")
+  note.run("n3", "u_devon", "September rent is past grace", "A late fee was assessed on Unit A1. October rent is still inside grace. Amounts are in INR.", "/account/payments", "2026-09-06T12:10:00.000Z", "in_app")
   note.run("n3p", "u_devon", "September rent is past grace", "A late fee was assessed on Unit A1.", "/account/payments", "2026-09-06T12:10:00.000Z", "push_demo")
-  note.run("n4", "u_luis", "Job assigned", "Weather seal on the north drive-in at 19 Waterman Ave is waiting for you to accept.", "/provider", "2026-09-20T16:05:00.000Z", "in_app")
-  note.run("n5", "u_jonah", "Open concierge job", "Sump alarm in H1 has no provider yet. Amrita Singh is approved for Port Lands.", "/landlord/jobs", "2026-09-21T15:05:00.000Z", "in_app")
+  note.run("n3w", "u_devon", "September rent is past grace", "A late fee was assessed on Unit A1. Pay via UPI or eNACH (demo).", "/account/payments", "2026-09-06T12:10:00.000Z", "whatsapp_demo")
+  note.run("n4", "u_luis", "Job assigned", "Weather seal on the north drive-in at BBM Bhiwandi Hub is waiting for you to accept.", "/provider", "2026-09-20T16:05:00.000Z", "in_app")
+  note.run("n5", "u_jonah", "Open concierge job", "Sump alarm in H1 has no provider yet. Amrita Singh is approved for Sriperumbudur.", "/landlord/jobs", "2026-09-21T15:05:00.000Z", "in_app")
+  note.run("n6", "u_meera", "NRI display currency", "Your landlord desk shows USD as a view. Charges and the ledger stay in INR.", "/landlord/settings", "2026-09-15T10:00:00.000Z", "in_app")
 }
 
 function openDatabase() {
@@ -634,7 +669,10 @@ export type NoticeRecord = {
   channel: string
 }
 
-export function listNotifications(userId: string, channel: "in_app" | "email_demo" | "push_demo") {
+export function listNotifications(
+  userId: string,
+  channel: "in_app" | "email_demo" | "push_demo" | "whatsapp_demo",
+) {
   return asRows(
     getDb()
       .prepare(
@@ -966,7 +1004,7 @@ export type LedgerRecord = {
   propertyName: string
   userId: string
   payerName: string
-  kind: "rent" | "late_fee" | "payment"
+  kind: "rent" | "late_fee" | "payment" | "gst"
   description: string
   amountCents: number
   status: "due" | "paid" | "waived"
@@ -1219,19 +1257,37 @@ export function decideApplication(
       const unit = asRow(tx.prepare("SELECT sqft, rate_psf, code FROM units WHERE id = ?").get(application.unitId))
       const dueOn = firstOfNextMonth()
       const amount = monthlyRentCents(Number(unit?.rate_psf), Number(unit?.sqft))
+      const gst = gstCents(amount)
+      const rentId = crypto.randomUUID()
+      const now = new Date().toISOString()
       tx.prepare(
         `INSERT INTO ledger_entries (
           id, tenant_id, unit_id, user_id, kind, description, amount_cents, status, due_on, created_at, source_id
         ) VALUES (?, ?, ?, ?, 'rent', ?, ?, 'due', ?, ?, NULL)`,
       ).run(
-        crypto.randomUUID(),
+        rentId,
         tenantId,
         application.unitId,
         application.applicantId,
         `Rent · Unit ${application.unitCode} · due ${dueOn}`,
         amount,
         dueOn,
-        new Date().toISOString(),
+        now,
+      )
+      tx.prepare(
+        `INSERT INTO ledger_entries (
+          id, tenant_id, unit_id, user_id, kind, description, amount_cents, status, due_on, created_at, source_id
+        ) VALUES (?, ?, ?, ?, 'gst', ?, ?, 'due', ?, ?, ?)`,
+      ).run(
+        crypto.randomUUID(),
+        tenantId,
+        application.unitId,
+        application.applicantId,
+        `GST (18%) · Unit ${application.unitCode} · due ${dueOn}`,
+        gst,
+        dueOn,
+        now,
+        rentId,
       )
     } else {
       const remaining = asRow(
@@ -1507,13 +1563,20 @@ export function payDue(userId: string, tenantId: string) {
       tenantId,
       due[0].unitId,
       userId,
-      `Demo PAD ····${method.last4} · ${due.length} open item${due.length === 1 ? "" : "s"}`,
+      `${method.brand} ····${method.last4} · ${due.length} open item${due.length === 1 ? "" : "s"}`,
       amount,
       todayISO(),
       now,
     )
   })
   return { ok: true as const, amountCents: amount, providerRef: method.providerRef, count: due.length }
+}
+
+export function setTenantDisplayCurrency(tenantId: string, currency: DisplayCurrency) {
+  getDb()
+    .prepare("UPDATE tenants SET display_currency = ? WHERE id = ? AND kind = 'landlord'")
+    .run(currency, tenantId)
+  return { ok: true as const }
 }
 
 export function saveVerification(input: {

@@ -8,11 +8,13 @@ export type Notice = {
   href?: string
 }
 
+export type NoticeChannel = "in_app" | "email_demo" | "push_demo" | "whatsapp_demo"
+
 /**
  * Queue-shaped notification boundary. Callers enqueue; a worker drains.
- * The demo worker runs in-process and writes an in-app row plus demo
- * email and web-push log rows. Swap the drain target for a real broker
- * without changing call sites.
+ * The demo worker runs in-process and writes in-app plus demo email,
+ * web-push, and WhatsApp log rows. Swap the drain target for a real
+ * broker without changing call sites.
  */
 export interface NotificationQueue {
   enqueue(notice: Notice): void
@@ -35,34 +37,19 @@ class DemoNotificationQueue implements NotificationQueue {
        VALUES (?, ?, ?, ?, ?, NULL, ?, ?)`,
     )
     const now = new Date().toISOString()
+    const channels: NoticeChannel[] = ["in_app", "email_demo", "push_demo", "whatsapp_demo"]
     for (const notice of batch) {
-      insert.run(
-        crypto.randomUUID(),
-        notice.userId,
-        notice.title,
-        notice.body,
-        notice.href ?? null,
-        now,
-        "in_app",
-      )
-      insert.run(
-        crypto.randomUUID(),
-        notice.userId,
-        notice.title,
-        notice.body,
-        notice.href ?? null,
-        now,
-        "email_demo",
-      )
-      insert.run(
-        crypto.randomUUID(),
-        notice.userId,
-        notice.title,
-        notice.body,
-        notice.href ?? null,
-        now,
-        "push_demo",
-      )
+      for (const channel of channels) {
+        insert.run(
+          crypto.randomUUID(),
+          notice.userId,
+          notice.title,
+          notice.body,
+          notice.href ?? null,
+          now,
+          channel,
+        )
+      }
     }
     return batch.length
   }

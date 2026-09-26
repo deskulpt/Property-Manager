@@ -132,7 +132,7 @@ export function LeasingMap({ properties }: { properties: MapProperty[] }) {
                 ))}
               </dl>
               <p className="font-sans text-2xl font-black text-[#E2A57E]">
-                ${rateLabel(selected.ratePsf)} <small className="font-mono text-xs font-normal text-white/50">/ SF net · annual</small>
+                ₹{rateLabel(selected.ratePsf)} <small className="font-mono text-xs font-normal text-white/50">/ SF · month</small>
               </p>
               <div className="mt-auto flex flex-wrap gap-2 pt-6">
                 <Link href={`/properties/${property.slug}/units/${selected.code}`} className="bg-terra px-4 py-3 font-sans text-sm font-bold text-white">

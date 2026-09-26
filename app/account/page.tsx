@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { EmptyState, PageHeader, RoleGate, StatusBadge } from "@/components/product"
+import { PhoneOtpForm } from "@/components/otp/phone-otp"
 import { applicationsForApplicant } from "@/lib/db"
 import { formatDay } from "@/lib/format"
 import { getSessionUser } from "@/lib/session"
@@ -22,7 +23,7 @@ export default async function AccountPage({
       <PageHeader
         kicker={user.company ?? "Applicant"}
         title={`${user.name.split(" ")[0]}’s applications`}
-        lede="Status updates here when a landlord approves or declines. Verification and the rent ledger live beside this list."
+        lede="Status updates here when a landlord approves or declines. Verification, phone OTP, and the rent ledger live beside this list."
       />
       {notice ? <p className="mb-4 border border-brand/20 bg-accent px-4 py-3 text-sm text-brand" role="status">{notice}</p> : null}
       <div className="mb-6 flex flex-wrap gap-3 text-sm font-bold">
@@ -30,6 +31,13 @@ export default async function AccountPage({
         <Link href="/account/payments" className="text-brand">Payments</Link>
         <Link href="/inbox" className="text-brand">Inbox</Link>
       </div>
+      <section className="mb-8 bg-card p-4 ring-1 ring-foreground/10">
+        <h2 className="font-sans text-lg font-extrabold">Phone OTP (demo)</h2>
+        <p className="mt-1 text-sm text-ink-soft">International E.164 numbers work — not only +91. No SMS provider in this demo.</p>
+        <div className="mt-4">
+          <PhoneOtpForm currentPhone={user.phone} />
+        </div>
+      </section>
       {applications.length === 0 ? (
         <EmptyState title="No applications yet" body="Open a bay from the portfolio and apply. Leased bays stay closed." action={{ href: "/properties", label: "Browse buildings" }} />
       ) : (
@@ -42,7 +50,7 @@ export default async function AccountPage({
                 </h2>
                 <StatusBadge status={application.status} />
               </div>
-              <p className="mt-1 text-sm text-ink-soft">{application.tenantId ? application.intendedUse : application.intendedUse}</p>
+              <p className="mt-1 text-sm text-ink-soft">{application.intendedUse}</p>
               <p className="mt-2 font-mono text-[11px] uppercase tracking-wider text-ink-faint">{formatDay(application.createdAt.slice(0, 10))}</p>
               <Link href={`/properties/${application.propertySlug}/units/${application.unitCode}`} className="mt-3 inline-block text-sm font-bold text-brand">
                 View the bay

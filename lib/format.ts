@@ -1,3 +1,5 @@
+import { activeMarket, type MarketId } from "@/lib/market"
+
 export type MarketRole = "applicant" | "landlord_admin" | "service_provider"
 export type StaffRole =
   | "super_admin"
@@ -28,26 +30,51 @@ export function isStaffRole(role: string): role is StaffRole {
   return (STAFF_ROLES as string[]).includes(role)
 }
 
-export function money(cents: number) {
-  return new Intl.NumberFormat("en-CA", {
+export function money(minorUnits: number, marketId?: MarketId) {
+  const market = marketId ? activeMarket() : activeMarket()
+  return new Intl.NumberFormat(market.locale, {
     style: "currency",
-    currency: "CAD",
-  }).format(cents / 100)
+    currency: market.currency,
+    maximumFractionDigits: 0,
+  }).format(minorUnits / market.currencyMinorPerMajor)
+}
+
+export function moneyExact(minorUnits: number) {
+  const market = activeMarket()
+  return new Intl.NumberFormat(market.locale, {
+    style: "currency",
+    currency: market.currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(minorUnits / market.currencyMinorPerMajor)
 }
 
 export function sqft(n: number) {
-  return `${new Intl.NumberFormat("en-CA").format(n)} SF`
+  const market = activeMarket()
+  return `${new Intl.NumberFormat(market.locale).format(n)} SF`
 }
 
 export function rateLabel(ratePsf: number) {
-  return ratePsf.toLocaleString("en-CA", {
-    minimumFractionDigits: 2,
+  const market = activeMarket()
+  return ratePsf.toLocaleString(market.locale, {
+    minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   })
 }
 
+export function rateCaption() {
+  return activeMarket().rateUnitLabel
+}
+
+/**
+ * Monthly rent in minor currency units from the stored asking rate.
+ * India stores ₹/SF/month; a later market with annual rates would divide by 12.
+ */
 export function monthlyRentCents(ratePsf: number, area: number) {
-  return Math.round((ratePsf * area * 100) / 12)
+  const market = activeMarket()
+  const monthlyMajor =
+    market.ratePeriod === "month" ? ratePsf * area : (ratePsf * area) / 12
+  return Math.round(monthlyMajor * market.currencyMinorPerMajor)
 }
 
 export function addDays(isoDate: string, days: number) {
@@ -69,8 +96,9 @@ export function firstOfNextMonth(from = new Date()) {
 
 export function formatDay(iso: string | null) {
   if (!iso) return "—"
+  const market = activeMarket()
   const [y, m, d] = iso.slice(0, 10).split("-").map(Number)
-  return new Intl.DateTimeFormat("en-CA", {
+  return new Intl.DateTimeFormat(market.locale, {
     year: "numeric",
     month: "short",
     day: "numeric",

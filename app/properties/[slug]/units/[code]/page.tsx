@@ -36,9 +36,9 @@ export default async function UnitPage({
       <aside className="h-fit bg-brand p-6 text-paper lg:sticky lg:top-24">
         <p className="font-mono text-[11px] uppercase tracking-wider text-white/55">{property.address}</p>
         <p className="mt-4 font-sans text-3xl font-black text-[#E2A57E]">
-          ${rateLabel(unit.ratePsf)} <small className="font-mono text-xs font-normal text-white/50">/ SF net · annual</small>
+          ₹{rateLabel(unit.ratePsf)} <small className="font-mono text-xs font-normal text-white/50">/ SF · month</small>
         </p>
-        <p className="mt-1 text-sm text-white/70">{money(monthly)} per month, before tax.</p>
+        <p className="mt-1 text-sm text-white/70">{money(monthly)} per month, before GST.</p>
         <div className="mt-4 text-paper [&_dt]:text-white/60">
           <SpecList
             rows={[

@@ -16,12 +16,14 @@ export default async function InboxPage() {
   const inbox = listNotifications(user.id, "in_app")
   const email = listNotifications(user.id, "email_demo")
   const push = listNotifications(user.id, "push_demo")
+  const whatsapp = listNotifications(user.id, "whatsapp_demo")
+  const delivery = [...email, ...push, ...whatsapp]
   return (
     <div className="mx-auto max-w-[800px] px-4 py-10">
       <PageHeader
         kicker={user.name}
         title="Inbox"
-        lede="In-app notices are the product. Email and web push are written by the demo sender beside them — no API key, no device token."
+        lede="In-app notices are the product. Email, web push, and WhatsApp are written by the demo sender beside them — no API key, no device token."
       />
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <form action={markInboxRead}>
@@ -43,12 +45,12 @@ export default async function InboxPage() {
         </ul>
       )}
       <h2 className="mt-10 font-sans text-lg font-extrabold">Demo delivery log</h2>
-      <p className="mt-1 text-sm text-ink-soft">These rows are what a mailer and a web-push worker would have received.</p>
+      <p className="mt-1 text-sm text-ink-soft">These rows are what a mailer, web-push worker, or WhatsApp Business API would have received.</p>
       <ul className="mt-3 grid gap-2">
-        {[...email, ...push].length === 0 ? (
-          <li className="text-sm text-ink-soft">No demo email or push has been logged yet.</li>
+        {delivery.length === 0 ? (
+          <li className="text-sm text-ink-soft">No demo email, push, or WhatsApp has been logged yet.</li>
         ) : (
-          [...email, ...push].map((note) => (
+          delivery.map((note) => (
             <li key={note.id} className="border border-border px-3 py-2 text-sm">
               <span className="font-mono text-[10px] uppercase tracking-wider text-terra">{note.channel}</span>
               <span className="ml-2 font-bold">{note.title}</span>

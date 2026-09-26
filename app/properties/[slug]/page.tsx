@@ -36,7 +36,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
         {property.units.map((unit) => (
           <Link key={unit.id} href={`/properties/${property.slug}/units/${unit.code}`} className="flex flex-wrap items-center justify-between gap-3 bg-card px-4 py-3 ring-1 ring-foreground/10">
             <span className="font-sans text-lg font-extrabold">Unit {unit.code}</span>
-            <span className="text-sm text-ink-soft">{sqft(unit.sqft)} · ${rateLabel(unit.ratePsf)} / SF · {money(monthlyRentCents(unit.ratePsf, unit.sqft))} / mo</span>
+            <span className="text-sm text-ink-soft">{sqft(unit.sqft)} · ₹{rateLabel(unit.ratePsf)} / SF · mo · {money(monthlyRentCents(unit.ratePsf, unit.sqft))} / mo</span>
             <StatusBadge status={unit.status} />
           </Link>
         ))}

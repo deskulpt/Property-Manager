@@ -18,7 +18,7 @@ export function InviteLandlordForm() {
       </div>
       <div className="grid gap-2">
         <Label htmlFor="city">City</Label>
-        <Input id="city" name="city" defaultValue="Toronto" />
+        <Input id="city" name="city" defaultValue="Mumbai" />
       </div>
       <div className="grid gap-2">
         <Label htmlFor="adminName">Admin name</Label>

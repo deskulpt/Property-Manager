@@ -9,6 +9,7 @@ const links = [
   { href: "/landlord/jobs", label: "Concierge" },
   { href: "/landlord/providers", label: "Providers" },
   { href: "/landlord/ledger", label: "Ledger" },
+  { href: "/landlord/settings", label: "Settings" },
 ]
 
 export default async function LandlordLayout({ children }: { children: React.ReactNode }) {
@@ -17,7 +18,7 @@ export default async function LandlordLayout({ children }: { children: React.Rea
     return (
       <RoleGate
         title="This desk is for a landlord admin"
-        body="Switch to Nadia Okonkwo for BBM Waterman, or Jonah Ellis for Harbourline Yards. Each one only sees their own organisation."
+        body="Switch to Nadia Okonkwo for BBM Logistics Parks, Jonah Ellis for Harbourline Yards India, or Meera Sahni (NRI) for Sahni Global Realty. Each one only sees their own organisation."
       />
     )
   }

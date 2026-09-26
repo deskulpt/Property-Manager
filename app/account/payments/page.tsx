@@ -9,7 +9,7 @@ export const metadata = { title: "Payments" }
 export default async function PaymentsPage() {
   const user = await getSessionUser()
   if (!user || user.role !== "applicant") {
-    return <RoleGate title="The ledger is on the applicant desk" body="Switch to Devon Hale to see rent due, a late fee, and a paid month. Maya Chen can add a method after she applies." />
+    return <RoleGate title="The ledger is on the applicant desk" body="Switch to Devon Hale to see rent due, GST, a late fee, and a paid month. Maya Chen can add a UPI or eNACH method after she applies." />
   }
   const entries = ledgerForUser(user.id)
   const methods = methodsForUser(user.id)
@@ -22,12 +22,12 @@ export default async function PaymentsPage() {
   return (
     <div className="mx-auto max-w-[900px] px-4 py-10">
       <PageHeader
-        kicker="Demo adapter · no card charge"
-        title="Rent, late fees, and what was paid."
-        lede="The payment provider is an interface. This build uses the demo adapter only. Autopay sets a flag. Recording a payment posts the ledger. Nothing leaves the machine."
+        kicker="Demo adapter · UPI / eNACH · INR"
+        title="Rent, GST, late fees, and what was paid."
+        lede="Charges are in INR. The payment provider is an interface — this build uses the India demo adapter only. Autopay sets a flag. Recording a payment posts the ledger. Nothing leaves the machine."
       />
       {entries.length === 0 ? (
-        <EmptyState title="No ledger yet" body="Rent lines appear after a landlord approves an application. You can still save a demo method once you have applied." />
+        <EmptyState title="No ledger yet" body="Rent and GST lines appear after a landlord approves an application. You can still save a demo UPI or eNACH method once you have applied." />
       ) : (
         <div className="overflow-x-auto border border-border">
           <table className="w-full min-w-[640px] text-left text-sm">
@@ -35,7 +35,7 @@ export default async function PaymentsPage() {
               <tr>
                 <th className="px-3 py-2">When</th>
                 <th className="px-3 py-2">Item</th>
-                <th className="px-3 py-2">Amount</th>
+                <th className="px-3 py-2">Amount (INR)</th>
                 <th className="px-3 py-2">Status</th>
               </tr>
             </thead>
@@ -92,7 +92,7 @@ export default async function PaymentsPage() {
         <section className="bg-card p-4 ring-1 ring-foreground/10">
           <h2 className="font-sans text-lg font-extrabold">Open balance</h2>
           <p className="mt-2 font-sans text-3xl font-black">{money(due.reduce((sum, entry) => sum + entry.amountCents, 0))}</p>
-          <p className="mt-1 text-sm text-ink-soft">{due.length} open item{due.length === 1 ? "" : "s"}. Posting uses the demo adapter and marks them paid.</p>
+          <p className="mt-1 text-sm text-ink-soft">{due.length} open item{due.length === 1 ? "" : "s"} in INR. Posting uses the demo adapter and marks them paid.</p>
           {tenantId && due.length > 0 ? (
             <div className="mt-4">
               <PayForm tenantId={tenantId} />

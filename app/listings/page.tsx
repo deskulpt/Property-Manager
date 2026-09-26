@@ -107,8 +107,8 @@ export default async function ListingsPage({
                   <div className="flex flex-col items-start justify-between gap-3 md:items-end">
                     <div className="text-left md:text-right">
                       <p className="font-sans text-2xl font-black text-brand">
-                        ${rateLabel(card.ratePsf)}
-                        <span className="ml-1 font-mono text-xs font-normal text-ink-faint">/ SF</span>
+                        ₹{rateLabel(card.ratePsf)}
+                        <span className="ml-1 font-mono text-xs font-normal text-ink-faint">/ SF · mo</span>
                       </p>
                       <p className="text-sm text-ink-soft">{money(card.monthlyCents)} / mo</p>
                     </div>

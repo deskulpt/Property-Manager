@@ -75,7 +75,7 @@ export function ListingsFilterForm({
     <form onSubmit={onSubmit} className="grid h-fit gap-4 bg-card p-4 ring-1 ring-foreground/10 lg:sticky lg:top-24">
       <div className="grid gap-2">
         <Label htmlFor="q">Search</Label>
-        <Input id="q" name="q" defaultValue={filters.q ?? ""} placeholder="Waterman, docks, Apex…" />
+        <Input id="q" name="q" defaultValue={filters.q ?? ""} placeholder="Bhiwandi, docks, Apex…" />
       </div>
       <div className="grid gap-2">
         <Label>Landlord</Label>
