@@ -16,7 +16,7 @@ import {
 } from "@/lib/format"
 import { gstCents, type DisplayCurrency } from "@/lib/market"
 
-const SEED_VERSION = "3"
+const SEED_VERSION = "4"
 const DB_PATH = path.join(process.cwd(), "data", "deskulpt.sqlite")
 
 export type SessionUser = {
@@ -579,6 +579,15 @@ function seed(db: Sql) {
   ledger.run("led_sep_fee", "t_bbm", "u_waterman_a1", "u_devon", "late_fee", "Late fee · September rent past 5-day grace", fee, "due", "2026-09-06", "2026-09-06T12:00:00.000Z", "led_sep_rent")
   ledger.run("led_oct_rent", "t_bbm", "u_waterman_a1", "u_devon", "rent", "October rent · Unit A1", rent, "due", "2026-10-01", "2026-09-20T12:00:00.000Z", null)
   ledger.run("led_oct_gst", "t_bbm", "u_waterman_a1", "u_devon", "gst", "GST (18%) · October rent · Unit A1", gst, "due", "2026-10-01", "2026-09-20T12:00:00.000Z", "led_oct_rent")
+
+  const t2 = db.prepare("SELECT sqft, rate_psf FROM units WHERE id = ?").get("u_thane_t2") as {
+    sqft: number
+    rate_psf: number
+  }
+  const nriRent = monthlyRentCents(t2.rate_psf, t2.sqft)
+  const nriGst = gstCents(nriRent)
+  ledger.run("led_nri_sep_rent", "t_nri", "u_thane_t2", "u_devon", "rent", "September rent · Unit T2", nriRent, "due", "2026-09-01", "2026-09-01T12:00:00.000Z", null)
+  ledger.run("led_nri_sep_gst", "t_nri", "u_thane_t2", "u_devon", "gst", "GST (18%) · September rent · Unit T2", nriGst, "due", "2026-09-01", "2026-09-01T12:00:00.000Z", "led_nri_sep_rent")
 
   const job = db.prepare(
     `INSERT INTO jobs (id, tenant_id, property_id, unit_id, title, details, trade, status, provider_id, created_at)
