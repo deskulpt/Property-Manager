@@ -329,11 +329,19 @@ export async function submitLateFeeRule(formData: FormData) {
   refresh(["/landlord/ledger", "/account/payments"])
 }
 
-export async function submitDisplayCurrency(formData: FormData) {
+export async function submitDisplayCurrency(formData: FormData): Promise<{
+  ok: boolean
+  error: string
+  currency: DisplayCurrency | null
+}> {
   const user = await getSessionUser()
-  if (!user || user.role !== "landlord_admin" || !user.tenantId) return
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) {
+    return { ok: false, error: "Switch to a landlord admin in the demo header first.", currency: null }
+  }
   const currency = String(formData.get("displayCurrency") ?? "") as DisplayCurrency
-  if (!["INR", "USD", "CAD", "GBP"].includes(currency)) return
+  if (!["INR", "USD", "CAD", "GBP"].includes(currency)) {
+    return { ok: false, error: "Choose INR, USD, CAD, or GBP.", currency: null }
+  }
   setTenantDisplayCurrency(user.tenantId, currency)
   notify({
     userId: user.id,
@@ -344,7 +352,8 @@ export async function submitDisplayCurrency(formData: FormData) {
         : `Amounts now show ${currency} with the INR charge beside them. Demo FX table only — not a live rate.`,
     href: "/landlord/settings",
   })
-  refresh(["/landlord", "/landlord/ledger", "/landlord/settings", "/inbox"])
+  revalidatePath("/", "layout")
+  return { ok: true, error: "", currency }
 }
 
 export type OtpState = {
