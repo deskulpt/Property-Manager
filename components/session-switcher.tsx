@@ -1,13 +1,7 @@
 "use client"
 
+import { useRouter } from "next/navigation"
 import { useTransition } from "react"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { switchSession } from "@/lib/actions"
 import { identityLabel, type Role } from "@/lib/format"
 
@@ -20,6 +14,10 @@ export type SwitchUser = {
   serviceArea: string | null
 }
 
+/**
+ * Native <select> on purpose: reliable without portal/hydration quirks,
+ * and usable by keyboard and browser automation.
+ */
 export function SessionSwitcher({
   users,
   currentId,
@@ -27,11 +25,8 @@ export function SessionSwitcher({
   users: SwitchUser[]
   currentId: string
 }) {
+  const router = useRouter()
   const [pending, startTransition] = useTransition()
-  const items = [
-    { value: "visitor", label: "Visitor · browse only" },
-    ...users.map((user) => ({ value: user.id, label: identityLabel(user) })),
-  ]
   const value = currentId || "visitor"
 
   return (
@@ -39,31 +34,31 @@ export function SessionSwitcher({
       <span className="hidden font-mono text-[10px] uppercase tracking-[0.16em] text-terra sm:inline">
         Demo
       </span>
-      <Select
-        items={items}
-        value={value}
+      <label className="sr-only" htmlFor="demo-identity">
+        Demo identity
+      </label>
+      <select
+        id="demo-identity"
+        name="userId"
+        aria-label="Demo identity"
         disabled={pending}
-        onValueChange={(next) => {
-          if (typeof next !== "string" || next === value) return
-          startTransition(() => {
-            void switchSession(next)
+        value={value}
+        className="h-9 w-[min(52vw,280px)] border border-input bg-card px-2 font-mono text-[11px] outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+        onChange={(event) => {
+          const next = event.target.value
+          startTransition(async () => {
+            await switchSession(next)
+            router.refresh()
           })
         }}
       >
-        <SelectTrigger
-          className="h-9 w-[min(52vw,280px)] bg-card font-mono text-[11px]"
-          aria-label="Demo identity"
-        >
-          <SelectValue placeholder="Choose a demo identity" />
-        </SelectTrigger>
-        <SelectContent>
-          {items.map((item) => (
-            <SelectItem key={item.value} value={item.value}>
-              {item.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        <option value="visitor">Visitor · browse only</option>
+        {users.map((user) => (
+          <option key={user.id} value={user.id}>
+            {identityLabel(user)}
+          </option>
+        ))}
+      </select>
     </div>
   )
 }

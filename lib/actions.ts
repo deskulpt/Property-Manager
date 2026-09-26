@@ -54,16 +54,17 @@ export async function switchSession(userId: string) {
   const jar = await cookies()
   if (!userId || userId === "visitor") {
     jar.delete(SESSION_COOKIE)
-    return
+  } else {
+    const user = getUser(userId)
+    if (!user) return
+    jar.set(SESSION_COOKIE, user.id, {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30,
+    })
   }
-  const user = getUser(userId)
-  if (!user) return
-  jar.set(SESSION_COOKIE, user.id, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
-  })
+  revalidatePath("/", "layout")
 }
 
 const applicationSchema = z.object({
