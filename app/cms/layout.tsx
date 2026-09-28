@@ -11,6 +11,8 @@ const ALL_LINKS: { href: string; label: string; kind?: PersonaKind | "home" }[] 
   { href: "/cms/applicants", label: "Applicants", kind: "applicants" },
   { href: "/cms/providers", label: "Providers", kind: "providers" },
   { href: "/cms/listings", label: "Listings CMS", kind: "listings" },
+  { href: "/cms/markets", label: "Markets", kind: "markets" },
+  { href: "/cms/languages", label: "Languages", kind: "languages" },
 ]
 
 export default async function CmsLayout({ children }: { children: React.ReactNode }) {

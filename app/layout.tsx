@@ -6,6 +6,7 @@ import { SiteHeader } from "@/components/site-header"
 import { PwaRegister } from "@/components/pwa-register"
 import { Toaster } from "@/components/ui/sonner"
 import { listSessionUsers, unreadCount } from "@/lib/db"
+import { t } from "@/lib/i18n"
 import { getSessionUser } from "@/lib/session"
 
 const archivo = Archivo({
@@ -45,7 +46,7 @@ export const viewport: Viewport = {
   themeColor: "#1C3F38",
 }
 
-export default async function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const [users, session] = await Promise.all([listSessionUsers(), getSessionUser()])
   const unread = session ? unreadCount(session.id) : 0
 
@@ -72,14 +73,15 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           <div className="mx-auto flex max-w-[1200px] flex-wrap items-end justify-between gap-6">
             <div>
               <p className="font-sans text-2xl font-black text-paper">
-                DeSkulpt<span className="text-terra">.</span>
+                {t("app.name")}
+                <span className="text-terra">.</span>
               </p>
-              <p className="mt-2 font-mono text-xs">Open-source property desk · demo data only</p>
+              <p className="mt-2 font-mono text-xs">{t("app.tagline")}</p>
             </div>
             <nav className="flex gap-4 font-mono text-xs" aria-label="Legal">
-              <Link href="/legal/terms" className="text-[#E2A57E]">Terms</Link>
-              <Link href="/legal/privacy" className="text-[#E2A57E]">Privacy</Link>
-              <Link href="/inbox" className="text-[#E2A57E]">Inbox</Link>
+              <Link href="/legal/terms" className="text-[#E2A57E]">{t("nav.legal.terms")}</Link>
+              <Link href="/legal/privacy" className="text-[#E2A57E]">{t("nav.legal.privacy")}</Link>
+              <Link href="/inbox" className="text-[#E2A57E]">{t("nav.inbox")}</Link>
             </nav>
           </div>
         </footer>

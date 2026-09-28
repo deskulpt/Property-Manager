@@ -15,8 +15,14 @@ import {
   type UnitStatus,
 } from "@/lib/format"
 import { gstCents, type DisplayCurrency } from "@/lib/market"
+import {
+  LIVE_MARKET,
+  MARKET_CHECKLIST_KEYS,
+  MARKET_CHECKLIST_LABELS,
+  type MarketChecklistKey,
+} from "@/lib/market-checklist"
 
-const SEED_VERSION = "4"
+const SEED_VERSION = "5"
 const DB_PATH = path.join(process.cwd(), "data", "deskulpt.sqlite")
 
 export type SessionUser = {
@@ -294,6 +300,28 @@ function createSchema(db: Sql) {
       created_at TEXT NOT NULL,
       channel TEXT NOT NULL
     );
+    CREATE TABLE market_drafts (
+      id TEXT PRIMARY KEY,
+      iso_code TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE market_checklist_items (
+      draft_id TEXT NOT NULL,
+      item_key TEXT NOT NULL,
+      done INTEGER NOT NULL DEFAULT 0,
+      notes TEXT NOT NULL DEFAULT '',
+      PRIMARY KEY (draft_id, item_key)
+    );
+    CREATE TABLE languages (
+      code TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      status TEXT NOT NULL,
+      waiting_reason TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
     CREATE TABLE meta (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
@@ -329,6 +357,9 @@ function reset(db: Sql) {
     "provider_approvals",
     "users",
     "tenants",
+    "market_checklist_items",
+    "market_drafts",
+    "languages",
     "meta",
   ]) {
     db.exec(`DROP TABLE IF EXISTS ${table}`)
@@ -613,6 +644,12 @@ function seed(db: Sql) {
   note.run("n4", "u_luis", "Job assigned", "Weather seal on the north drive-in at BBM Bhiwandi Hub is waiting for you to accept.", "/provider", "2026-09-20T16:05:00.000Z", "in_app")
   note.run("n5", "u_jonah", "Open concierge job", "Sump alarm in H1 has no provider yet. Amrita Singh is approved for Sriperumbudur.", "/landlord/jobs", "2026-09-21T15:05:00.000Z", "in_app")
   note.run("n6", "u_meera", "NRI display currency", "Your landlord desk shows USD as a view. Charges and the ledger stay in INR.", "/landlord/settings", "2026-09-15T10:00:00.000Z", "in_app")
+
+  // Languages: English is the source. No parked markets and no extra locales are seeded.
+  db.prepare(
+    `INSERT INTO languages (code, name, status, waiting_reason, created_at, updated_at)
+     VALUES (?, ?, ?, NULL, ?, ?)`,
+  ).run("en", "English", "ready", "2026-09-01T00:00:00.000Z", "2026-09-01T00:00:00.000Z")
 }
 
 function openDatabase() {
@@ -2051,5 +2088,191 @@ export function landlordTenants() {
       .prepare("SELECT id, name FROM tenants WHERE kind = 'landlord' ORDER BY name")
       .all(),
   ).map((row) => ({ id: String(row.id), name: String(row.name) }))
+}
+
+export type MarketChecklistItem = {
+  key: MarketChecklistKey
+  label: string
+  done: boolean
+  notes: string
+}
+
+export type MarketDraft = {
+  id: string
+  isoCode: string
+  name: string
+  createdAt: string
+  updatedAt: string
+  items: MarketChecklistItem[]
+  complete: boolean
+  doneCount: number
+  totalCount: number
+}
+
+function mapDraft(row: Record<string, unknown>): MarketDraft {
+  const id = String(row.id)
+  const items = MARKET_CHECKLIST_KEYS.map((key) => {
+    const item = asRow(
+      getDb()
+        .prepare(
+          "SELECT done, notes FROM market_checklist_items WHERE draft_id = ? AND item_key = ?",
+        )
+        .get(id, key),
+    )
+    return {
+      key,
+      label: MARKET_CHECKLIST_LABELS[key],
+      done: Number(item?.done ?? 0) === 1,
+      notes: String(item?.notes ?? ""),
+    }
+  })
+  const doneCount = items.filter((item) => item.done).length
+  return {
+    id,
+    isoCode: String(row.iso_code),
+    name: String(row.name),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+    items,
+    complete: doneCount === items.length,
+    doneCount,
+    totalCount: items.length,
+  }
+}
+
+export function listMarketDrafts() {
+  return asRows(
+    getDb().prepare("SELECT * FROM market_drafts ORDER BY created_at DESC").all(),
+  ).map(mapDraft)
+}
+
+export function getMarketDraft(id: string) {
+  const row = asRow(getDb().prepare("SELECT * FROM market_drafts WHERE id = ?").get(id))
+  return row ? mapDraft(row) : null
+}
+
+export function createMarketDraft(input: { isoCode: string; name: string }) {
+  const iso = input.isoCode.trim().toUpperCase()
+  const name = input.name.trim()
+  if (!/^[A-Z]{2}$/.test(iso)) {
+    return { ok: false as const, error: "Use a two-letter ISO 3166 country code." }
+  }
+  if (iso === LIVE_MARKET.iso) {
+    return { ok: false as const, error: "India is already the live market." }
+  }
+  if (name.length < 2) {
+    return { ok: false as const, error: "Enter a display name." }
+  }
+  const existing = asRow(getDb().prepare("SELECT id FROM market_drafts WHERE iso_code = ?").get(iso))
+  if (existing) return { ok: false as const, error: "A draft for that country code already exists." }
+
+  const id = crypto.randomUUID()
+  const now = new Date().toISOString()
+  const db = getDb()
+  db.prepare(
+    "INSERT INTO market_drafts (id, iso_code, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+  ).run(id, iso, name, now, now)
+  const insertItem = db.prepare(
+    "INSERT INTO market_checklist_items (draft_id, item_key, done, notes) VALUES (?, ?, 0, '')",
+  )
+  for (const key of MARKET_CHECKLIST_KEYS) insertItem.run(id, key)
+  return { ok: true as const, id }
+}
+
+export function setChecklistItem(
+  draftId: string,
+  itemKey: MarketChecklistKey,
+  input: { done: boolean; notes: string },
+) {
+  const draft = getMarketDraft(draftId)
+  if (!draft) return { ok: false as const, error: "Draft not found." }
+  if (!MARKET_CHECKLIST_KEYS.includes(itemKey)) {
+    return { ok: false as const, error: "Unknown checklist row." }
+  }
+  const now = new Date().toISOString()
+  getDb()
+    .prepare(
+      `UPDATE market_checklist_items SET done = ?, notes = ? WHERE draft_id = ? AND item_key = ?`,
+    )
+    .run(input.done ? 1 : 0, input.notes.trim(), draftId, itemKey)
+  getDb().prepare("UPDATE market_drafts SET updated_at = ? WHERE id = ?").run(now, draftId)
+  return { ok: true as const }
+}
+
+/**
+ * Countries offered on public forms: live India plus drafts with every checklist row done.
+ * Incomplete drafts never appear here.
+ */
+export function publicFormCountries(): { iso: string; name: string; live: boolean }[] {
+  const ready = listMarketDrafts()
+    .filter((draft) => draft.complete)
+    .map((draft) => ({ iso: draft.isoCode, name: draft.name, live: false }))
+  return [{ iso: LIVE_MARKET.iso, name: LIVE_MARKET.name, live: true }, ...ready]
+}
+
+export function isPublicFormCountry(nameOrIso: string) {
+  const needle = nameOrIso.trim().toLowerCase()
+  return publicFormCountries().some(
+    (country) =>
+      country.name.toLowerCase() === needle || country.iso.toLowerCase() === needle,
+  )
+}
+
+export type LanguageRecord = {
+  code: string
+  name: string
+  status: "ready" | "waiting_for_key"
+  waitingReason: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export function listLanguages() {
+  return asRows(
+    getDb().prepare("SELECT * FROM languages ORDER BY CASE code WHEN 'en' THEN 0 ELSE 1 END, code").all(),
+  ).map(
+    (row): LanguageRecord => ({
+      code: String(row.code),
+      name: String(row.name),
+      status: String(row.status) as LanguageRecord["status"],
+      waitingReason: str(row, "waiting_reason"),
+      createdAt: String(row.created_at),
+      updatedAt: String(row.updated_at),
+    }),
+  )
+}
+
+export function upsertLanguage(input: {
+  code: string
+  name: string
+  status: "ready" | "waiting_for_key"
+  waitingReason: string | null
+}) {
+  const code = input.code.trim().toLowerCase()
+  const name = input.name.trim()
+  if (!/^[a-z]{2}(-[a-z0-9]{2,8})?$/.test(code)) {
+    return { ok: false as const, error: "Use a BCP 47 language code such as hi or fr." }
+  }
+  if (code === "en") {
+    return { ok: false as const, error: "English is the source language and already exists." }
+  }
+  if (name.length < 2) return { ok: false as const, error: "Enter a display name." }
+  const now = new Date().toISOString()
+  const existing = asRow(getDb().prepare("SELECT code FROM languages WHERE code = ?").get(code))
+  if (existing) {
+    getDb()
+      .prepare(
+        `UPDATE languages SET name = ?, status = ?, waiting_reason = ?, updated_at = ? WHERE code = ?`,
+      )
+      .run(name, input.status, input.waitingReason, now, code)
+  } else {
+    getDb()
+      .prepare(
+        `INSERT INTO languages (code, name, status, waiting_reason, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(code, name, input.status, input.waitingReason, now, now)
+  }
+  return { ok: true as const, code }
 }
 

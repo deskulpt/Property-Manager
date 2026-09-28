@@ -28,6 +28,12 @@ export default async function CmsHomePage() {
     caps.personas.includes("listings")
       ? { href: "/cms/listings", title: "Listings readiness", body: "Floor plans, 360, and walkthrough coverage across the catalog." }
       : null,
+    caps.personas.includes("markets")
+      ? { href: "/cms/markets", title: "Next-market checklist", body: "Draft countries and finish every seam before they appear on public forms." }
+      : null,
+    caps.personas.includes("languages")
+      ? { href: "/cms/languages", title: "Languages", body: "English source files. Add a language; translation waits without an API key." }
+      : null,
   ].filter(Boolean) as { href: string; title: string; body: string }[]
 
   return (

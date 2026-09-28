@@ -11,30 +11,38 @@ import {
   assignJob,
   createApplication,
   createJob,
+  createMarketDraft,
   decideApplication,
   getUser,
   inviteLandlord,
+  isPublicFormCountry,
   landlordIds,
   openApplicationTenants,
   payDue,
+  publicFormCountries,
   saveFloorPlan,
   saveHotspots,
   saveLateFeeRule,
   saveVerification,
   setAutopay,
+  setChecklistItem,
   setProviderApproval,
   setProviderVerified,
   setTenantDisplayCurrency,
   transitionJob,
+  upsertLanguage,
   upsertMethod,
 } from "@/lib/db"
 import { TRADES } from "@/lib/format"
+import { t } from "@/lib/i18n"
 import { toE164, type DisplayCurrency, type PaymentMethodKind } from "@/lib/market"
+import { MARKET_CHECKLIST_KEYS, type MarketChecklistKey } from "@/lib/market-checklist"
 import { notify, notifyMany } from "@/lib/notifications"
 import { demoOtpCode, requestDemoOtp, verifyDemoOtp } from "@/lib/otp"
 import { demoPayments } from "@/lib/payments"
 import { staffCapabilities } from "@/lib/permissions"
 import { getSessionUser, SESSION_COOKIE } from "@/lib/session"
+import { translateEnglishCatalog, writeLocaleFile } from "@/lib/translate"
 import { simulateMatch } from "@/lib/verification"
 
 function refresh(paths: string[]) {
@@ -535,18 +543,13 @@ export async function submitPayment(formData: FormData) {
   refresh(["/account/payments", "/landlord/ledger", "/inbox"])
 }
 
-const verificationSchema = z
-  .object({
-    country: z.enum(["Canada", "United States", "India", "United Kingdom"]),
-    region: z.string().trim().min(2, "Enter a province, state, or region"),
-    docType: z.enum(["aadhaar", "driving_licence"]),
-    fileName: z.string().trim().max(180),
-    faceName: z.string().trim().max(180),
-  })
-  .refine((value) => (value.country === "India" ? value.docType === "aadhaar" : value.docType === "driving_licence"), {
-    message: "India uses Aadhaar in this demo. Everywhere else uses a driving licence.",
-    path: ["docType"],
-  })
+const verificationSchema = z.object({
+  country: z.string().trim().min(2),
+  region: z.string().trim().min(2, "Enter a province, state, or region"),
+  docType: z.enum(["aadhaar", "driving_licence"]),
+  fileName: z.string().trim().max(180),
+  faceName: z.string().trim().max(180),
+})
 
 export type VerifyState = {
   error: string | null
@@ -567,6 +570,19 @@ export async function completeVerification(_prev: VerifyState, payload: {
   const parsed = verificationSchema.safeParse(payload)
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Check the wizard.", result: null }
+  }
+  if (!isPublicFormCountry(parsed.data.country)) {
+    return {
+      error: "That country is not offered yet. Finish the next-market checklist first.",
+      result: null,
+    }
+  }
+  const isIndia = parsed.data.country === "India" || parsed.data.country === "IN"
+  if (isIndia && parsed.data.docType !== "aadhaar") {
+    return { error: "India uses Aadhaar in this demo.", result: null }
+  }
+  if (!isIndia && parsed.data.docType !== "driving_licence") {
+    return { error: "Non-India markets use a driving licence in this demo.", result: null }
   }
   const simulated = simulateMatch(parsed.data)
   saveVerification({
@@ -695,4 +711,100 @@ export async function submitPlatformApproval(formData: FormData) {
     href: "/provider",
   })
   refresh(["/cms", "/cms/providers", "/landlord/providers", "/landlord/jobs", "/provider", "/inbox"])
+}
+
+export type MarketFormState = { error: string | null; ok: boolean }
+
+export async function submitCreateMarketDraft(
+  _prev: MarketFormState,
+  formData: FormData,
+): Promise<MarketFormState> {
+  const user = await getSessionUser()
+  const caps = user ? staffCapabilities(user.role) : null
+  if (!caps?.manageMarkets) {
+    return { error: "Only a Super Admin can start a draft market.", ok: false }
+  }
+  const result = createMarketDraft({
+    isoCode: String(formData.get("isoCode") ?? ""),
+    name: String(formData.get("name") ?? ""),
+  })
+  if (!result.ok) return { error: result.error, ok: false }
+  notify({
+    userId: user!.id,
+    title: "Draft market started",
+    body: "Finish every checklist row before this country appears on public forms.",
+    href: `/cms/markets/${result.id}`,
+  })
+  refresh(["/cms/markets", "/account/verify", "/inbox"])
+  redirect(`/cms/markets/${result.id}`)
+}
+
+export async function submitChecklistItem(formData: FormData) {
+  const user = await getSessionUser()
+  const caps = user ? staffCapabilities(user.role) : null
+  if (!caps?.manageMarkets) return
+  const draftId = String(formData.get("draftId") ?? "")
+  const itemKey = String(formData.get("itemKey") ?? "") as MarketChecklistKey
+  if (!MARKET_CHECKLIST_KEYS.includes(itemKey)) return
+  const done = formData.get("done") === "1"
+  const notes = String(formData.get("notes") ?? "")
+  setChecklistItem(draftId, itemKey, { done, notes })
+  refresh(["/cms/markets", `/cms/markets/${draftId}`, "/account/verify"])
+}
+
+export type LanguageFormState = { error: string | null; message: string | null }
+
+export async function submitAddLanguage(
+  _prev: LanguageFormState,
+  formData: FormData,
+): Promise<LanguageFormState> {
+  const user = await getSessionUser()
+  const caps = user ? staffCapabilities(user.role) : null
+  if (!caps?.manageLanguages) {
+    return { error: "Only a Super Admin can add a language.", message: null }
+  }
+  const code = String(formData.get("code") ?? "")
+  const name = String(formData.get("name") ?? "")
+  const translated = await translateEnglishCatalog(code)
+  if (translated.ok) {
+    writeLocaleFile(code, translated.messages)
+    const saved = upsertLanguage({
+      code,
+      name,
+      status: "ready",
+      waitingReason: null,
+    })
+    if (!saved.ok) return { error: saved.error, message: null }
+    notify({
+      userId: user!.id,
+      title: "Language added",
+      body: `${name} (${code}) translated from English via Google Cloud Translation API.`,
+      href: "/cms/languages",
+    })
+    refresh(["/cms/languages", "/inbox"])
+    return { error: null, message: t("cms.languages.ready") }
+  }
+  if (translated.waiting) {
+    const saved = upsertLanguage({
+      code,
+      name,
+      status: "waiting_for_key",
+      waitingReason: translated.reason,
+    })
+    if (!saved.ok) return { error: saved.error, message: null }
+    notify({
+      userId: user!.id,
+      title: "Language saved — translation waiting",
+      body: translated.reason,
+      href: "/cms/languages",
+    })
+    refresh(["/cms/languages", "/inbox"])
+    return { error: null, message: t("cms.languages.waiting") }
+  }
+  return { error: translated.reason, message: null }
+}
+
+/** Used by the verify page to pass countries without importing db in the client. */
+export async function listPublicFormCountriesAction() {
+  return publicFormCountries()
 }

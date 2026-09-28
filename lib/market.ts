@@ -59,9 +59,6 @@ export const MARKETS: Record<MarketId, MarketProfile> = {
     ],
     idDocuments: [
       { country: "India", docType: "aadhaar", label: "Aadhaar" },
-      { country: "Canada", docType: "driving_licence", label: "Driving licence" },
-      { country: "United States", docType: "driving_licence", label: "Driving licence" },
-      { country: "United Kingdom", docType: "driving_licence", label: "Driving licence" },
     ],
     defaultCountry: "India",
     statesLabel: "State / UT",

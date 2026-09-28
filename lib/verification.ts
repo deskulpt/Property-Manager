@@ -1,9 +1,5 @@
 import "server-only"
 
-export const COUNTRIES = ["Canada", "United States", "India", "United Kingdom"] as const
-
-export type Country = (typeof COUNTRIES)[number]
-
 /**
  * Simulated document check. The score is a deterministic function of the
  * labels the person typed — not a biometric template, and not a call to

@@ -6,6 +6,8 @@ export type PersonaKind =
   | "applicants"
   | "providers"
   | "listings"
+  | "markets"
+  | "languages"
 
 export type StaffCapabilities = {
   openCms: boolean
@@ -18,12 +20,14 @@ export type StaffCapabilities = {
   verifyProvider: boolean
   approveProvider: boolean
   seeListingReadiness: boolean
+  manageMarkets: boolean
+  manageLanguages: boolean
 }
 
 const CAPS: Record<StaffRole, StaffCapabilities> = {
   super_admin: {
     openCms: true,
-    personas: ["platform_staff", "landlords", "applicants", "providers", "listings"],
+    personas: ["platform_staff", "landlords", "applicants", "providers", "listings", "markets", "languages"],
     seeFullEmail: true,
     seeMaskedEmail: true,
     seeVerification: true,
@@ -32,6 +36,8 @@ const CAPS: Record<StaffRole, StaffCapabilities> = {
     verifyProvider: true,
     approveProvider: true,
     seeListingReadiness: true,
+    manageMarkets: true,
+    manageLanguages: true,
   },
   account_manager: {
     openCms: true,
@@ -44,6 +50,8 @@ const CAPS: Record<StaffRole, StaffCapabilities> = {
     verifyProvider: false,
     approveProvider: false,
     seeListingReadiness: false,
+    manageMarkets: false,
+    manageLanguages: false,
   },
   service_manager: {
     openCms: true,
@@ -56,6 +64,8 @@ const CAPS: Record<StaffRole, StaffCapabilities> = {
     verifyProvider: true,
     approveProvider: true,
     seeListingReadiness: false,
+    manageMarkets: false,
+    manageLanguages: false,
   },
   property_manager: {
     openCms: true,
@@ -68,6 +78,8 @@ const CAPS: Record<StaffRole, StaffCapabilities> = {
     verifyProvider: false,
     approveProvider: false,
     seeListingReadiness: true,
+    manageMarkets: false,
+    manageLanguages: false,
   },
   merchandiser: {
     openCms: true,
@@ -80,6 +92,8 @@ const CAPS: Record<StaffRole, StaffCapabilities> = {
     verifyProvider: false,
     approveProvider: false,
     seeListingReadiness: true,
+    manageMarkets: false,
+    manageLanguages: false,
   },
 }
 

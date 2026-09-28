@@ -1,6 +1,7 @@
 import { PageHeader, RoleGate } from "@/components/product"
 import { VerificationWizard } from "@/components/verify/wizard"
-import { latestVerification } from "@/lib/db"
+import { latestVerification, publicFormCountries } from "@/lib/db"
+import { t } from "@/lib/i18n"
 import { getSessionUser } from "@/lib/session"
 
 export const metadata = { title: "Verification" }
@@ -11,14 +12,15 @@ export default async function VerifyPage() {
     return <RoleGate title="Verification is for applicants" body="Switch to Maya Chen to run the wizard, or Devon Hale to see a completed demo result." />
   }
   const existing = latestVerification(user.id)
+  const countries = publicFormCountries()
   return (
     <div className="mx-auto max-w-2xl px-4 py-10">
       <PageHeader
-        kicker="Identity · demo"
-        title="Verify the applicant."
-        lede="Pick a country. India uses Aadhaar in this wizard. Other countries use a provincial or state driving licence. The face step is visual and simulated."
+        kicker={t("verify.kicker")}
+        title={t("verify.title")}
+        lede={t("verify.lede")}
       />
-      <VerificationWizard existing={existing} />
+      <VerificationWizard existing={existing} countries={countries} />
     </div>
   )
 }
