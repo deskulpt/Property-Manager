@@ -15,8 +15,9 @@ export type SwitchUser = {
 }
 
 /**
- * Native <select> on purpose: reliable without portal/hydration quirks,
- * and usable by keyboard and browser automation.
+ * Native <select> inside a <form>. Changing the value submits the form so
+ * the server action always runs — including when automation sets .value and
+ * calls requestSubmit() without a React synthetic onChange.
  */
 export function SessionSwitcher({
   users,
@@ -34,31 +35,46 @@ export function SessionSwitcher({
       <span className="hidden font-mono text-[10px] uppercase tracking-[0.16em] text-terra sm:inline">
         Demo
       </span>
-      <label className="sr-only" htmlFor="demo-identity">
-        Demo identity
-      </label>
-      <select
-        id="demo-identity"
-        name="userId"
-        aria-label="Demo identity"
-        disabled={pending}
-        value={value}
-        className="h-9 w-[min(52vw,280px)] border border-input bg-card px-2 font-mono text-[11px] outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-        onChange={(event) => {
-          const next = event.target.value
+      <form
+        data-testid="demo-identity-form"
+        action={async (formData) => {
+          const next = String(formData.get("userId") ?? "visitor")
+          await switchSession(next)
+        }}
+        onSubmit={(event) => {
+          event.preventDefault()
+          const form = event.currentTarget
+          const next = String(new FormData(form).get("userId") ?? "visitor")
           startTransition(async () => {
             await switchSession(next)
             router.refresh()
           })
         }}
       >
-        <option value="visitor">Visitor · browse only</option>
-        {users.map((user) => (
-          <option key={user.id} value={user.id}>
-            {identityLabel(user)}
-          </option>
-        ))}
-      </select>
+        <label className="sr-only" htmlFor="demo-identity">
+          Demo identity
+        </label>
+        <select
+          id="demo-identity"
+          name="userId"
+          aria-label="Demo identity"
+          data-testid="demo-identity"
+          disabled={pending}
+          defaultValue={value}
+          key={value}
+          className="h-9 w-[min(52vw,280px)] border border-input bg-card px-2 font-mono text-[11px] outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+          onChange={(event) => {
+            event.currentTarget.form?.requestSubmit()
+          }}
+        >
+          <option value="visitor">Visitor · browse only</option>
+          {users.map((user) => (
+            <option key={user.id} value={user.id}>
+              {identityLabel(user)}
+            </option>
+          ))}
+        </select>
+      </form>
     </div>
   )
 }
