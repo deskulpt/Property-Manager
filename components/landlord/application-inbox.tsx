@@ -157,15 +157,23 @@ export function ApplicationInbox({
             </Link>
             {application.status === "submitted" ? (
               <>
-                <form action={reviewApplication}>
+                <form action={reviewApplication} data-testid={`approve-form-${application.id}`}>
                   <input type="hidden" name="applicationId" value={application.id} />
                   <input type="hidden" name="decision" value="approved" />
-                  <SubmitButton pendingLabel="Approving…">Approve</SubmitButton>
+                  <SubmitButton data-testid={`approve-${application.id}`} pendingLabel="Approving…">
+                    Approve
+                  </SubmitButton>
                 </form>
-                <form action={reviewApplication}>
+                <form action={reviewApplication} data-testid={`deny-form-${application.id}`}>
                   <input type="hidden" name="applicationId" value={application.id} />
                   <input type="hidden" name="decision" value="denied" />
-                  <SubmitButton variant="outline" pendingLabel="Declining…">Deny</SubmitButton>
+                  <SubmitButton
+                    data-testid={`deny-${application.id}`}
+                    variant="outline"
+                    pendingLabel="Declining…"
+                  >
+                    Deny
+                  </SubmitButton>
                 </form>
                 <AssignDialog application={application} providers={providers} />
               </>

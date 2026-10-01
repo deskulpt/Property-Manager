@@ -17,6 +17,12 @@ npm run dev
 
 Open [http://127.0.0.1:43123](http://127.0.0.1:43123). The first request creates `data/deskulpt.sqlite` and loads the demo portfolio. The server binds dual-stack (`::`) on port **43123**.
 
+```bash
+npm run reset          # restore the demo seed (stop the dev server first, or set DESKULPT_DB_PATH)
+npm test               # isolation + command tests (temp SQLite)
+npm run test:e2e       # Playwright leasing path on a throwaway DB/port
+```
+
 ## Demo identities
 
 Use the **Demo** switcher in the header. There is no password.

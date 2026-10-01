@@ -23,7 +23,10 @@ import {
 } from "@/lib/market-checklist"
 
 const SEED_VERSION = "5"
-const DB_PATH = path.join(process.cwd(), "data", "deskulpt.sqlite")
+
+function dbPath() {
+  return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
+}
 
 export type SessionUser = {
   id: string
@@ -653,8 +656,9 @@ function seed(db: Sql) {
 }
 
 function openDatabase() {
-  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true })
-  const db = new DatabaseSync(DB_PATH)
+  const file = dbPath()
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  const db = new DatabaseSync(file)
   db.exec("PRAGMA foreign_keys = ON")
   const meta = db.prepare(
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'meta'",
@@ -671,6 +675,18 @@ function openDatabase() {
 export function getDb() {
   if (!globalDb.deskulptDb) globalDb.deskulptDb = openDatabase()
   return globalDb.deskulptDb
+}
+
+/** Drop every table and reload the demo seed. Used by `npm run reset` and tests. */
+export function resetSeedDatabase() {
+  reset(getDb())
+}
+
+/** Close the process-wide SQLite handle so the next getDb() reopens (tests). */
+export function closeDatabase() {
+  if (!globalDb.deskulptDb) return
+  globalDb.deskulptDb.close()
+  globalDb.deskulptDb = undefined
 }
 
 export function listSessionUsers() {

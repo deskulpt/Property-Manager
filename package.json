@@ -10,7 +10,11 @@
     "dev": "next dev -H :: -p 43123",
     "build": "next build",
     "start": "next start -H :: -p 43123",
-    "lint": "eslint"
+    "lint": "eslint",
+    "reset": "vitest run test/reset-cli.test.ts",
+    "test": "vitest run test/isolation.test.ts",
+    "test:watch": "vitest test/isolation.test.ts",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -30,6 +34,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.56.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -37,6 +42,8 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "tsx": "^4.20.5",
+    "typescript": "^5",
+    "vitest": "^3.2.4"
   }
 }
