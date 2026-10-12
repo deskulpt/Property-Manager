@@ -1,0 +1,102 @@
+import type { Metadata, Viewport } from "next"
+import { IBM_Plex_Mono, IBM_Plex_Sans, Syne } from "next/font/google"
+import Link from "next/link"
+import "./globals.css"
+import { SiteHeader } from "@/components/site-header"
+import { PwaRegister } from "@/components/pwa-register"
+import { Toaster } from "@/components/ui/sonner"
+import { listSessionUsers, unreadCount } from "@/lib/db"
+import { t } from "@/lib/i18n"
+import { getSessionUser } from "@/lib/session"
+
+const syne = Syne({
+  subsets: ["latin"],
+  variable: "--font-syne",
+  weight: ["500", "600", "700", "800"],
+})
+
+const plex = IBM_Plex_Sans({
+  subsets: ["latin"],
+  variable: "--font-plex",
+  weight: ["400", "500", "600", "700"],
+})
+
+const plexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  variable: "--font-plex-mono",
+  weight: ["400", "500", "700"],
+})
+
+export const metadata: Metadata = {
+  title: {
+    default: "DeSkulpt",
+    template: "%s · DeSkulpt",
+  },
+  description:
+    "Multi-tenant industrial leasing desk. Browse bays, apply, and run a landlord portfolio with demo verification and demo payments.",
+  applicationName: "DeSkulpt",
+  icons: {
+    icon: "/icons/icon-192.png",
+    apple: "/icons/icon-192.png",
+  },
+}
+
+export const viewport: Viewport = {
+  themeColor: "#13253A",
+}
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const [users, session] = await Promise.all([listSessionUsers(), getSessionUser()])
+  const unread = session ? unreadCount(session.id) : 0
+
+  return (
+    <html
+      lang="en"
+      className={`${syne.variable} ${plex.variable} ${plexMono.variable} h-full antialiased`}
+    >
+      <body className="flex min-h-full flex-col bg-paper text-ink">
+        <SiteHeader
+          users={users.map((user) => ({
+            id: user.id,
+            name: user.name,
+            role: user.role,
+            tenantName: user.tenantName,
+            trade: user.trade,
+            serviceArea: user.serviceArea,
+          }))}
+          currentId={session?.id ?? ""}
+          unread={unread}
+          role={session?.role ?? null}
+        />
+        <div className="flex-1">{children}</div>
+        <footer className="border-t border-white/10 bg-brand-deep px-4 py-12 text-paper/65 md:px-8">
+          <div className="mx-auto flex max-w-[1200px] flex-col gap-8 md:flex-row md:items-end md:justify-between">
+            <div>
+              <p className="font-heading text-3xl font-extrabold tracking-tight text-paper">
+                {t("app.name")}
+                <span className="text-terra">.</span>
+              </p>
+              <p className="mt-2 max-w-sm font-mono text-xs leading-relaxed">{t("app.tagline")}</p>
+            </div>
+            <nav className="flex flex-wrap gap-x-5 gap-y-2 font-mono text-xs uppercase tracking-[0.12em]" aria-label="Legal">
+              <Link href="/listings" className="text-[#9ed0e0] transition-colors hover:text-paper">
+                {t("nav.listings")}
+              </Link>
+              <Link href="/legal/terms" className="text-[#9ed0e0] transition-colors hover:text-paper">
+                {t("nav.legal.terms")}
+              </Link>
+              <Link href="/legal/privacy" className="text-[#9ed0e0] transition-colors hover:text-paper">
+                {t("nav.legal.privacy")}
+              </Link>
+              <Link href="/inbox" className="text-[#9ed0e0] transition-colors hover:text-paper">
+                {t("nav.inbox")}
+              </Link>
+            </nav>
+          </div>
+        </footer>
+        <PwaRegister />
+        <Toaster />
+      </body>
+    </html>
+  )
+}

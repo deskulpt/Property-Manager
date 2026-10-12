@@ -1,0 +1,178 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+  DeSkulpt visual system — blueprint paper / industrial leasing.
+  Cool drafting paper (not cream), steel navy brand, cyan mark accent.
+  Rejects purple SaaS, cream+terracotta Fable skins, and glow/pill clusters.
+*/
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-plex), "IBM Plex Sans", sans-serif;
+  --font-mono: var(--font-plex-mono), "IBM Plex Mono", ui-monospace, monospace;
+  --font-heading: var(--font-syne), "Syne", sans-serif;
+  --font-serif: var(--font-syne), "Syne", sans-serif;
+  --color-terra: #0e6e8c;
+  --color-terra-dark: #0a5570;
+  --color-mark: #0e6e8c;
+  --color-mark-dark: #0a5570;
+  --color-brand: #13253a;
+  --color-brand-deep: #0a1624;
+  --color-paper: #eef2f5;
+  --color-paper-2: #e3e9ef;
+  --color-paper-3: #d5dee7;
+  --color-ink: #12151a;
+  --color-ink-soft: #3d4654;
+  --color-ink-faint: #6b7585;
+  --color-avail: #2f7a4e;
+  --color-pending: #9a7b2f;
+  --color-leased: #8a919c;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --background: #eef2f5;
+  --foreground: #12151a;
+  --card: #f7f9fb;
+  --card-foreground: #12151a;
+  --popover: #f7f9fb;
+  --popover-foreground: #12151a;
+  --primary: #13253a;
+  --primary-foreground: #eef2f5;
+  --secondary: #d5dee7;
+  --secondary-foreground: #12151a;
+  --muted: #e3e9ef;
+  --muted-foreground: #3d4654;
+  --accent: #d9e8ef;
+  --accent-foreground: #0a5570;
+  --destructive: #9b3b2e;
+  --border: #c5ced8;
+  --input: #c5ced8;
+  --ring: #0e6e8c;
+  --chart-1: #0e6e8c;
+  --chart-2: #13253a;
+  --chart-3: #2f7a4e;
+  --chart-4: #9a7b2f;
+  --chart-5: #6b7585;
+  --radius: 0.125rem;
+  --sidebar: #f7f9fb;
+  --sidebar-foreground: #12151a;
+  --sidebar-primary: #13253a;
+  --sidebar-primary-foreground: #eef2f5;
+  --sidebar-accent: #e3e9ef;
+  --sidebar-accent-foreground: #13253a;
+  --sidebar-border: #c5ced8;
+  --sidebar-ring: #0e6e8c;
+}
+
+.dark {
+  --background: #0a1624;
+  --foreground: #eef2f5;
+  --card: #13253a;
+  --card-foreground: #eef2f5;
+  --popover: #13253a;
+  --popover-foreground: #eef2f5;
+  --primary: #7eb8cc;
+  --primary-foreground: #0a1624;
+  --secondary: #1c3348;
+  --secondary-foreground: #eef2f5;
+  --muted: #1c3348;
+  --muted-foreground: #a8b4c0;
+  --accent: #1c3348;
+  --accent-foreground: #eef2f5;
+  --destructive: #e07a6a;
+  --border: rgb(255 255 255 / 12%);
+  --input: rgb(255 255 255 / 14%);
+  --ring: #7eb8cc;
+  --chart-1: #7eb8cc;
+  --chart-2: #a8b4c0;
+  --chart-3: #6db88a;
+  --chart-4: #c4a84a;
+  --chart-5: #6b7585;
+  --sidebar: #13253a;
+  --sidebar-foreground: #eef2f5;
+  --sidebar-primary: #7eb8cc;
+  --sidebar-primary-foreground: #0a1624;
+  --sidebar-accent: #1c3348;
+  --sidebar-accent-foreground: #eef2f5;
+  --sidebar-border: rgb(255 255 255 / 12%);
+  --sidebar-ring: #7eb8cc;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans bg-background text-foreground;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-syne), "Syne", sans-serif;
+    letter-spacing: -0.03em;
+    font-weight: 700;
+  }
+}
+
+@layer utilities {
+  .blueprint-grid {
+    background-image:
+      linear-gradient(rgb(14 110 140 / 0.12) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(14 110 140 / 0.12) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+  .blueprint-grid-fine {
+    background-image:
+      linear-gradient(rgb(238 242 245 / 0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(238 242 245 / 0.06) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  .desk-chrome {
+    border-left: 3px solid var(--color-terra);
+  }
+}
