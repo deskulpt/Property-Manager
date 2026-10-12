@@ -72,35 +72,66 @@ export function ListingsFilterForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="grid h-fit gap-4 bg-card p-4 ring-1 ring-foreground/10 lg:sticky lg:top-24">
-      <div className="grid gap-2">
-        <Label htmlFor="q">Search</Label>
-        <Input id="q" name="q" defaultValue={filters.q ?? ""} placeholder="Bhiwandi, docks, Apex…" />
+    <form
+      onSubmit={onSubmit}
+      className="desk-chrome grid h-fit gap-5 border border-ink/10 bg-card p-5 lg:sticky lg:top-24"
+    >
+      <div className="grid gap-1.5">
+        <Label htmlFor="q" className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint">
+          Search
+        </Label>
+        <Input
+          id="q"
+          name="q"
+          defaultValue={filters.q ?? ""}
+          placeholder="Bhiwandi, docks, Apex…"
+          className="rounded-sm"
+        />
       </div>
-      <div className="grid gap-2">
-        <Label>Landlord</Label>
-        <Select items={landlordItems} value={tenantId || " "} onValueChange={(value) => setTenantId(value && value !== " " ? String(value) : "")}>
-          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+      <div className="grid gap-1.5">
+        <Label className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint">
+          Landlord
+        </Label>
+        <Select
+          items={landlordItems}
+          value={tenantId || " "}
+          onValueChange={(value) => setTenantId(value && value !== " " ? String(value) : "")}
+        >
+          <SelectTrigger className="w-full rounded-sm">
+            <SelectValue />
+          </SelectTrigger>
           <SelectContent>
             {landlordItems.map((item) => (
-              <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
+              <SelectItem key={item.value} value={item.value}>
+                {item.label}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
-      <div className="grid gap-2">
-        <Label>Area</Label>
-        <Select items={areaItems} value={area || " "} onValueChange={(value) => setArea(value && value !== " " ? String(value) : "")}>
-          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+      <div className="grid gap-1.5">
+        <Label className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint">Area</Label>
+        <Select
+          items={areaItems}
+          value={area || " "}
+          onValueChange={(value) => setArea(value && value !== " " ? String(value) : "")}
+        >
+          <SelectTrigger className="w-full rounded-sm">
+            <SelectValue />
+          </SelectTrigger>
           <SelectContent>
             {areaItems.map((item) => (
-              <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
+              <SelectItem key={item.value} value={item.value}>
+                {item.label}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
-      <fieldset className="grid gap-2">
-        <legend className="text-sm font-medium">Status</legend>
+      <fieldset className="grid gap-2.5">
+        <legend className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint">
+          Status
+        </legend>
         {(["available", "pending", "leased"] as const).map((status) => (
           <label key={status} className="flex items-center gap-2 text-sm capitalize">
             <Checkbox
@@ -111,48 +142,141 @@ export function ListingsFilterForm({
           </label>
         ))}
       </fieldset>
-      <div className="grid grid-cols-2 gap-2">
-        <div className="grid gap-2">
-          <Label htmlFor="minSqft">Min SF</Label>
-          <Input id="minSqft" name="minSqft" inputMode="numeric" defaultValue={filters.minSqft ?? ""} />
+      <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-1.5">
+          <Label
+            htmlFor="minSqft"
+            className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint"
+          >
+            Min SF
+          </Label>
+          <Input
+            id="minSqft"
+            name="minSqft"
+            inputMode="numeric"
+            defaultValue={filters.minSqft ?? ""}
+            className="rounded-sm"
+          />
         </div>
-        <div className="grid gap-2">
-          <Label htmlFor="maxSqft">Max SF</Label>
-          <Input id="maxSqft" name="maxSqft" inputMode="numeric" defaultValue={filters.maxSqft ?? ""} />
+        <div className="grid gap-1.5">
+          <Label
+            htmlFor="maxSqft"
+            className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint"
+          >
+            Max SF
+          </Label>
+          <Input
+            id="maxSqft"
+            name="maxSqft"
+            inputMode="numeric"
+            defaultValue={filters.maxSqft ?? ""}
+            className="rounded-sm"
+          />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <div className="grid gap-2">
-          <Label htmlFor="minRate">Min $/SF</Label>
-          <Input id="minRate" name="minRate" inputMode="decimal" defaultValue={filters.minRate ?? ""} />
+      <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-1.5">
+          <Label
+            htmlFor="minRate"
+            className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint"
+          >
+            Min ₹/SF
+          </Label>
+          <Input
+            id="minRate"
+            name="minRate"
+            inputMode="decimal"
+            defaultValue={filters.minRate ?? ""}
+            className="rounded-sm"
+          />
         </div>
-        <div className="grid gap-2">
-          <Label htmlFor="maxRate">Max $/SF</Label>
-          <Input id="maxRate" name="maxRate" inputMode="decimal" defaultValue={filters.maxRate ?? ""} />
+        <div className="grid gap-1.5">
+          <Label
+            htmlFor="maxRate"
+            className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint"
+          >
+            Max ₹/SF
+          </Label>
+          <Input
+            id="maxRate"
+            name="maxRate"
+            inputMode="decimal"
+            defaultValue={filters.maxRate ?? ""}
+            className="rounded-sm"
+          />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <div className="grid gap-2">
-          <Label htmlFor="minDocks">Min docks</Label>
-          <Input id="minDocks" name="minDocks" inputMode="numeric" defaultValue={filters.minDocks ?? ""} />
+      <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-1.5">
+          <Label
+            htmlFor="minDocks"
+            className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint"
+          >
+            Min docks
+          </Label>
+          <Input
+            id="minDocks"
+            name="minDocks"
+            inputMode="numeric"
+            defaultValue={filters.minDocks ?? ""}
+            className="rounded-sm"
+          />
         </div>
-        <div className="grid gap-2">
-          <Label htmlFor="minDriveIns">Min drive-ins</Label>
-          <Input id="minDriveIns" name="minDriveIns" inputMode="numeric" defaultValue={filters.minDriveIns ?? ""} />
+        <div className="grid gap-1.5">
+          <Label
+            htmlFor="minDriveIns"
+            className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint"
+          >
+            Min drive-ins
+          </Label>
+          <Input
+            id="minDriveIns"
+            name="minDriveIns"
+            inputMode="numeric"
+            defaultValue={filters.minDriveIns ?? ""}
+            className="rounded-sm"
+          />
         </div>
       </div>
-      <div className="grid gap-2">
-        <Label htmlFor="minClearHeight">Min clear height (ft)</Label>
-        <Input id="minClearHeight" name="minClearHeight" inputMode="numeric" defaultValue={filters.minClearHeight ?? ""} />
+      <div className="grid gap-1.5">
+        <Label
+          htmlFor="minClearHeight"
+          className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint"
+        >
+          Min clear height (ft)
+        </Label>
+        <Input
+          id="minClearHeight"
+          name="minClearHeight"
+          inputMode="numeric"
+          defaultValue={filters.minClearHeight ?? ""}
+          className="rounded-sm"
+        />
       </div>
-      <div className="grid gap-2">
-        <Label htmlFor="power">Power contains</Label>
-        <Input id="power" name="power" defaultValue={filters.power ?? ""} placeholder="600A" />
+      <div className="grid gap-1.5">
+        <Label
+          htmlFor="power"
+          className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint"
+        >
+          Power contains
+        </Label>
+        <Input
+          id="power"
+          name="power"
+          defaultValue={filters.power ?? ""}
+          placeholder="600A"
+          className="rounded-sm"
+        />
       </div>
-      <fieldset className="grid gap-2">
-        <legend className="text-sm font-medium">Media</legend>
+      <fieldset className="grid gap-2.5">
+        <legend className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint">
+          Media
+        </legend>
         <label className="flex items-center gap-2 text-sm">
-          <Checkbox checked={hasFloorPlan} onCheckedChange={(checked) => setHasFloorPlan(checked === true)} />
+          <Checkbox
+            checked={hasFloorPlan}
+            onCheckedChange={(checked) => setHasFloorPlan(checked === true)}
+          />
           Floor plan on file
         </label>
         <label className="flex items-center gap-2 text-sm">
@@ -160,22 +284,33 @@ export function ListingsFilterForm({
           360 photo
         </label>
         <label className="flex items-center gap-2 text-sm">
-          <Checkbox checked={hasMatterport} onCheckedChange={(checked) => setHasMatterport(checked === true)} />
+          <Checkbox
+            checked={hasMatterport}
+            onCheckedChange={(checked) => setHasMatterport(checked === true)}
+          />
           Walkthrough URL
         </label>
       </fieldset>
-      <div className="grid gap-2">
-        <Label>Sort</Label>
-        <Select items={sortItems} value={sort} onValueChange={(value) => value && setSort(value as ListingFilters["sort"] & string)}>
-          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+      <div className="grid gap-1.5">
+        <Label className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint">Sort</Label>
+        <Select
+          items={sortItems}
+          value={sort}
+          onValueChange={(value) => value && setSort(value as ListingFilters["sort"] & string)}
+        >
+          <SelectTrigger className="w-full rounded-sm">
+            <SelectValue />
+          </SelectTrigger>
           <SelectContent>
             {sortItems.map((item) => (
-              <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
+              <SelectItem key={item.value} value={item.value}>
+                {item.label}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 pt-1">
         <Button type="submit">Apply filters</Button>
         <Button type="button" variant="outline" onClick={() => router.push("/listings")}>
           Reset
