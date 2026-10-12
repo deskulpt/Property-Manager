@@ -32,8 +32,8 @@ export function SessionSwitcher({
 
   return (
     <div className="flex items-center gap-2">
-      <span className="hidden font-mono text-[10px] uppercase tracking-[0.16em] text-terra sm:inline">
-        Demo
+      <span className="hidden font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint sm:inline">
+        Identity
       </span>
       <form
         data-testid="demo-identity-form"
@@ -62,7 +62,7 @@ export function SessionSwitcher({
           disabled={pending}
           defaultValue={value}
           key={value}
-          className="h-9 w-[min(52vw,280px)] border border-input bg-card px-2 font-mono text-[11px] outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+          className="h-9 w-[min(52vw,280px)] rounded-sm border border-ink/20 bg-card px-2 font-mono text-[11px] outline-none focus-visible:ring-2 focus-visible:ring-terra/40 disabled:opacity-50"
           onChange={(event) => {
             event.currentTarget.form?.requestSubmit()
           }}

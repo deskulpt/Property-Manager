@@ -52,8 +52,12 @@ export default async function CmsHomePage() {
       </ul>
       <div className="grid gap-3 md:grid-cols-2">
         {cards.map((card) => (
-          <Link key={card.href} href={card.href} className="bg-card p-5 ring-1 ring-foreground/10 hover:ring-brand/40">
-            <h2 className="font-sans text-xl font-extrabold">{card.title}</h2>
+          <Link
+            key={card.href}
+            href={card.href}
+            className="desk-chrome border border-ink/10 bg-card p-5 transition-colors hover:border-terra/40"
+          >
+            <h2 className="font-heading text-xl font-extrabold">{card.title}</h2>
             <p className="mt-2 text-sm text-ink-soft">{card.body}</p>
           </Link>
         ))}

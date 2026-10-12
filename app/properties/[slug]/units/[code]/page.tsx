@@ -20,12 +20,14 @@ export default async function UnitPage({
     <div className="mx-auto grid max-w-[1200px] gap-8 px-4 py-10 md:px-8 lg:grid-cols-[1.3fr_0.7fr]">
       <div>
         <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-terra">
-          <Link href={`/properties/${property.slug}`}>{property.name}</Link>
+          <Link href={`/properties/${property.slug}`} className="hover:underline">
+            {property.name}
+          </Link>
           {" · "}
           {property.tenantName}
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          <h1 className="text-4xl font-black">Unit {unit.code}</h1>
+          <h1 className="font-heading text-4xl font-extrabold">Unit {unit.code}</h1>
           <StatusBadge status={unit.status} />
         </div>
         <p className="mt-3 max-w-2xl text-ink-soft">{unit.description}</p>
@@ -33,10 +35,13 @@ export default async function UnitPage({
           <UnitGallery media={media} matterportUrl={unit.matterportUrl} />
         </div>
       </div>
-      <aside className="h-fit bg-brand p-6 text-paper lg:sticky lg:top-24">
-        <p className="font-mono text-[11px] uppercase tracking-wider text-white/55">{property.address}</p>
-        <p className="mt-4 font-sans text-3xl font-black text-[#E2A57E]">
-          ₹{rateLabel(unit.ratePsf)} <small className="font-mono text-xs font-normal text-white/50">/ SF · month</small>
+      <aside className="h-fit border border-white/10 bg-brand p-6 text-paper lg:sticky lg:top-24">
+        <p className="font-mono text-[11px] uppercase tracking-wider text-white/55">
+          {property.address}
+        </p>
+        <p className="mt-4 font-heading text-3xl font-extrabold text-[#9ed0e0]">
+          ₹{rateLabel(unit.ratePsf)}{" "}
+          <small className="font-mono text-xs font-normal text-white/50">/ SF · month</small>
         </p>
         <p className="mt-1 text-sm text-white/70">{money(monthly)} per month, before GST.</p>
         <div className="mt-4 text-paper [&_dt]:text-white/60">
@@ -52,13 +57,21 @@ export default async function UnitPage({
         </div>
         <div className="mt-6 flex flex-wrap gap-2">
           {unit.status === "leased" ? (
-            <p className="text-sm text-white/70">This bay is leased. Browse the floor plan for an open one.</p>
+            <p className="text-sm text-white/70">
+              This bay is leased. Browse the floor plan for an open one.
+            </p>
           ) : (
-            <Link href={`/apply/${unit.id}`} className="bg-terra px-4 py-3 font-sans text-sm font-bold text-white">
+            <Link
+              href={`/apply/${unit.id}`}
+              className="bg-terra px-4 py-3 font-heading text-sm font-bold text-white transition-colors hover:bg-terra-dark"
+            >
               Apply for this bay
             </Link>
           )}
-          <Link href={`/properties/${property.slug}`} className="border border-white/30 px-4 py-3 font-sans text-sm font-bold">
+          <Link
+            href={`/properties/${property.slug}`}
+            className="border border-white/30 px-4 py-3 font-heading text-sm font-bold transition-colors hover:border-white"
+          >
             Back to the plan
           </Link>
         </div>

@@ -82,39 +82,47 @@ export default async function ListingsPage({
           ) : (
             <div className="grid gap-3">
               {results.map((card) => (
-                <article key={card.unitId} className="grid gap-3 bg-card p-4 ring-1 ring-foreground/10 md:grid-cols-[1fr_auto]">
+                <article
+                  key={card.unitId}
+                  className="grid gap-3 border border-ink/10 bg-card p-4 transition-colors hover:border-terra/40 md:grid-cols-[1fr_auto]"
+                >
                   <div>
                     <p className="font-mono text-[11px] uppercase tracking-wider text-terra">
                       {card.tenantName} · {card.area}
                     </p>
-                    <h2 className="mt-1 font-sans text-xl font-extrabold">
+                    <h2 className="mt-1 font-heading text-xl font-extrabold">
                       {card.propertyName} · Unit {card.code}
                     </h2>
                     <p className="mt-1 text-sm text-ink-soft">{card.address}</p>
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       <StatusBadge status={card.status} />
                       <span className="font-mono text-[11px] uppercase tracking-wider text-ink-faint">
-                        {sqft(card.sqft)} · {card.clearHeight} clear · {card.docks} docks · {card.driveIns} drive-in · {card.power}
+                        {sqft(card.sqft)} · {card.clearHeight} clear · {card.docks} docks ·{" "}
+                        {card.driveIns} drive-in · {card.power}
                       </span>
                     </div>
                     <p className="mt-3 line-clamp-2 text-sm text-ink-soft">{card.description}</p>
-                    <div className="mt-3 flex flex-wrap gap-2 font-mono text-[10px] uppercase tracking-wider text-ink-faint">
-                      {card.floorPlanPath ? <span>Floor plan</span> : null}
-                      {card.hasPano ? <span>360</span> : null}
-                      {card.matterportUrl ? <span>Walkthrough</span> : null}
+                    <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] uppercase tracking-wider text-ink-faint">
+                      {card.floorPlanPath ? <span className="border-l-2 border-terra/50 pl-2">Floor plan</span> : null}
+                      {card.hasPano ? <span className="border-l-2 border-terra/50 pl-2">360</span> : null}
+                      {card.matterportUrl ? (
+                        <span className="border-l-2 border-terra/50 pl-2">Walkthrough</span>
+                      ) : null}
                     </div>
                   </div>
                   <div className="flex flex-col items-start justify-between gap-3 md:items-end">
                     <div className="text-left md:text-right">
-                      <p className="font-sans text-2xl font-black text-brand">
+                      <p className="font-heading text-2xl font-extrabold text-brand">
                         ₹{rateLabel(card.ratePsf)}
-                        <span className="ml-1 font-mono text-xs font-normal text-ink-faint">/ SF · mo</span>
+                        <span className="ml-1 font-mono text-xs font-normal text-ink-faint">
+                          / SF · mo
+                        </span>
                       </p>
                       <p className="text-sm text-ink-soft">{money(card.monthlyCents)} / mo</p>
                     </div>
                     <Link
                       href={`/properties/${card.propertySlug}/units/${card.code}`}
-                      className="bg-terra px-3 py-2 font-sans text-sm font-bold text-white"
+                      className="bg-terra px-3 py-2 font-heading text-sm font-bold text-white transition-colors hover:bg-terra-dark"
                     >
                       Open unit
                     </Link>
