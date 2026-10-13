@@ -74,12 +74,12 @@ export function SiteHeader({
       <div className="mx-auto flex max-w-[1200px] items-center justify-between gap-3 px-4 py-3 md:px-8">
         <Link
           href="/"
-          className="group flex items-baseline gap-0 font-heading text-xl font-extrabold tracking-tight text-brand"
+          className="group flex items-baseline gap-0 font-serif text-lg font-semibold tracking-tight text-brand md:text-xl"
         >
           <span className="relative">
             {t("app.name")}
             <span
-              className="absolute -bottom-0.5 left-0 h-0.5 w-full origin-left scale-x-100 bg-terra transition-transform group-hover:scale-x-110"
+              className="absolute -bottom-0.5 left-0 h-[2px] w-full bg-terra"
               aria-hidden
             />
           </span>
@@ -131,7 +131,7 @@ export function SiteHeader({
                   </p>
                   <nav className="grid gap-2" aria-label="Mobile browse">
                     {browse.map((link) => (
-                      <Link key={link.href} href={link.href} className="font-heading text-lg font-bold">
+                      <Link key={link.href} href={link.href} className="font-serif text-lg font-bold">
                         {link.label}
                       </Link>
                     ))}
@@ -143,7 +143,7 @@ export function SiteHeader({
                   </p>
                   <nav className="grid gap-2" aria-label="Mobile desk">
                     {desk.map((link) => (
-                      <Link key={link.href} href={link.href} className="font-heading text-lg font-bold">
+                      <Link key={link.href} href={link.href} className="font-serif text-lg font-bold">
                         {link.label}
                         {link.badge != null ? ` (${link.badge})` : ""}
                       </Link>

@@ -27,7 +27,9 @@ export default async function UnitPage({
           {property.tenantName}
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          <h1 className="font-heading text-4xl font-extrabold">Unit {unit.code}</h1>
+          <h1 className="font-serif text-3xl font-semibold tracking-tight md:text-4xl">
+            Unit {unit.code}
+          </h1>
           <StatusBadge status={unit.status} />
         </div>
         <p className="mt-3 max-w-2xl text-ink-soft">{unit.description}</p>
@@ -39,7 +41,7 @@ export default async function UnitPage({
         <p className="font-mono text-[11px] uppercase tracking-wider text-white/55">
           {property.address}
         </p>
-        <p className="mt-4 font-heading text-3xl font-extrabold text-[#9ed0e0]">
+        <p className="mt-4 font-serif text-3xl font-semibold text-[#9ed0e0]">
           ₹{rateLabel(unit.ratePsf)}{" "}
           <small className="font-mono text-xs font-normal text-white/50">/ SF · month</small>
         </p>
@@ -63,14 +65,14 @@ export default async function UnitPage({
           ) : (
             <Link
               href={`/apply/${unit.id}`}
-              className="bg-terra px-4 py-3 font-heading text-sm font-bold text-white transition-colors hover:bg-terra-dark"
+              className="bg-terra px-4 py-3 font-serif text-sm font-bold text-white transition-colors hover:bg-terra-dark"
             >
               Apply for this bay
             </Link>
           )}
           <Link
             href={`/properties/${property.slug}`}
-            className="border border-white/30 px-4 py-3 font-heading text-sm font-bold transition-colors hover:border-white"
+            className="border border-white/30 px-4 py-3 font-serif text-sm font-bold transition-colors hover:border-white"
           >
             Back to the plan
           </Link>

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next"
-import { IBM_Plex_Mono, IBM_Plex_Sans, Syne } from "next/font/google"
+import { IBM_Plex_Mono, Source_Sans_3, Source_Serif_4 } from "next/font/google"
 import Link from "next/link"
 import "./globals.css"
 import { SiteHeader } from "@/components/site-header"
@@ -9,21 +9,23 @@ import { listSessionUsers, unreadCount } from "@/lib/db"
 import { t } from "@/lib/i18n"
 import { getSessionUser } from "@/lib/session"
 
-const syne = Syne({
+/** Helvetica-adjacent UI sans — professional, not display/stretched. */
+const sans = Source_Sans_3({
   subsets: ["latin"],
-  variable: "--font-syne",
-  weight: ["500", "600", "700", "800"],
-})
-
-const plex = IBM_Plex_Sans({
-  subsets: ["latin"],
-  variable: "--font-plex",
+  variable: "--font-sans-face",
   weight: ["400", "500", "600", "700"],
 })
 
-const plexMono = IBM_Plex_Mono({
+/** Restrained editorial serif for titles — modest sizes only. */
+const serif = Source_Serif_4({
   subsets: ["latin"],
-  variable: "--font-plex-mono",
+  variable: "--font-serif-face",
+  weight: ["400", "500", "600", "700"],
+})
+
+const mono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono-face",
   weight: ["400", "500", "700"],
 })
 
@@ -52,9 +54,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html
       lang="en"
-      className={`${syne.variable} ${plex.variable} ${plexMono.variable} h-full antialiased`}
+      className={`${sans.variable} ${serif.variable} ${mono.variable} h-full antialiased`}
     >
-      <body className="flex min-h-full flex-col bg-paper text-ink">
+      <body className="flex min-h-full flex-col bg-paper font-sans text-ink">
         <SiteHeader
           users={users.map((user) => ({
             id: user.id,
@@ -72,20 +74,26 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <footer className="border-t border-white/10 bg-brand-deep px-4 py-12 text-paper/65 md:px-8">
           <div className="mx-auto flex max-w-[1200px] flex-col gap-8 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="font-heading text-3xl font-extrabold tracking-tight text-paper">
+              <p className="font-serif text-2xl font-semibold tracking-tight text-paper">
                 {t("app.name")}
                 <span className="text-terra">.</span>
               </p>
               <p className="mt-2 max-w-sm font-mono text-xs leading-relaxed">{t("app.tagline")}</p>
             </div>
-            <nav className="flex flex-wrap gap-x-5 gap-y-2 font-mono text-xs uppercase tracking-[0.12em]" aria-label="Legal">
+            <nav
+              className="flex flex-wrap gap-x-5 gap-y-2 font-mono text-xs uppercase tracking-[0.12em]"
+              aria-label="Legal"
+            >
               <Link href="/listings" className="text-[#9ed0e0] transition-colors hover:text-paper">
                 {t("nav.listings")}
               </Link>
               <Link href="/legal/terms" className="text-[#9ed0e0] transition-colors hover:text-paper">
                 {t("nav.legal.terms")}
               </Link>
-              <Link href="/legal/privacy" className="text-[#9ed0e0] transition-colors hover:text-paper">
+              <Link
+                href="/legal/privacy"
+                className="text-[#9ed0e0] transition-colors hover:text-paper"
+              >
                 {t("nav.legal.privacy")}
               </Link>
               <Link href="/inbox" className="text-[#9ed0e0] transition-colors hover:text-paper">

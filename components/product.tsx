@@ -14,7 +14,7 @@ export function PageHeader({
   return (
     <header className="mb-8">
       <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-terra">{kicker}</p>
-      <h1 className="mt-2 font-heading text-3xl font-extrabold tracking-tight md:text-4xl">
+      <h1 className="mt-2 font-serif text-2xl font-semibold tracking-tight md:text-3xl">
         {title}
       </h1>
       {lede ? <p className="mt-3 max-w-2xl text-lg text-ink-soft">{lede}</p> : null}
@@ -34,12 +34,12 @@ export function EmptyState({
   return (
     <div className="border border-dashed border-border bg-card px-6 py-12 text-center">
       <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-terra">Empty</p>
-      <h2 className="mt-3 font-heading text-2xl font-extrabold">{title}</h2>
+      <h2 className="mt-3 font-serif text-2xl font-semibold">{title}</h2>
       <p className="mx-auto mt-2 max-w-md text-ink-soft">{body}</p>
       {action ? (
         <Link
           href={action.href}
-          className="mt-5 inline-block font-heading text-sm font-bold text-terra underline underline-offset-4"
+          className="mt-5 inline-block font-serif text-sm font-bold text-terra underline underline-offset-4"
         >
           {action.label}
         </Link>
@@ -100,7 +100,7 @@ export function SpecList({
           <dt className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">
             {row.label}
           </dt>
-          <dd className="font-heading font-bold">{row.value}</dd>
+          <dd className="font-serif font-bold">{row.value}</dd>
         </div>
       ))}
     </dl>

@@ -39,7 +39,7 @@ export default async function LandlordHome() {
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
         {cards.map((card) => (
           <div key={card.label} className="border border-ink/10 bg-card p-4">
-            <div className="font-heading text-2xl font-extrabold text-brand">{card.node}</div>
+            <div className="font-serif text-2xl font-semibold text-brand">{card.node}</div>
             <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-ink-faint">
               {card.label}
             </p>

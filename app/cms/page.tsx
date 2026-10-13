@@ -57,7 +57,7 @@ export default async function CmsHomePage() {
             href={card.href}
             className="desk-chrome border border-ink/10 bg-card p-5 transition-colors hover:border-terra/40"
           >
-            <h2 className="font-heading text-xl font-extrabold">{card.title}</h2>
+            <h2 className="font-serif text-xl font-semibold">{card.title}</h2>
             <p className="mt-2 text-sm text-ink-soft">{card.body}</p>
           </Link>
         ))}
