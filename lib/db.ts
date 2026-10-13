@@ -22,7 +22,7 @@ import {
   type MarketChecklistKey,
 } from "@/lib/market-checklist"
 
-const SEED_VERSION = "5"
+const SEED_VERSION = "6"
 
 function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
@@ -443,6 +443,15 @@ function seed(db: Sql) {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
 
+  /** Public Matterport showcase models used as demo walkthrough embeds. */
+  const MATTERPORTS: Record<string, string> = {
+    "waterman:B1": "https://my.matterport.com/show/?m=JADuQHXd8ts",
+    "waterman:A2": "https://my.matterport.com/show/?m=L3sdz2m7jxp",
+    "cranfield:U3": "https://my.matterport.com/show/?m=x2aPXLXpbu1",
+    "commissioners:H1": "https://my.matterport.com/show/?m=VpGQDT9DFjr",
+    "thane:T1": "https://my.matterport.com/show/?m=iLToEwe2fAz",
+  }
+
   function addUnits(
     tenantId: string,
     propertyId: string,
@@ -451,7 +460,9 @@ function seed(db: Sql) {
     units: UnitSeed[],
   ) {
     for (const unit of units) {
-      const rich = slug === "waterman" && unit.code === "B1"
+      const key = `${slug}:${unit.code}`
+      const walk = MATTERPORTS[key] ?? null
+      const rich = key === "waterman:B1"
       unitStmt.run(
         `u_${slug}_${unit.code.toLowerCase()}`,
         tenantId,
@@ -466,10 +477,10 @@ function seed(db: Sql) {
         unit.status,
         unit.x,
         unit.y,
-        rich ? "https://my.matterport.com/show/?m=SxQL3iGyoDo" : null,
+        walk,
         rich
-          ? "Flagship bay at BBM Bhiwandi Hub. Clear-span distribution with stills, a motion loop, a short clip, a 360 photo, and a Matterport-compatible embed."
-          : `${unit.sqft.toLocaleString("en-IN")} SF bay at ${propertyName}. ${unit.h} clear, ${unit.dock} dock door${unit.dock === 1 ? "" : "s"}, ${unit.drive} drive-in, ${unit.pwr}.`,
+          ? "Flagship bay at BBM Bhiwandi Hub. Clear-span distribution with stills, motion, 360, and a live Matterport walkthrough embed."
+          : `${unit.sqft.toLocaleString("en-IN")} SF bay at ${propertyName}. ${unit.h} clear, ${unit.dock} dock door${unit.dock === 1 ? "" : "s"}, ${unit.drive} drive-in, ${unit.pwr}.${walk ? " Matterport walkthrough on file." : ""}`,
       )
     }
   }
@@ -511,12 +522,34 @@ function seed(db: Sql) {
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
   )
   const b1 = "u_waterman_b1"
-  media.run("m1", "t_bbm", b1, "photo", "/media/b1-dock.jpg", "Dock approach, demo still", 1)
-  media.run("m2", "t_bbm", b1, "photo", "/media/b1-aisle.jpg", "Rack aisle, demo still", 2)
-  media.run("m3", "t_bbm", b1, "photo", "/media/b1-yard.jpg", "Yard and trailer positions, demo still", 3)
-  media.run("m4", "t_bbm", b1, "gif", "/media/b1-loop.gif", "Motion loop across the bay stills", 4)
-  media.run("m5", "t_bbm", b1, "video", "/media/b1-walk.mp4", "Short walk-through clip", 5)
-  media.run("m6", "t_bbm", b1, "pano", "/media/b1-pano.jpg", "Equirectangular 360 photo — drag to look around", 6)
+  media.run("m1", "t_bbm", b1, "photo", "/media/b1-dock.jpg", "Dock approach", 1)
+  media.run("m2", "t_bbm", b1, "photo", "/media/b1-aisle.jpg", "Rack aisle", 2)
+  media.run("m3", "t_bbm", b1, "photo", "/media/b1-yard.jpg", "Yard and trailer positions", 3)
+  media.run("m3b", "t_bbm", b1, "photo", "/media/gen-clearspan.jpg", "Clear-span volume", 4)
+  media.run("m4", "t_bbm", b1, "gif", "/media/b1-loop.gif", "Motion loop across the bay stills", 5)
+  media.run("m5", "t_bbm", b1, "video", "/media/b1-walk.mp4", "Short walk-through clip", 6)
+  media.run("m6", "t_bbm", b1, "pano", "/media/b1-pano.jpg", "Equirectangular 360 photo — drag to look around", 7)
+
+  // Cover stills across the catalogue (AI + stock CRE photography)
+  const covers: [string, string, string, string, string][] = [
+    ["m_a2a", "t_bbm", "u_waterman_a2", "/media/gen-aisle.jpg", "Aisle perspective"],
+    ["m_a2b", "t_bbm", "u_waterman_a2", "/media/gen-dock.jpg", "Dock line"],
+    ["m_c2a", "t_bbm", "u_waterman_c2", "/media/us-warehouse2.jpg", "Bay interior"],
+    ["m_01a", "t_bbm", "u_bartley_01", "/media/gen-exterior.jpg", "Park exterior"],
+    ["m_01b", "t_bbm", "u_bartley_01", "/media/gen-office.jpg", "Office mezzanine entry"],
+    ["m_04a", "t_bbm", "u_bartley_04", "/media/gen-yard.jpg", "Trailer yard"],
+    ["m_u1a", "t_bbm", "u_cranfield_u1", "/media/us-dock.jpg", "Urban dock apron"],
+    ["m_u3a", "t_bbm", "u_cranfield_u3", "/media/gen-clearspan.jpg", "Clear height study"],
+    ["m_u3b", "t_bbm", "u_cranfield_u3", "/media/us-yard.jpg", "Site apron"],
+    ["m_h1a", "t_harbour", "u_commissioners_h1", "/media/us-warehouse1.jpg", "Rack hall"],
+    ["m_h1b", "t_harbour", "u_commissioners_h1", "/media/gen-dock.jpg", "Dock doors"],
+    ["m_h4a", "t_harbour", "u_commissioners_h4", "/media/gen-aisle.jpg", "Circulation aisle"],
+    ["m_t1a", "t_nri", "u_thane_t1", "/media/gen-exterior.jpg", "Thane warehouse face"],
+    ["m_t1b", "t_nri", "u_thane_t1", "/media/gen-office.jpg", "Front office"],
+  ]
+  covers.forEach(([id, tenantId, unitId, url, caption], index) => {
+    media.run(id, tenantId, unitId, "photo", url, caption, index + 1)
+  })
 
   db.prepare(
     `INSERT INTO applications (
@@ -1716,6 +1749,7 @@ export type ListingCard = {
   description: string
   matterportUrl: string | null
   hasPano: boolean
+  coverUrl: string | null
   propertyId: string
   propertyName: string
   propertySlug: string
@@ -1755,7 +1789,12 @@ export function searchListings(filters: ListingFilters = {}): ListingCard[] {
            p.id AS property_id, p.name AS property_name, p.slug AS property_slug,
            p.address, p.area, p.city_line, p.floor_plan_path,
            t.id AS tenant_id, t.name AS tenant_name,
-           EXISTS(SELECT 1 FROM unit_media m WHERE m.unit_id = u.id AND m.kind = 'pano') AS has_pano
+           EXISTS(SELECT 1 FROM unit_media m WHERE m.unit_id = u.id AND m.kind = 'pano') AS has_pano,
+           (
+             SELECT m.url FROM unit_media m
+             WHERE m.unit_id = u.id AND m.kind = 'photo'
+             ORDER BY m.sort_order ASC LIMIT 1
+           ) AS cover_url
          FROM units u
          JOIN properties p ON p.id = u.property_id
          JOIN tenants t ON t.id = u.tenant_id AND t.kind = 'landlord'`,
@@ -1786,6 +1825,7 @@ export function searchListings(filters: ListingFilters = {}): ListingCard[] {
       description: String(row.description),
       matterportUrl: str(row, "matterport_url"),
       hasPano: Number(row.has_pano) === 1,
+      coverUrl: str(row, "cover_url"),
       propertyId: String(row.property_id),
       propertyName: String(row.property_name),
       propertySlug: String(row.property_slug),

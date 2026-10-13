@@ -56,7 +56,7 @@ export function LeasingMap({ properties }: { properties: MapProperty[] }) {
                 setSlug(item.slug)
                 setCode(null)
               }}
-              className={`px-3 py-2 text-left font-heading text-sm font-bold ${on ? "bg-terra text-white" : "border border-white/20 text-white/70"}`}
+              className={`px-3 py-2 text-left font-serif text-sm font-bold ${on ? "bg-terra text-white" : "border border-white/20 text-white/70"}`}
             >
               {item.name}
               <small className="mt-0.5 block font-mono text-[10px] font-normal tracking-wide">
@@ -69,7 +69,7 @@ export function LeasingMap({ properties }: { properties: MapProperty[] }) {
       <div className="grid min-h-[480px] lg:grid-cols-[1.55fr_1fr]">
         <div className="blueprint-grid-fine border-b border-white/15 p-6 lg:border-r lg:border-b-0">
           <div className="mb-4 flex items-baseline justify-between gap-3">
-            <h3 className="font-heading text-lg font-extrabold text-paper">{property.name}</h3>
+            <h3 className="font-serif text-lg font-semibold text-paper">{property.name}</h3>
             <p className="font-mono text-[11px] tracking-wide text-white/50">{property.cityLine}</p>
           </div>
           <div className="relative border border-white/35 p-3">
@@ -93,7 +93,7 @@ export function LeasingMap({ properties }: { properties: MapProperty[] }) {
                   className={`min-w-[90px] border px-3 py-3 text-left ${tone[unit.status]} ${code === unit.code ? "outline outline-2 outline-offset-1 outline-terra" : ""}`}
                   style={{ flexGrow: (unit.sqft / max) * 3 + 1 }}
                 >
-                  <div className="font-heading text-[15px] font-extrabold">{unit.code}</div>
+                  <div className="font-serif text-[15px] font-semibold">{unit.code}</div>
                   <div className="mt-1 font-mono text-[10px]">{sqft(unit.sqft)}</div>
                 </button>
               ))}
@@ -111,7 +111,7 @@ export function LeasingMap({ properties }: { properties: MapProperty[] }) {
               <span className={`mb-4 inline-flex w-fit px-2.5 py-1 font-mono text-[10px] uppercase tracking-widest ${tone[selected.status]}`}>
                 {selected.status === "available" ? "Available" : selected.status === "pending" ? "Offer pending" : "Leased"}
               </span>
-              <p className="font-heading text-4xl font-extrabold tracking-tight">
+              <p className="font-serif text-4xl font-semibold tracking-tight">
                 Unit {selected.code}
               </p>
               <p className="mt-2 font-mono text-[11px] tracking-wide text-white/55">
@@ -132,24 +132,24 @@ export function LeasingMap({ properties }: { properties: MapProperty[] }) {
                     <dt className="font-mono text-[11px] uppercase tracking-wide text-white/60">
                       {label}
                     </dt>
-                    <dd className="font-heading font-bold">{value}</dd>
+                    <dd className="font-serif font-bold">{value}</dd>
                   </div>
                 ))}
               </dl>
-              <p className="font-heading text-2xl font-extrabold text-[#9ed0e0]">
+              <p className="font-serif text-2xl font-semibold text-[#9ed0e0]">
                 ₹{rateLabel(selected.ratePsf)}{" "}
                 <small className="font-mono text-xs font-normal text-white/50">/ SF · month</small>
               </p>
               <div className="mt-auto flex flex-wrap gap-2 pt-6">
                 <Link
                   href={`/properties/${property.slug}/units/${selected.code}`}
-                  className="bg-terra px-4 py-3 font-heading text-sm font-bold text-white"
+                  className="bg-terra px-4 py-3 font-serif text-sm font-bold text-white"
                 >
                   {selected.status === "leased" ? "View this bay" : "Open this bay"}
                 </Link>
                 <Link
                   href={`/properties/${property.slug}`}
-                  className="border border-white/30 px-4 py-3 font-heading text-sm font-bold text-paper"
+                  className="border border-white/30 px-4 py-3 font-serif text-sm font-bold text-paper"
                 >
                   Floor plan
                 </Link>

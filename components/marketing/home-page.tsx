@@ -21,30 +21,47 @@ export function HomePage({
           className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_20%_0%,rgb(14_110_140/0.14),transparent_55%),radial-gradient(ellipse_at_90%_40%,rgb(19_37_58/0.08),transparent_50%)]"
           aria-hidden
         />
-        <div className="mx-auto flex min-h-[min(88vh,760px)] max-w-[1200px] flex-col justify-end px-4 pb-16 pt-20 md:px-8 md:pb-24 md:pt-28">
-          <p className="hero-brand font-heading text-[clamp(3.4rem,12vw,8.5rem)] leading-[0.88] font-extrabold tracking-[-0.045em] text-brand">
-            DeSkulpt<span className="text-terra">.</span>
-          </p>
-          <h1 className="hero-rise mt-6 max-w-[18ch] font-heading text-[clamp(1.55rem,3.6vw,2.65rem)] leading-[1.12] font-bold tracking-[-0.03em] text-ink">
-            Industrial bays, mapped and leased online.
-          </h1>
-          <p className="hero-rise mt-4 max-w-[42ch] text-lg font-normal text-ink-soft md:text-xl">
-            A leasing desk for warehouses and yards — live availability, applications, and landlord books in one place.
-          </p>
-          <div className="hero-rise mt-8 flex flex-wrap gap-3">
-            <Link
-              href="/listings"
-              className="bg-brand px-5 py-3.5 font-heading text-sm font-bold tracking-wide text-paper transition-colors hover:bg-brand-deep"
-            >
-              Browse listings
-            </Link>
-            <Link
-              href="/#map"
-              className="border border-ink/25 bg-paper/60 px-5 py-3.5 font-heading text-sm font-bold tracking-wide text-ink transition-colors hover:border-terra hover:text-terra"
-            >
-              Open the map
-            </Link>
+        <div className="mx-auto grid min-h-[min(72vh,640px)] max-w-[1200px] items-end gap-10 px-4 pb-14 pt-16 md:grid-cols-[1.1fr_0.9fr] md:px-8 md:pb-20 md:pt-24">
+          <div>
+            <p className="hero-brand font-serif text-4xl font-semibold tracking-tight text-brand md:text-5xl">
+              DeSkulpt<span className="text-terra">.</span>
+            </p>
+            <h1 className="hero-rise mt-5 max-w-[22ch] font-serif text-2xl font-medium leading-snug tracking-tight text-ink md:text-3xl">
+              Industrial bays, mapped and leased online.
+            </h1>
+            <p className="hero-rise mt-4 max-w-[40ch] text-base leading-relaxed text-ink-soft md:text-lg">
+              A leasing desk for warehouses and yards — live availability, applications, and landlord
+              books in one place.
+            </p>
+            <div className="hero-rise mt-8 flex flex-wrap gap-3">
+              <Link
+                href="/listings"
+                className="bg-brand px-5 py-3 text-sm font-semibold tracking-wide text-paper transition-colors hover:bg-brand-deep"
+              >
+                Browse listings
+              </Link>
+              <Link
+                href="/#map"
+                className="border border-ink/25 bg-paper/80 px-5 py-3 text-sm font-semibold tracking-wide text-ink transition-colors hover:border-terra hover:text-terra"
+              >
+                Open the map
+              </Link>
+            </div>
           </div>
+          <Link
+            href="/properties/waterman/units/B1"
+            className="hero-rise group relative hidden overflow-hidden border border-ink/15 md:block"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/media/gen-exterior.jpg"
+              alt="BBM logistics park exterior"
+              className="aspect-[4/3] h-full w-full object-cover transition duration-500 group-hover:scale-[1.02]"
+            />
+            <span className="absolute inset-x-0 bottom-0 bg-brand/80 px-4 py-3 text-sm text-paper">
+              Featured · Unit B1 walkthrough
+            </span>
+          </Link>
         </div>
       </section>
 
@@ -60,7 +77,7 @@ export function HomePage({
               key={label}
               className="border-ink/15 border-r border-b px-4 py-5 last:border-r-0 md:border-b-0"
             >
-              <dt className="font-heading text-3xl font-extrabold tracking-tight text-brand md:text-4xl">
+              <dt className="font-serif text-3xl font-semibold tracking-tight text-brand md:text-4xl">
                 {value}
               </dt>
               <dd className="mt-1 font-mono text-[11px] uppercase tracking-wider text-ink-faint">
@@ -75,7 +92,7 @@ export function HomePage({
         <p className="reveal font-mono text-xs uppercase tracking-[0.18em] text-terra">
           01 — The opportunity
         </p>
-        <h2 className="reveal mt-4 max-w-[18ch] font-heading text-4xl font-extrabold md:text-5xl">
+        <h2 className="reveal mt-4 max-w-[18ch] font-serif text-3xl font-semibold md:text-4xl">
           Today, a great portfolio sits behind a brochure.
         </h2>
         <p className="reveal mt-4 max-w-[62ch] text-lg text-ink-soft">
@@ -136,7 +153,7 @@ export function HomePage({
         <p className="reveal font-mono text-xs uppercase tracking-[0.18em] text-terra">
           02 — Platform pillars
         </p>
-        <h2 className="reveal mt-4 font-heading text-4xl font-extrabold md:text-5xl">
+        <h2 className="reveal mt-4 font-serif text-3xl font-semibold md:text-4xl">
           Three audiences, three desks.
         </h2>
         <div className="reveal mt-8 grid gap-px bg-ink/15 md:grid-cols-3">
@@ -159,7 +176,7 @@ export function HomePage({
           ].map(([num, title, body]) => (
             <article key={num} className="desk-chrome bg-paper p-7">
               <p className="font-mono text-xs tracking-widest text-terra">{num}</p>
-              <h3 className="mt-3 font-heading text-2xl font-extrabold">{title}</h3>
+              <h3 className="mt-3 font-serif text-2xl font-semibold">{title}</h3>
               <p className="mt-2 text-ink-soft">{body}</p>
             </article>
           ))}
@@ -171,7 +188,7 @@ export function HomePage({
           <p className="reveal font-mono text-xs uppercase tracking-[0.18em] text-[#7eb8cc]">
             03 — The centrepiece
           </p>
-          <h2 className="reveal mt-4 max-w-[16ch] font-heading text-4xl font-extrabold text-paper md:text-5xl">
+          <h2 className="reveal mt-4 max-w-[16ch] font-serif text-4xl font-semibold text-paper md:text-5xl">
             Select a building. Click a unit. See everything.
           </h2>
           <p className="reveal mt-4 max-w-[62ch] text-lg text-paper/75">
@@ -190,7 +207,7 @@ export function HomePage({
         <p className="reveal font-mono text-xs uppercase tracking-[0.18em] text-terra">
           04 — Applicant experience
         </p>
-        <h2 className="reveal mt-4 max-w-[16ch] font-heading text-4xl font-extrabold md:text-5xl">
+        <h2 className="reveal mt-4 max-w-[16ch] font-serif text-3xl font-semibold md:text-4xl">
           From applicant to occupant, online.
         </h2>
         <div className="mt-10 grid items-center gap-10 lg:grid-cols-2">
@@ -228,7 +245,7 @@ export function HomePage({
               >
                 <span className="font-mono text-xs font-bold text-terra">{num}</span>
                 <div>
-                  <h3 className="font-heading text-lg font-bold">{title}</h3>
+                  <h3 className="font-serif text-lg font-bold">{title}</h3>
                   <p className="text-[15px] text-ink-soft">{body}</p>
                 </div>
               </li>
@@ -246,7 +263,7 @@ export function HomePage({
                   ["Demo", "eNACH on file"],
                 ].map(([n, l]) => (
                   <div key={l} className="border border-ink/10 bg-paper-2 p-3">
-                    <div className="font-heading text-xl font-extrabold text-brand">{n}</div>
+                    <div className="font-serif text-xl font-semibold text-brand">{n}</div>
                     <div className="font-mono text-[10px] uppercase tracking-wider text-ink-faint">
                       {l}
                     </div>
@@ -266,7 +283,7 @@ export function HomePage({
                   <span className="font-mono text-[10px] uppercase text-terra">{pill}</span>
                 </div>
               ))}
-              <Link href="/account/payments" className="font-heading text-sm font-bold text-terra">
+              <Link href="/account/payments" className="font-serif text-sm font-bold text-terra">
                 Open the ledger →
               </Link>
             </div>
@@ -288,7 +305,7 @@ export function HomePage({
                   ["Inbox", "Live applications"],
                 ].map(([n, l]) => (
                   <div key={l} className="border border-ink/10 bg-paper-2 p-3">
-                    <div className="font-heading text-lg font-extrabold text-brand">{n}</div>
+                    <div className="font-serif text-lg font-semibold text-brand">{n}</div>
                     <div className="font-mono text-[10px] uppercase text-ink-faint">{l}</div>
                   </div>
                 ))}
@@ -298,7 +315,7 @@ export function HomePage({
                   <div key={height} className="flex-1 bg-terra" style={{ height: `${height}%` }} />
                 ))}
               </div>
-              <Link href="/landlord" className="font-heading text-sm font-bold text-terra">
+              <Link href="/landlord" className="font-serif text-sm font-bold text-terra">
                 Enter the landlord desk →
               </Link>
             </div>
@@ -307,7 +324,7 @@ export function HomePage({
             <p className="reveal font-mono text-xs uppercase tracking-[0.18em] text-[#7eb8cc]">
               05 — Management backend
             </p>
-            <h2 className="reveal mt-4 font-heading text-4xl font-extrabold text-paper md:text-5xl">
+            <h2 className="reveal mt-4 font-serif text-4xl font-semibold text-paper md:text-5xl">
               One desk to run the portfolio.
             </h2>
             <ul className="reveal mt-6">
@@ -339,7 +356,7 @@ export function HomePage({
                 >
                   <span className="font-mono text-xs font-bold text-[#7eb8cc]">{num}</span>
                   <div>
-                    <h3 className="font-heading text-lg font-bold text-paper">{title}</h3>
+                    <h3 className="font-serif text-lg font-bold text-paper">{title}</h3>
                     <p className="text-[15px] text-paper/70">{body}</p>
                   </div>
                 </li>
@@ -353,7 +370,7 @@ export function HomePage({
         <p className="reveal font-mono text-xs uppercase tracking-[0.18em] text-terra">
           06 — Going further
         </p>
-        <h2 className="reveal mt-4 font-heading text-4xl font-extrabold md:text-5xl">
+        <h2 className="reveal mt-4 font-serif text-3xl font-semibold md:text-4xl">
           What this slice already does.
         </h2>
         <div className="reveal mt-8 grid gap-px bg-ink/10 md:grid-cols-3">
@@ -387,7 +404,7 @@ export function HomePage({
           ].map(([num, title, body]) => (
             <article key={num} className="bg-paper p-6">
               <p className="font-mono text-[11px] tracking-widest text-terra">{num}</p>
-              <h3 className="mt-3 font-heading text-lg font-bold">{title}</h3>
+              <h3 className="mt-3 font-serif text-lg font-bold">{title}</h3>
               <p className="mt-2 text-sm text-ink-soft">{body}</p>
             </article>
           ))}
@@ -399,7 +416,7 @@ export function HomePage({
           <p className="reveal font-mono text-xs uppercase tracking-[0.18em] text-terra">
             07 — Architecture
           </p>
-          <h2 className="reveal mt-4 font-heading text-4xl font-extrabold md:text-5xl">
+          <h2 className="reveal mt-4 font-serif text-3xl font-semibold md:text-4xl">
             A stack you can run without a secret.
           </h2>
           <p className="reveal mt-4 max-w-[62ch] text-ink-soft">
@@ -432,25 +449,25 @@ export function HomePage({
         <p className="reveal font-mono text-[12px] uppercase tracking-[0.22em] text-terra">
           Next step
         </p>
-        <h2 className="reveal mt-4 max-w-[18ch] font-heading text-4xl font-extrabold md:text-6xl">
+        <h2 className="reveal mt-4 max-w-[18ch] font-serif text-3xl font-semibold md:text-4xl">
           Walk the portfolio the way a prospect would.
         </h2>
         <div className="reveal mt-8 flex flex-wrap gap-3">
           <Link
             href="/properties/waterman/units/B1"
-            className="bg-terra px-6 py-4 font-heading text-sm font-bold text-white transition-colors hover:bg-terra-dark"
+            className="bg-terra px-6 py-4 font-serif text-sm font-bold text-white transition-colors hover:bg-terra-dark"
           >
             Open Unit B1
           </Link>
           <Link
             href="/landlord"
-            className="bg-brand px-6 py-4 font-heading text-sm font-bold text-paper transition-colors hover:bg-brand-deep"
+            className="bg-brand px-6 py-4 font-serif text-sm font-bold text-paper transition-colors hover:bg-brand-deep"
           >
             Landlord desk
           </Link>
           <Link
             href="/provider"
-            className="border border-ink/25 px-6 py-4 font-heading text-sm font-bold transition-colors hover:border-terra hover:text-terra"
+            className="border border-ink/25 px-6 py-4 font-serif text-sm font-bold transition-colors hover:border-terra hover:text-terra"
           >
             Provider desk
           </Link>
