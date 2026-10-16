@@ -29,6 +29,7 @@ export default async function AccountPage({
       <div className="mb-6 flex flex-wrap gap-3 text-sm font-bold">
         <Link href="/account/verify" className="text-brand">Verification</Link>
         <Link href="/account/payments" className="text-brand">Payments</Link>
+        <Link href="/shop" className="text-brand">Shop</Link>
         <Link href="/inbox" className="text-brand">Inbox</Link>
       </div>
       <section className="mb-8 bg-card p-4 ring-1 ring-foreground/10">

@@ -125,7 +125,12 @@ Requires a landlord admin. Nadia, Jonah, and Meera each see only their organisat
 - `/landlord/jobs` concierge board (open, assigned, accepted, complete)
 - `/landlord/providers` approve a provider for this organisation
 - `/landlord/ledger` organisation ledger
-- `/landlord/settings` display currency
+- `/landlord/settings` display currency, Razorpay shop keys (write-only secret)
+- `/landlord/shop` SKUs and paid shop orders
+
+### Occupant shop
+
+`/shop` is for applicants with an **approved lease** (Devon on BBM Unit A1). Maya sees an empty “Shop is for current occupants” state. Seed SKUs: Extra Keys, FOB, Air Filters, Repair tool kit rental, Service Lift Booking. Cart + checkout use `demoShopPay` by default (`lib/shop-payments.ts`). Landlord **Settings → Payments → Razorpay** accepts Key ID / Secret; the secret is encrypted at rest and never returned on GET (last-4 only). Demo mode toggle forces the demo adapter even when keys exist. No live Razorpay HTTP charges in this build.
 
 ### Payments and ledger
 
@@ -224,7 +229,7 @@ npm start
 
 ```bash
 npm test
-npm run test:e2e
+npm run test  # isolation + shop:e2e
 ```
 
 - `npm test` runs `test/isolation.test.ts` on a temporary SQLite file. It checks tenant isolation, approving Maya (rent plus GST, and a second approve fails), late-fee idempotence, CMS email redaction, provider area approval, and that public form countries stay India-only until a draft checklist is complete. It does not use `data/deskulpt.sqlite`.
@@ -233,6 +238,17 @@ npm run test:e2e
 - `npm run lint` runs ESLint.
 
 Playwright downloads a browser on first use (`npx playwright install` if the run asks for one).
+
+## Continuous integration
+
+GitHub Actions (`.github/workflows/ci.yml`) runs on every pull request and every push to `main`:
+
+1. `npm ci` (Node 22, npm cache)
+2. `npm run lint`
+3. `npm test` (Vitest isolation suite)
+4. `npm run build`
+
+An optional **Deploy** job on `main` and a manual **Deploy (manual)** workflow (`workflow_dispatch`) call Vercel only when `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` are set as repository secrets. Without those secrets the job skips — no fake credentials. Railway (or another host for easyrental.space) can follow the same pattern later. Playwright e2e is a separate workflow when present; it is not required for this CI gate.
 
 ## Demo limits
 
