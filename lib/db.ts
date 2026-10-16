@@ -22,7 +22,7 @@ import {
   type MarketChecklistKey,
 } from "@/lib/market-checklist"
 
-const SEED_VERSION = "8"
+const SEED_VERSION = "9"
 
 function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
@@ -48,10 +48,20 @@ export type SessionUser = {
   hasPassword: boolean
 }
 
+export type FloorRecord = {
+  id: string
+  tenantId: string
+  propertyId: string
+  label: string
+  levelIndex: number
+  planPath: string | null
+}
+
 export type UnitRecord = {
   id: string
   tenantId: string
   propertyId: string
+  floorId: string | null
   code: string
   sqft: number
   clearHeight: string
@@ -85,8 +95,10 @@ export type PropertyRecord = {
   cityLine: string
   totalSqft: number
   floorPlanPath: string | null
+  modelPath: string | null
   latitude: number | null
   longitude: number | null
+  floors: FloorRecord[]
   units: UnitRecord[]
 }
 
@@ -139,6 +151,7 @@ function mapUnit(row: Record<string, unknown>): UnitRecord {
     id: String(row.id),
     tenantId: String(row.tenant_id),
     propertyId: String(row.property_id),
+    floorId: str(row, "floor_id"),
     code: String(row.code),
     sqft: Number(row.sqft),
     clearHeight: String(row.clear_height),
@@ -222,8 +235,18 @@ function createSchema(db: Sql) {
       city_line TEXT NOT NULL,
       total_sqft INTEGER NOT NULL,
       floor_plan_path TEXT,
+      model_path TEXT,
       latitude REAL,
       longitude REAL
+    );
+    CREATE TABLE floors (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      property_id TEXT NOT NULL,
+      label TEXT NOT NULL,
+      level_index INTEGER NOT NULL,
+      plan_path TEXT,
+      UNIQUE (property_id, level_index)
     );
     CREATE TABLE visit_requests (
       id TEXT PRIMARY KEY,
@@ -243,6 +266,7 @@ function createSchema(db: Sql) {
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
       property_id TEXT NOT NULL,
+      floor_id TEXT,
       code TEXT NOT NULL,
       sqft INTEGER NOT NULL,
       clear_height TEXT NOT NULL,
@@ -369,6 +393,7 @@ function createSchema(db: Sql) {
     );
     CREATE INDEX idx_units_tenant ON units(tenant_id);
     CREATE INDEX idx_units_property ON units(property_id);
+    CREATE INDEX idx_floors_property ON floors(property_id);
     CREATE INDEX idx_apps_tenant ON applications(tenant_id, status);
     CREATE INDEX idx_apps_applicant ON applications(applicant_id);
     CREATE INDEX idx_jobs_tenant ON jobs(tenant_id, status);
@@ -396,6 +421,7 @@ function reset(db: Sql) {
     "custom_domains",
     "unit_media",
     "units",
+    "floors",
     "properties",
     "provider_approvals",
     "users",
@@ -424,6 +450,7 @@ type UnitSeed = {
   status: UnitStatus
   x: number
   y: number
+  floorId?: string | null
 }
 
 function seed(db: Sql) {
@@ -469,21 +496,41 @@ function seed(db: Sql) {
 
   const property = db.prepare(
     `INSERT INTO properties (
-      id, tenant_id, name, slug, address, area, city_line, total_sqft, floor_plan_path, latitude, longitude
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id, tenant_id, name, slug, address, area, city_line, total_sqft, floor_plan_path, model_path, latitude, longitude
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
   // Gate pins are approximate public coords for demo Leaflet embeds (no Mapbox key).
-  property.run("p_waterman", "t_bbm", "BBM Bhiwandi Hub", "waterman", "Plot 19, Kalyan-Bhiwandi Road, Bhiwandi, Maharashtra 421302", "Bhiwandi", "BHIWANDI · PIN 421302 · 214,000 SF", 214000, "/floorplans/waterman.svg", 19.2813, 73.0483)
-  property.run("p_bartley", "t_bbm", "BBM Whitefield Sheds", "bartley", "161 ITPL Main Road, Whitefield, Bengaluru, Karnataka 560066", "Whitefield", "WHITEFIELD · PIN 560066 · 96,000 SF", 96000, "/floorplans/bartley.svg", 12.9698, 77.75)
-  property.run("p_cranfield", "t_bbm", "BBM Andheri East", "cranfield", "12 MIDC Central Road, Andheri East, Mumbai, Maharashtra 400093", "Andheri East", "ANDHERI EAST · PIN 400093 · 74,500 SF", 74500, "/floorplans/cranfield.svg", 19.1136, 72.8697)
-  property.run("p_commissioners", "t_harbour", "Harbourline Sriperumbudur", "commissioners", "88 SIPCOT Industrial Park, Sriperumbudur, Tamil Nadu 602105", "Sriperumbudur", "SRIPERUMBUDUR · PIN 602105 · 86,000 SF", 86000, "/floorplans/commissioners.svg", 12.9675, 79.9473)
-  property.run("p_nri_thane", "t_nri", "Sahni Thane Warehouse", "thane", "45 Wagle Estate, Thane West, Maharashtra 400604", "Thane", "THANE · PIN 400604 · 42,000 SF", 42000, "/floorplans/cranfield.svg", 19.2183, 72.9781)
+  property.run("p_waterman", "t_bbm", "BBM Bhiwandi Hub", "waterman", "Plot 19, Kalyan-Bhiwandi Road, Bhiwandi, Maharashtra 421302", "Bhiwandi", "BHIWANDI · PIN 421302 · 214,000 SF", 214000, "/floorplans/waterman.svg", null, 19.2813, 73.0483)
+  property.run("p_bartley", "t_bbm", "BBM Whitefield Sheds", "bartley", "161 ITPL Main Road, Whitefield, Bengaluru, Karnataka 560066", "Whitefield", "WHITEFIELD · PIN 560066 · 96,000 SF", 96000, "/floorplans/bartley.svg", null, 12.9698, 77.75)
+  property.run("p_cranfield", "t_bbm", "BBM Andheri East", "cranfield", "12 MIDC Central Road, Andheri East, Mumbai, Maharashtra 400093", "Andheri East", "ANDHERI EAST · PIN 400093 · 74,500 SF", 74500, "/floorplans/cranfield.svg", null, 19.1136, 72.8697)
+  property.run("p_commissioners", "t_harbour", "Harbourline Sriperumbudur", "commissioners", "88 SIPCOT Industrial Park, Sriperumbudur, Tamil Nadu 602105", "Sriperumbudur", "SRIPERUMBUDUR · PIN 602105 · 86,000 SF", 86000, "/floorplans/commissioners.svg", null, 12.9675, 79.9473)
+  property.run("p_nri_thane", "t_nri", "Sahni Thane Warehouse", "thane", "45 Wagle Estate, Thane West, Maharashtra 400604", "Thane", "THANE · PIN 400604 · 42,000 SF", 42000, "/floorplans/cranfield.svg", null, 19.2183, 72.9781)
+  // Multi-floor stack/peel demo (PRD §4.4) — 8 levels so the selector scrolls (>5).
+  property.run("p_powai", "t_bbm", "BBM Powai Tower", "powai", "12 Hiranandani Gardens, Powai, Mumbai, Maharashtra 400076", "Powai", "POWAI · PIN 400076 · 96,000 SF · 8 FLOORS", 96000, "/floorplans/powai-plate.svg", null, 19.1197, 72.9051)
+
+  const floorStmt = db.prepare(
+    `INSERT INTO floors (id, tenant_id, property_id, label, level_index, plan_path)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  )
+  const POWAI_FLOORS: { id: string; label: string; level: number }[] = [
+    { id: "f_powai_g", label: "Ground", level: 0 },
+    { id: "f_powai_1", label: "L1", level: 1 },
+    { id: "f_powai_2", label: "L2", level: 2 },
+    { id: "f_powai_3", label: "L3", level: 3 },
+    { id: "f_powai_4", label: "L4", level: 4 },
+    { id: "f_powai_5", label: "L5", level: 5 },
+    { id: "f_powai_6", label: "L6", level: 6 },
+    { id: "f_powai_7", label: "L7", level: 7 },
+  ]
+  for (const floor of POWAI_FLOORS) {
+    floorStmt.run(floor.id, "t_bbm", "p_powai", floor.label, floor.level, "/floorplans/powai-plate.svg")
+  }
 
   const unitStmt = db.prepare(
     `INSERT INTO units (
-      id, tenant_id, property_id, code, sqft, clear_height, docks, drive_ins, power,
+      id, tenant_id, property_id, floor_id, code, sqft, clear_height, docks, drive_ins, power,
       rate_psf, status, hotspot_x, hotspot_y, matterport_url, description
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
 
   /**
@@ -505,15 +552,18 @@ function seed(db: Sql) {
     propertyName: string,
     slug: string,
     units: UnitSeed[],
+    floorId: string | null = null,
   ) {
     for (const unit of units) {
       const key = `${slug}:${unit.code}`
       const walk = MATTERPORTS[key] ?? null
       const rich = key === "waterman:B1"
+      const unitFloorId = unit.floorId ?? floorId
       unitStmt.run(
         `u_${slug}_${unit.code.toLowerCase()}`,
         tenantId,
         propertyId,
+        unitFloorId,
         unit.code,
         unit.sqft,
         unit.h,
@@ -563,6 +613,32 @@ function seed(db: Sql) {
     { code: "T1", sqft: 22000, h: "26'", dock: 4, drive: 1, pwr: "600A / 415V", rate: 78, status: "available", x: 35, y: 45 },
     { code: "T2", sqft: 20000, h: "24'", dock: 3, drive: 1, pwr: "400A / 415V", rate: 80, status: "leased", x: 65, y: 55 },
   ])
+
+  // One leasable bay per floor so peel/scroll acceptance is easy to demo.
+  const powaiStatuses: UnitStatus[] = [
+    "available",
+    "leased",
+    "available",
+    "pending",
+    "available",
+    "leased",
+    "available",
+    "pending",
+  ]
+  const powaiUnits: UnitSeed[] = POWAI_FLOORS.map((floor, index) => ({
+    code: `P${floor.level}`,
+    sqft: 11000 + index * 400,
+    h: "12'",
+    dock: 0,
+    drive: 1,
+    pwr: "200A / 415V",
+    rate: 110 - index,
+    status: powaiStatuses[index],
+    x: 28 + (index % 3) * 22,
+    y: 38 + (index % 2) * 28,
+    floorId: floor.id,
+  }))
+  addUnits("t_bbm", "p_powai", "BBM Powai Tower", "powai", powaiUnits)
 
   const media = db.prepare(
     `INSERT INTO unit_media (id, tenant_id, unit_id, kind, url, caption, sort_order)
@@ -851,9 +927,29 @@ function unitsFor(propertyId: string) {
   ).map(mapUnit)
 }
 
+function floorsFor(propertyId: string): FloorRecord[] {
+  return asRows(
+    getDb()
+      .prepare(
+        "SELECT * FROM floors WHERE property_id = ? ORDER BY level_index ASC",
+      )
+      .all(propertyId),
+  ).map(
+    (row): FloorRecord => ({
+      id: String(row.id),
+      tenantId: String(row.tenant_id),
+      propertyId: String(row.property_id),
+      label: String(row.label),
+      levelIndex: Number(row.level_index),
+      planPath: str(row, "plan_path"),
+    }),
+  )
+}
+
 function mapProperty(row: Record<string, unknown>): PropertyRecord {
+  const id = String(row.id)
   return {
-    id: String(row.id),
+    id,
     tenantId: String(row.tenant_id),
     tenantName: String(row.tenant_name),
     name: String(row.name),
@@ -863,9 +959,11 @@ function mapProperty(row: Record<string, unknown>): PropertyRecord {
     cityLine: String(row.city_line),
     totalSqft: Number(row.total_sqft),
     floorPlanPath: str(row, "floor_plan_path"),
+    modelPath: str(row, "model_path"),
     latitude: num(row, "latitude"),
     longitude: num(row, "longitude"),
-    units: unitsFor(String(row.id)),
+    floors: floorsFor(id),
+    units: unitsFor(id),
   }
 }
 
