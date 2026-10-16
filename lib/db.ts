@@ -30,6 +30,34 @@ function dbPath() {
 
 export type PackageTier = "starter" | "pro"
 
+/** Exclusive file lock so parallel Next build workers do not race seed/reset. */
+function withDbInitLock<T>(fn: () => T): T {
+  const lockPath = `${dbPath()}.initlock`
+  const deadline = Date.now() + 20_000
+  while (true) {
+    try {
+      const fd = fs.openSync(lockPath, "wx")
+      try {
+        return fn()
+      } finally {
+        fs.closeSync(fd)
+        try {
+          fs.unlinkSync(lockPath)
+        } catch {
+          /* ignore */
+        }
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err
+      if (Date.now() > deadline) {
+        throw new Error(`Timed out waiting for SQLite init lock at ${lockPath}`)
+      }
+      const wait = new Int32Array(new SharedArrayBuffer(4))
+      Atomics.wait(wait, 0, 0, 40)
+    }
+  }
+}
+
 export type SessionUser = {
   id: string
   name: string
@@ -736,20 +764,25 @@ function seed(db: Sql) {
 }
 
 function openDatabase() {
-  const file = dbPath()
-  fs.mkdirSync(path.dirname(file), { recursive: true })
-  const db = new DatabaseSync(file)
-  db.exec("PRAGMA foreign_keys = ON")
-  const meta = db.prepare(
-    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'meta'",
-  ).get()
-  if (!meta) {
-    reset(db)
+  return withDbInitLock(() => {
+    const file = dbPath()
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    const db = new DatabaseSync(file)
+    // WAL + busy timeout: readers across workers after init.
+    db.exec("PRAGMA journal_mode = WAL")
+    db.exec("PRAGMA busy_timeout = 8000")
+    db.exec("PRAGMA foreign_keys = ON")
+    const meta = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'meta'",
+    ).get()
+    if (!meta) {
+      reset(db)
+      return db
+    }
+    const version = asRow(db.prepare("SELECT value FROM meta WHERE key = 'seed_version'").get())
+    if (!version || version.value !== SEED_VERSION) reset(db)
     return db
-  }
-  const version = asRow(db.prepare("SELECT value FROM meta WHERE key = 'seed_version'").get())
-  if (!version || version.value !== SEED_VERSION) reset(db)
-  return db
+  })
 }
 
 export function getDb() {

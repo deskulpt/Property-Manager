@@ -234,6 +234,17 @@ npm run test:e2e
 
 Playwright downloads a browser on first use (`npx playwright install` if the run asks for one).
 
+## Continuous integration
+
+GitHub Actions (`.github/workflows/ci.yml`) runs on every pull request and every push to `main`:
+
+1. `npm ci` (Node 22, npm cache)
+2. `npm run lint`
+3. `npm test` (Vitest isolation suite)
+4. `npm run build`
+
+An optional **Deploy** job on `main` and a manual **Deploy (manual)** workflow (`workflow_dispatch`) call Vercel only when `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` are set as repository secrets. Without those secrets the job skips — no fake credentials. Railway (or another host for easyrental.space) can follow the same pattern later. Playwright e2e is a separate workflow when present; it is not required for this CI gate.
+
 ## Demo limits
 
 These boundaries are intentional:
