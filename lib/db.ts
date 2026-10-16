@@ -23,8 +23,21 @@ import {
 } from "@/lib/market-checklist"
 import { decryptSecret, encryptSecret, secretLast4 } from "@/lib/shop-crypto"
 import { resolveShopPaymentProvider } from "@/lib/shop-payments"
+import {
+  ATTRIBUTION_DAYS,
+  addDaysIso,
+  leaseRewardPaise,
+  nextIndicationStatus,
+  normalizeRefCode,
+  payableOnAfter,
+  PUBLISH_REWARD_PAISE,
+  type IndicationPath,
+  type IndicationStatus,
+  type RewardKind,
+  type RewardLedgerStatus,
+} from "@/lib/referrals"
 
-const SEED_VERSION = "9"
+const SEED_VERSION = "11"
 
 function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
@@ -483,6 +496,53 @@ function createSchema(db: Sql) {
       status TEXT NOT NULL,
       UNIQUE (sku_id, slot_start)
     );
+    CREATE TABLE referrers (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      name TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      email TEXT NOT NULL,
+      code TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE indications (
+      id TEXT PRIMARY KEY,
+      referrer_id TEXT NOT NULL,
+      path TEXT NOT NULL,
+      status TEXT NOT NULL,
+      property_type TEXT NOT NULL,
+      address TEXT NOT NULL DEFAULT '',
+      area TEXT NOT NULL,
+      city TEXT NOT NULL,
+      pin TEXT NOT NULL,
+      approx_sqft INTEGER,
+      rent_ask_inr INTEGER,
+      landlord_name TEXT NOT NULL,
+      landlord_phone TEXT NOT NULL,
+      landlord_email TEXT,
+      consent_at TEXT NOT NULL,
+      attribution_expires_at TEXT NOT NULL,
+      listing_unit_id TEXT,
+      leased_rent_paise INTEGER,
+      referrer_name TEXT,
+      referrer_phone TEXT,
+      referrer_email TEXT,
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE referral_rewards (
+      id TEXT PRIMARY KEY,
+      indication_id TEXT NOT NULL,
+      referrer_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      amount_paise INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      available_on TEXT,
+      paid_at TEXT,
+      label TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
     CREATE INDEX idx_units_tenant ON units(tenant_id);
     CREATE INDEX idx_units_property ON units(property_id);
     CREATE INDEX idx_floors_property ON floors(property_id);
@@ -500,6 +560,9 @@ function createSchema(db: Sql) {
     CREATE INDEX idx_shop_orders_tenant ON shop_orders(tenant_id, created_at);
     CREATE INDEX idx_shop_orders_user ON shop_orders(user_id);
     CREATE INDEX idx_shop_rentals_sku ON shop_rental_bookings(sku_id, slot_start);
+    CREATE INDEX idx_indications_referrer ON indications(referrer_id, status);
+    CREATE INDEX idx_referral_rewards_referrer ON referral_rewards(referrer_id, created_at);
+    CREATE INDEX idx_referrers_code ON referrers(code);
   `)
 }
 
@@ -522,6 +585,9 @@ function reset(db: Sql) {
     "shop_cart_items",
     "shop_skus",
     "shop_settings",
+    "referral_rewards",
+    "indications",
+    "referrers",
     "unit_media",
     "units",
     "floors",
@@ -932,6 +998,204 @@ function seed(db: Sql) {
     `INSERT INTO languages (code, name, status, waiting_reason, created_at, updated_at)
      VALUES (?, ?, ?, NULL, ?, ?)`,
   ).run("en", "English", "ready", "2026-09-01T00:00:00.000Z", "2026-09-01T00:00:00.000Z")
+
+  // Refer & Earn (§19A) — Asha Reddy demo referrer + mixed indication statuses.
+  db.prepare(
+    `INSERT INTO referrers (id, user_id, name, phone, email, code, created_at)
+     VALUES (?, NULL, ?, ?, ?, ?, ?)`,
+  ).run(
+    "rr_asha",
+    "Asha Reddy",
+    "+919800001001",
+    "asha@easyrefer.example",
+    "EASY-ASHA",
+    "2026-08-01T10:00:00.000Z",
+  )
+
+  const indIns = db.prepare(
+    `INSERT INTO indications (
+      id, referrer_id, path, status, property_type, address, area, city, pin,
+      approx_sqft, rent_ask_inr, landlord_name, landlord_phone, landlord_email,
+      consent_at, attribution_expires_at, listing_unit_id, leased_rent_paise,
+      referrer_name, referrer_phone, referrer_email, notes, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+  // Pune warehouse — published + publish reward payable
+  indIns.run(
+    "ind_pune",
+    "rr_asha",
+    "submit",
+    "published",
+    "warehouse",
+    "Plot 12, Chakan MIDC Phase II",
+    "Chakan",
+    "Pune",
+    "410501",
+    72000,
+    3600000,
+    "Vikram Joshi",
+    "+919822334455",
+    "vikram@joshilogistics.example",
+    "2026-08-20T09:00:00.000Z",
+    "2026-11-18T09:00:00.000Z",
+    null,
+    "Asha Reddy",
+    "+919800001001",
+    "asha@easyrefer.example",
+    "DEMO · Pune warehouse bay",
+    "2026-08-20T09:00:00.000Z",
+    "2026-09-10T12:00:00.000Z",
+  )
+  // Chennai shed — awaiting media
+  indIns.run(
+    "ind_chennai",
+    "rr_asha",
+    "submit",
+    "awaiting_media",
+    "warehouse",
+    "88 SIPCOT fringe road",
+    "Sriperumbudur",
+    "Chennai",
+    "602105",
+    42000,
+    1850000,
+    "Lakshmi Iyer",
+    "+919444112233",
+    "lakshmi@iyersheds.example",
+    "2026-09-20T09:30:00.000Z",
+    "2026-12-19T09:30:00.000Z",
+    null,
+    "Asha Reddy",
+    "+919800001001",
+    "asha@easyrefer.example",
+    "DEMO · Chennai industrial shed",
+    "2026-09-20T09:30:00.000Z",
+    "2026-10-01T11:00:00.000Z",
+  )
+  // Bengaluru office — prospecting
+  indIns.run(
+    "ind_blr",
+    "rr_asha",
+    "link",
+    "prospecting",
+    "office",
+    "ITPL Main Road floor plate",
+    "Whitefield",
+    "Bengaluru",
+    "560066",
+    18000,
+    2100000,
+    "Arjun Mehta",
+    "+919845667700",
+    null,
+    "2026-10-02T14:00:00.000Z",
+    "2026-12-31T14:00:00.000Z",
+    null,
+    "Asha Reddy",
+    "+919800001001",
+    "asha@easyrefer.example",
+    "DEMO · Bengaluru office floor",
+    "2026-10-02T14:00:00.000Z",
+    "2026-10-05T10:00:00.000Z",
+  )
+  // Hyderabad yard — leased + publish paid_demo + lease accrued
+  indIns.run(
+    "ind_hyd",
+    "rr_asha",
+    "submit",
+    "leased",
+    "other",
+    "Genome Valley yard parcel",
+    "Shamirpet",
+    "Hyderabad",
+    "500078",
+    95000,
+    2800000,
+    "Farah Qureshi",
+    "+919849001122",
+    "farah@qyards.example",
+    "2026-07-05T08:00:00.000Z",
+    "2026-10-03T08:00:00.000Z",
+    2800000 * 100,
+    "Asha Reddy",
+    "+919800001001",
+    "asha@easyrefer.example",
+    "DEMO · Hyderabad yard",
+    "2026-07-05T08:00:00.000Z",
+    "2026-09-15T16:00:00.000Z",
+  )
+  // Discarded dud
+  indIns.run(
+    "ind_dud",
+    "rr_asha",
+    "submit",
+    "discarded",
+    "retail",
+    "Unverified plot near NH",
+    "Outer Ring",
+    "Hyderabad",
+    "500032",
+    null,
+    null,
+    "Unknown Contact",
+    "+919900000099",
+    null,
+    "2026-09-01T08:00:00.000Z",
+    "2026-11-30T08:00:00.000Z",
+    null,
+    "Asha Reddy",
+    "+919800001001",
+    "asha@easyrefer.example",
+    "DEMO · discarded dud lead",
+    "2026-09-01T08:00:00.000Z",
+    "2026-09-08T09:00:00.000Z",
+  )
+
+  const rwIns = db.prepare(
+    `INSERT INTO referral_rewards (
+      id, indication_id, referrer_id, kind, amount_paise, status, available_on, paid_at, label, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+  // Pune publish → payable (event Sep → available Oct 15)
+  rwIns.run(
+    "rw_pune_pub",
+    "ind_pune",
+    "rr_asha",
+    "publish",
+    200000,
+    "payable",
+    "2026-10-15",
+    null,
+    "DEMO · Published · ₹2,000 proposed",
+    "2026-09-10T12:00:00.000Z",
+  )
+  // Hyd publish → paid_demo
+  rwIns.run(
+    "rw_hyd_pub",
+    "ind_hyd",
+    "rr_asha",
+    "publish",
+    200000,
+    "paid_demo",
+    "2026-09-15",
+    "2026-09-15T10:00:00.000Z",
+    "DEMO · Published · paid_demo",
+    "2026-08-12T12:00:00.000Z",
+  )
+  // Hyd lease 5% of ₹28,00,000 = ₹1,40,000 → 14000000 paise → wait rent is 2800000 INR = 280000000 paise * 5% = 14000000 paise
+  rwIns.run(
+    "rw_hyd_lease",
+    "ind_hyd",
+    "rr_asha",
+    "lease",
+    14000000,
+    "accrued",
+    "2026-10-15",
+    null,
+    "DEMO · Leased · 5% first month",
+    "2026-09-15T16:00:00.000Z",
+  )
+
 }
 
 function openDatabase() {
@@ -3416,5 +3680,370 @@ export function forceBookRentalSlot(input: {
       input.slotStart,
       input.userId,
     )
+}
+
+/* ── Refer & Earn (§19A) ─────────────────────────────────────────────── */
+
+export type ReferrerRecord = {
+  id: string
+  userId: string | null
+  name: string
+  phone: string
+  email: string
+  code: string
+  createdAt: string
+}
+
+export type IndicationRecord = {
+  id: string
+  referrerId: string
+  path: IndicationPath
+  status: IndicationStatus
+  propertyType: string
+  address: string
+  area: string
+  city: string
+  pin: string
+  approxSqft: number | null
+  rentAskInr: number | null
+  landlordName: string
+  landlordPhone: string
+  landlordEmail: string | null
+  consentAt: string
+  attributionExpiresAt: string
+  listingUnitId: string | null
+  leasedRentPaise: number | null
+  referrerName: string | null
+  referrerPhone: string | null
+  referrerEmail: string | null
+  notes: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type ReferralRewardRecord = {
+  id: string
+  indicationId: string
+  referrerId: string
+  kind: RewardKind
+  amountPaise: number
+  status: RewardLedgerStatus
+  availableOn: string | null
+  paidAt: string | null
+  label: string
+  createdAt: string
+}
+
+function mapReferrer(row: Record<string, unknown>): ReferrerRecord {
+  return {
+    id: String(row.id),
+    userId: str(row, "user_id"),
+    name: String(row.name),
+    phone: String(row.phone),
+    email: String(row.email),
+    code: String(row.code),
+    createdAt: String(row.created_at),
+  }
+}
+
+function mapIndication(row: Record<string, unknown>): IndicationRecord {
+  return {
+    id: String(row.id),
+    referrerId: String(row.referrer_id),
+    path: String(row.path) as IndicationPath,
+    status: String(row.status) as IndicationStatus,
+    propertyType: String(row.property_type),
+    address: String(row.address ?? ""),
+    area: String(row.area),
+    city: String(row.city),
+    pin: String(row.pin),
+    approxSqft: row.approx_sqft == null ? null : Number(row.approx_sqft),
+    rentAskInr: row.rent_ask_inr == null ? null : Number(row.rent_ask_inr),
+    landlordName: String(row.landlord_name),
+    landlordPhone: String(row.landlord_phone),
+    landlordEmail: str(row, "landlord_email"),
+    consentAt: String(row.consent_at),
+    attributionExpiresAt: String(row.attribution_expires_at),
+    listingUnitId: str(row, "listing_unit_id"),
+    leasedRentPaise: row.leased_rent_paise == null ? null : Number(row.leased_rent_paise),
+    referrerName: str(row, "referrer_name"),
+    referrerPhone: str(row, "referrer_phone"),
+    referrerEmail: str(row, "referrer_email"),
+    notes: String(row.notes ?? ""),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  }
+}
+
+function mapReferralReward(row: Record<string, unknown>): ReferralRewardRecord {
+  return {
+    id: String(row.id),
+    indicationId: String(row.indication_id),
+    referrerId: String(row.referrer_id),
+    kind: String(row.kind) as RewardKind,
+    amountPaise: Number(row.amount_paise),
+    status: String(row.status) as RewardLedgerStatus,
+    availableOn: str(row, "available_on"),
+    paidAt: str(row, "paid_at"),
+    label: String(row.label),
+    createdAt: String(row.created_at),
+  }
+}
+
+export function getDemoReferrer() {
+  return getReferrerByCode("EASY-ASHA")
+}
+
+export function getReferrerByCode(code: string) {
+  const row = asRow(
+    getDb().prepare("SELECT * FROM referrers WHERE code = ?").get(normalizeRefCode(code)),
+  )
+  return row ? mapReferrer(row) : null
+}
+
+export function getReferrer(id: string) {
+  const row = asRow(getDb().prepare("SELECT * FROM referrers WHERE id = ?").get(id))
+  return row ? mapReferrer(row) : null
+}
+
+export function listIndicationsForReferrer(referrerId: string) {
+  return asRows(
+    getDb()
+      .prepare(`SELECT * FROM indications WHERE referrer_id = ? ORDER BY created_at DESC`)
+      .all(referrerId),
+  ).map(mapIndication)
+}
+
+export function listAllIndications() {
+  return asRows(
+    getDb().prepare(`SELECT * FROM indications ORDER BY created_at DESC`).all(),
+  ).map(mapIndication)
+}
+
+export function getIndication(id: string) {
+  const row = asRow(getDb().prepare("SELECT * FROM indications WHERE id = ?").get(id))
+  return row ? mapIndication(row) : null
+}
+
+export function listRewardsForReferrer(referrerId: string) {
+  return asRows(
+    getDb()
+      .prepare(`SELECT * FROM referral_rewards WHERE referrer_id = ? ORDER BY created_at DESC`)
+      .all(referrerId),
+  ).map(mapReferralReward)
+}
+
+export function referrerRewardTotals(referrerId: string) {
+  const rows = listRewardsForReferrer(referrerId)
+  let accrued = 0
+  let payable = 0
+  let paid = 0
+  for (const r of rows) {
+    if (r.status === "accrued") accrued += r.amountPaise
+    else if (r.status === "payable") payable += r.amountPaise
+    else if (r.status === "paid_demo") paid += r.amountPaise
+  }
+  return { accrued, payable, paid, total: accrued + payable + paid }
+}
+
+function phonesEqual(a: string, b: string) {
+  const da = a.replace(/\D/g, "")
+  const db = b.replace(/\D/g, "")
+  if (!da || !db) return false
+  return da === db || da.endsWith(db.slice(-10)) || db.endsWith(da.slice(-10))
+}
+
+export function createIndication(input: {
+  referrerId: string
+  path: IndicationPath
+  propertyType: string
+  address?: string
+  area: string
+  city: string
+  pin: string
+  approxSqft: number | null
+  rentAskInr: number | null
+  landlordName: string
+  landlordPhone: string
+  landlordEmail: string | null
+  referrerName: string
+  referrerPhone: string
+  referrerEmail: string | null
+  notes?: string
+}) {
+  if (phonesEqual(input.landlordPhone, input.referrerPhone)) {
+    return { ok: false as const, error: "Self-referral is not allowed — landlord phone must differ from yours." }
+  }
+  if (
+    input.landlordEmail &&
+    input.referrerEmail &&
+    input.landlordEmail.trim().toLowerCase() === input.referrerEmail.trim().toLowerCase()
+  ) {
+    return { ok: false as const, error: "Self-referral is not allowed — landlord email must differ from yours." }
+  }
+  const id = crypto.randomUUID()
+  const stamp = new Date().toISOString()
+  const expires = addDaysIso(stamp, ATTRIBUTION_DAYS)
+  getDb()
+    .prepare(
+      `INSERT INTO indications (
+        id, referrer_id, path, status, property_type, address, area, city, pin,
+        approx_sqft, rent_ask_inr, landlord_name, landlord_phone, landlord_email,
+        consent_at, attribution_expires_at, listing_unit_id, leased_rent_paise,
+        referrer_name, referrer_phone, referrer_email, notes, created_at, updated_at
+      ) VALUES (?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      id,
+      input.referrerId,
+      input.path,
+      input.propertyType,
+      input.address ?? "",
+      input.area,
+      input.city,
+      input.pin,
+      input.approxSqft,
+      input.rentAskInr,
+      input.landlordName,
+      input.landlordPhone,
+      input.landlordEmail,
+      stamp,
+      expires,
+      input.referrerName,
+      input.referrerPhone,
+      input.referrerEmail,
+      input.notes ?? "",
+      stamp,
+      stamp,
+    )
+  return { ok: true as const, id }
+}
+
+function insertReward(input: {
+  indicationId: string
+  referrerId: string
+  kind: RewardKind
+  amountPaise: number
+  status: RewardLedgerStatus
+  eventAt: string
+  label: string
+}) {
+  getDb()
+    .prepare(
+      `INSERT INTO referral_rewards (
+        id, indication_id, referrer_id, kind, amount_paise, status, available_on, paid_at, label, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
+    )
+    .run(
+      crypto.randomUUID(),
+      input.indicationId,
+      input.referrerId,
+      input.kind,
+      input.amountPaise,
+      input.status,
+      payableOnAfter(input.eventAt),
+      input.label,
+      input.eventAt,
+    )
+}
+
+export function advanceIndicationStatus(indicationId: string) {
+  const db = getDb()
+  const row = asRow(db.prepare("SELECT * FROM indications WHERE id = ?").get(indicationId))
+  if (!row) return { ok: false as const, error: "Indication not found." }
+  const current = mapIndication(row)
+
+  // Expiry: if past attribution and not yet published → deactivated
+  if (
+    !["published", "in_negotiation", "leased", "discarded", "deactivated"].includes(current.status) &&
+    new Date(current.attributionExpiresAt).getTime() < Date.now()
+  ) {
+    const stamp = new Date().toISOString()
+    db.prepare("UPDATE indications SET status = 'deactivated', updated_at = ?, notes = ? WHERE id = ?").run(
+      stamp,
+      `${current.notes}\n[auto] attribution expired`.trim(),
+      indicationId,
+    )
+    return { ok: true as const, status: "deactivated" as IndicationStatus }
+  }
+
+  const next = nextIndicationStatus(current.status)
+  if (!next) return { ok: false as const, error: "Indication is at a terminal status." }
+  const stamp = new Date().toISOString()
+  let leasedRent = current.leasedRentPaise
+  if (next === "leased" && leasedRent == null && current.rentAskInr != null) {
+    leasedRent = Math.round(current.rentAskInr * 100)
+  }
+  db.prepare(
+    "UPDATE indications SET status = ?, updated_at = ?, leased_rent_paise = COALESCE(?, leased_rent_paise) WHERE id = ?",
+  ).run(next, stamp, leasedRent, indicationId)
+
+  if (next === "published") {
+    insertReward({
+      indicationId,
+      referrerId: current.referrerId,
+      kind: "publish",
+      amountPaise: PUBLISH_REWARD_PAISE,
+      status: "accrued",
+      eventAt: stamp,
+      label: "DEMO · Published · ₹2,000 proposed",
+    })
+  }
+  if (next === "leased") {
+    const rentInr = leasedRent != null ? leasedRent / 100 : current.rentAskInr ?? 0
+    const amount = leaseRewardPaise(rentInr)
+    if (amount > 0) {
+      insertReward({
+        indicationId,
+        referrerId: current.referrerId,
+        kind: "lease",
+        amountPaise: amount,
+        status: "accrued",
+        eventAt: stamp,
+        label: "DEMO · Leased · 5% first month",
+      })
+    }
+  }
+  return { ok: true as const, status: next }
+}
+
+export function discardIndication(indicationId: string) {
+  const db = getDb()
+  const row = asRow(db.prepare("SELECT status FROM indications WHERE id = ?").get(indicationId))
+  if (!row) return { ok: false as const, error: "Indication not found." }
+  const status = String(row.status)
+  if (status === "leased" || status === "discarded" || status === "deactivated") {
+    return { ok: false as const, error: "Cannot discard this indication." }
+  }
+  db.prepare("UPDATE indications SET status = 'discarded', updated_at = ? WHERE id = ?").run(
+    new Date().toISOString(),
+    indicationId,
+  )
+  return { ok: true as const }
+}
+
+export function deactivateExpiredIndications() {
+  const db = getDb()
+  const now = new Date().toISOString()
+  db.prepare(
+    `UPDATE indications
+     SET status = 'deactivated', updated_at = ?
+     WHERE attribution_expires_at < ?
+       AND status NOT IN ('published', 'in_negotiation', 'leased', 'discarded', 'deactivated')`,
+  ).run(now, now)
+}
+
+export function ensureReferrerForDemo(): ReferrerRecord {
+  const existing = getDemoReferrer()
+  if (existing) return existing
+  const id = crypto.randomUUID()
+  const stamp = new Date().toISOString()
+  getDb()
+    .prepare(
+      `INSERT INTO referrers (id, user_id, name, phone, email, code, created_at)
+       VALUES (?, NULL, ?, ?, ?, ?, ?)`,
+    )
+    .run(id, "Asha Reddy", "+919800001001", "asha@easyrefer.example", "EASY-ASHA", stamp)
+  return getReferrer(id)!
 }
 

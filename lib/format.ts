@@ -156,6 +156,16 @@ export function statusLabel(status: string) {
   if (status === "completed") return "Completed"
   if (status === "cancelled") return "Cancelled"
   if (status === "refunded") return "Refunded"
+  if (status === "new") return "New"
+  if (status === "prospecting") return "Prospecting"
+  if (status === "awaiting_media") return "Awaiting media"
+  if (status === "published") return "Published"
+  if (status === "in_negotiation") return "In negotiation"
+  if (status === "discarded") return "Discarded"
+  if (status === "deactivated") return "Deactivated"
+  if (status === "accrued") return "Accrued"
+  if (status === "payable") return "Payable"
+  if (status === "paid_demo") return "Paid (demo)"
   return status
 }
 

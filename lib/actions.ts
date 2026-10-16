@@ -48,6 +48,12 @@ import {
   checkoutCart,
   saveShopRazorpaySettings,
   setShopSkuEnabled,
+  advanceIndicationStatus,
+  createIndication,
+  discardIndication,
+  ensureReferrerForDemo,
+  getDemoReferrer,
+  getReferrerByCode,
   getShopSettingsPublic,
 } from "@/lib/db"
 import { TRADES } from "@/lib/format"
@@ -60,6 +66,7 @@ import { demoOtpCode, requestDemoOtp, verifyDemoOtp } from "@/lib/otp"
 import { demoPayments } from "@/lib/payments"
 import { staffCapabilities } from "@/lib/permissions"
 import { getSessionUser, SESSION_COOKIE } from "@/lib/session"
+import { isValidRefCode, normalizeRefCode, REF_COOKIE, type PropertyType } from "@/lib/referrals"
 import { translateEnglishCatalog, writeLocaleFile } from "@/lib/translate"
 import { simulateMatch } from "@/lib/verification"
 
@@ -1210,3 +1217,113 @@ export async function getShopSettingsPublicAction(tenantId: string) {
   }
   return getShopSettingsPublic(tenantId)
 }
+
+
+export type ReferralFormState = {
+  error?: string | null
+  fieldErrors?: Record<string, string>
+  ok?: boolean
+  id?: string
+}
+
+const indicationSchema = z.object({
+  propertyType: z.enum(["warehouse", "office", "industrial_park", "retail", "other"]),
+  address: z.string().trim().optional(),
+  area: z.string().trim().min(2, "Enter the area / locality"),
+  city: z.string().trim().min(2, "Enter the city"),
+  pin: z.string().trim().regex(/^\d{6}$/, "PIN must be 6 digits"),
+  approxSqft: z.string().trim().optional(),
+  rentAskInr: z.string().trim().optional(),
+  landlordName: z.string().trim().min(2, "Enter the landlord name"),
+  landlordPhone: z
+    .string()
+    .trim()
+    .regex(/^\+91\d{10}$/, "Use +91 followed by 10 digits"),
+  landlordEmail: z.string().trim().email("Enter a valid email").optional().or(z.literal("")),
+  referrerName: z.string().trim().min(2, "Enter your name"),
+  referrerPhone: z
+    .string()
+    .trim()
+    .regex(/^\+91\d{10}$/, "Use +91 followed by 10 digits"),
+  referrerEmail: z.string().trim().email("Enter a valid email").optional().or(z.literal("")),
+  notes: z.string().trim().optional(),
+  consent: z.literal("on"),
+})
+
+function parseOptionalInt(raw: string | undefined) {
+  if (!raw) return null
+  const n = Number(raw.replace(/,/g, ""))
+  if (!Number.isFinite(n) || n <= 0) return null
+  return Math.round(n)
+}
+
+export async function submitIndication(
+  _prev: ReferralFormState,
+  formData: FormData,
+): Promise<ReferralFormState> {
+  const parsed = indicationSchema.safeParse({
+    propertyType: formData.get("propertyType"),
+    address: formData.get("address") || "",
+    area: formData.get("area"),
+    city: formData.get("city"),
+    pin: formData.get("pin"),
+    approxSqft: formData.get("approxSqft") || "",
+    rentAskInr: formData.get("rentAskInr") || "",
+    landlordName: formData.get("landlordName"),
+    landlordPhone: formData.get("landlordPhone"),
+    landlordEmail: formData.get("landlordEmail") || "",
+    referrerName: formData.get("referrerName"),
+    referrerPhone: formData.get("referrerPhone"),
+    referrerEmail: formData.get("referrerEmail") || "",
+    notes: formData.get("notes") || "",
+    consent: formData.get("consent") === "on" ? "on" : "",
+  })
+  if (!parsed.success) {
+    return { error: "Check the highlighted fields.", fieldErrors: issues(parsed.error) }
+  }
+
+  const jar = await cookies()
+  let referrer = getDemoReferrer()
+  const refCode = jar.get(REF_COOKIE)?.value
+  if (refCode && isValidRefCode(refCode)) {
+    referrer = getReferrerByCode(normalizeRefCode(refCode)) ?? referrer
+  }
+  if (!referrer) referrer = ensureReferrerForDemo()
+
+  const result = createIndication({
+    referrerId: referrer.id,
+    path: "submit",
+    propertyType: parsed.data.propertyType as PropertyType,
+    address: parsed.data.address,
+    area: parsed.data.area,
+    city: parsed.data.city,
+    pin: parsed.data.pin,
+    approxSqft: parseOptionalInt(parsed.data.approxSqft),
+    rentAskInr: parseOptionalInt(parsed.data.rentAskInr),
+    landlordName: parsed.data.landlordName,
+    landlordPhone: parsed.data.landlordPhone,
+    landlordEmail: parsed.data.landlordEmail || null,
+    referrerName: parsed.data.referrerName,
+    referrerPhone: parsed.data.referrerPhone,
+    referrerEmail: parsed.data.referrerEmail || null,
+    notes: parsed.data.notes,
+  })
+  if (!result.ok) return { error: result.error, fieldErrors: {} }
+  refresh(["/refer", "/refer/dashboard", "/refer/rewards", "/cms/referrals"])
+  return { ok: true, id: result.id, error: null, fieldErrors: {} }
+}
+
+export async function demoAdvanceIndication(formData: FormData) {
+  const id = String(formData.get("indicationId") ?? "")
+  if (!id) return
+  advanceIndicationStatus(id)
+  refresh(["/refer/dashboard", "/refer/rewards", "/cms/referrals"])
+}
+
+export async function demoDiscardIndication(formData: FormData) {
+  const id = String(formData.get("indicationId") ?? "")
+  if (!id) return
+  discardIndication(id)
+  refresh(["/refer/dashboard", "/cms/referrals"])
+}
+

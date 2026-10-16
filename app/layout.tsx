@@ -91,6 +91,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <Link href="/listings" className="text-[#9ed0e0] transition-colors hover:text-paper">
                 {t("nav.listings")}
               </Link>
+              <Link href="/refer" className="text-[#9ed0e0] transition-colors hover:text-paper">
+                {t("nav.refer")}
+              </Link>
               <Link href="/legal/terms" className="text-[#9ed0e0] transition-colors hover:text-paper">
                 {t("nav.legal.terms")}
               </Link>

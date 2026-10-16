@@ -26,6 +26,7 @@ function publicLinks(): NavLink[] {
     { href: "/listings", label: t("nav.listings") },
     { href: "/#map", label: t("nav.map") },
     { href: "/properties", label: t("nav.portfolio") },
+    { href: "/refer", label: t("nav.refer") },
   ]
 }
 
