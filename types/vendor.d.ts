@@ -7,6 +7,8 @@ declare module "node:sqlite" {
       all(...params: unknown[]): unknown[]
       run(...params: unknown[]): { changes: number; lastInsertRowid: number | bigint }
     }
+    /** Present at runtime; needed so closeDatabase() typechecks under this stub. */
+    close(): void
   }
 }
 
