@@ -60,34 +60,6 @@ function withDbInitLock<T>(fn: () => T): T {
 
 export type PackageTier = "starter" | "pro"
 
-/** Exclusive file lock so parallel Next build workers do not race seed/reset. */
-function withDbInitLock<T>(fn: () => T): T {
-  const lockPath = `${dbPath()}.initlock`
-  const deadline = Date.now() + 20_000
-  while (true) {
-    try {
-      const fd = fs.openSync(lockPath, "wx")
-      try {
-        return fn()
-      } finally {
-        fs.closeSync(fd)
-        try {
-          fs.unlinkSync(lockPath)
-        } catch {
-          /* ignore */
-        }
-      }
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err
-      if (Date.now() > deadline) {
-        throw new Error(`Timed out waiting for SQLite init lock at ${lockPath}`)
-      }
-      const wait = new Int32Array(new SharedArrayBuffer(4))
-      Atomics.wait(wait, 0, 0, 40)
-    }
-  }
-}
-
 export type SessionUser = {
   id: string
   name: string
