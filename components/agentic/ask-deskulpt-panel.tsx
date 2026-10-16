@@ -32,14 +32,14 @@ export function AskDeskulptPanel({
   if (packageTier !== "pro") {
     return (
       <div className="border border-ink/10 bg-paper-2 p-4">
-        <p className="font-sans text-lg font-extrabold">Ask DeSkulpt (PRO)</p>
+        <p className="font-sans text-lg font-extrabold">Ask Easy Rental (PRO)</p>
         <p className="mt-2 text-sm text-ink-soft">
           Draft listings and propose desk actions with a human approval gate. Starter organisations
           see this upgrade path — switch to Nadia (BBM · PRO) in the Demo identity menu to try the
           stub agent.
         </p>
         <p className="mt-4 inline-block border border-terra/40 bg-terra/10 px-3 py-2 text-sm font-semibold text-terra">
-          Upgrade to PRO to unlock Ask DeSkulpt
+          Upgrade to PRO to unlock Ask Easy Rental
         </p>
       </div>
     )
@@ -62,7 +62,7 @@ export function AskDeskulptPanel({
   return (
     <div className="grid gap-6">
       <section className="border border-ink/10 bg-card p-4">
-        <h2 className="font-sans text-lg font-extrabold">Ask DeSkulpt</h2>
+        <h2 className="font-sans text-lg font-extrabold">Ask Easy Rental</h2>
         <p className="mt-1 text-sm text-ink-soft">
           Stub agent (Slice L.0) — deterministic drafts and tool proposals. No live LLM. Nothing
           mutates or notifies until you approve.
