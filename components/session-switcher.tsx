@@ -31,8 +31,8 @@ export function SessionSwitcher({
   const value = currentId || "visitor"
 
   return (
-    <div className="flex items-center gap-2">
-      <span className="hidden font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint sm:inline">
+    <div className="flex items-center gap-1.5">
+      <span className="hidden text-[10px] font-medium uppercase tracking-[0.12em] text-ink-faint sm:inline">
         Demo
       </span>
       <form
@@ -62,7 +62,7 @@ export function SessionSwitcher({
           disabled={pending}
           defaultValue={value}
           key={value}
-          className="h-9 w-[min(52vw,280px)] rounded-sm border border-ink/20 bg-card px-2 font-mono text-[11px] outline-none focus-visible:ring-2 focus-visible:ring-terra/40 disabled:opacity-50"
+          className="h-8 max-w-[200px] rounded-sm border border-ink/15 bg-paper px-1.5 text-[11px] text-ink-soft outline-none focus-visible:ring-2 focus-visible:ring-terra/40 disabled:opacity-50"
           onChange={(event) => {
             event.currentTarget.form?.requestSubmit()
           }}
