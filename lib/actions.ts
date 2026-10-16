@@ -1100,6 +1100,8 @@ export async function runStubListingAutofill(
   })
   refresh(["/landlord/ask"])
   return { ok: true }
+}
+
 export type ShopActionState = {
   error?: string | null
   message?: string | null
