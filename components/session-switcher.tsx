@@ -33,7 +33,7 @@ export function SessionSwitcher({
   return (
     <div className="flex items-center gap-2">
       <span className="hidden font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint sm:inline">
-        Identity
+        Demo
       </span>
       <form
         data-testid="demo-identity-form"
@@ -57,7 +57,7 @@ export function SessionSwitcher({
         <select
           id="demo-identity"
           name="userId"
-          aria-label="Demo identity"
+          aria-label="Demo identity switcher"
           data-testid="demo-identity"
           disabled={pending}
           defaultValue={value}

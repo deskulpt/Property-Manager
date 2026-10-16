@@ -183,3 +183,23 @@
     border-left: 3px solid var(--color-terra);
   }
 }
+
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+  body {
+    background: white !important;
+  }
+  header.sticky,
+  footer,
+  .print\:hidden {
+    display: none !important;
+  }
+  #qr-poster-sheet {
+    box-shadow: none !important;
+    border: none !important;
+  }
+}

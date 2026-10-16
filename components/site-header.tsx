@@ -9,6 +9,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet"
 import { SessionSwitcher, type SwitchUser } from "@/components/session-switcher"
+import { logoutSession } from "@/lib/actions"
 import { isStaffRole, roleLabel, type Role } from "@/lib/format"
 import { t } from "@/lib/i18n"
 
@@ -59,18 +60,21 @@ export function SiteHeader({
   currentId,
   unread,
   role,
+  signedIn,
 }: {
   users: SwitchUser[]
   currentId: string
   unread: number
   role?: Role | null
+  signedIn?: boolean
 }) {
   const browse = publicLinks()
   const desk = deskLinks(role, unread)
   const roleHint = role ? roleLabel(role) : "Visitor"
+  const visitor = !signedIn
 
   return (
-    <header className="sticky top-0 z-40 border-b border-ink/10 bg-paper/90 backdrop-blur-md">
+    <header className="sticky top-0 z-40 border-b border-ink/10 bg-paper/90 backdrop-blur-md print:hidden">
       <div className="mx-auto flex max-w-[1200px] items-center justify-between gap-3 px-4 py-3 md:px-8">
         <Link
           href="/"
@@ -103,6 +107,31 @@ export function SiteHeader({
         </nav>
 
         <div className="flex items-center gap-2">
+          {visitor ? (
+            <div className="hidden items-center gap-2 sm:flex">
+              <Link
+                href="/login"
+                className="font-mono text-[11px] uppercase tracking-[0.1em] text-ink-soft hover:text-terra"
+              >
+                Log in
+              </Link>
+              <Link
+                href="/signup"
+                className="bg-terra px-3 py-2 font-mono text-[11px] uppercase tracking-[0.1em] font-bold text-white hover:bg-terra-dark"
+              >
+                Sign up
+              </Link>
+            </div>
+          ) : (
+            <form action={logoutSession} className="hidden sm:block">
+              <button
+                type="submit"
+                className="font-mono text-[11px] uppercase tracking-[0.1em] text-ink-soft hover:text-terra"
+              >
+                Log out
+              </button>
+            </form>
+          )}
           <p className="hidden font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint xl:block">
             {roleHint}
           </p>
@@ -150,7 +179,23 @@ export function SiteHeader({
                     ))}
                   </nav>
                 </div>
-                <nav className="grid gap-2 border-t border-ink/10 pt-4" aria-label="Legal">
+                <nav className="grid gap-2 border-t border-ink/10 pt-4" aria-label="Account">
+                  {visitor ? (
+                    <>
+                      <Link href="/login" className="font-serif text-lg font-bold">
+                        Log in
+                      </Link>
+                      <Link href="/signup" className="font-serif text-lg font-bold text-terra">
+                        Sign up
+                      </Link>
+                    </>
+                  ) : (
+                    <form action={logoutSession}>
+                      <button type="submit" className="font-serif text-lg font-bold">
+                        Log out
+                      </button>
+                    </form>
+                  )}
                   <Link href="/legal/terms" className="text-sm text-ink-soft">
                     {t("nav.legal.terms")}
                   </Link>
