@@ -21,8 +21,10 @@ import {
   MARKET_CHECKLIST_LABELS,
   type MarketChecklistKey,
 } from "@/lib/market-checklist"
+import { decryptSecret, encryptSecret, secretLast4 } from "@/lib/shop-crypto"
+import { resolveShopPaymentProvider } from "@/lib/shop-payments"
 
-const SEED_VERSION = "8"
+const SEED_VERSION = "9"
 
 function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
@@ -57,6 +59,34 @@ function withDbInitLock<T>(fn: () => T): T {
 }
 
 export type PackageTier = "starter" | "pro"
+
+/** Exclusive file lock so parallel Next build workers do not race seed/reset. */
+function withDbInitLock<T>(fn: () => T): T {
+  const lockPath = `${dbPath()}.initlock`
+  const deadline = Date.now() + 20_000
+  while (true) {
+    try {
+      const fd = fs.openSync(lockPath, "wx")
+      try {
+        return fn()
+      } finally {
+        fs.closeSync(fd)
+        try {
+          fs.unlinkSync(lockPath)
+        } catch {
+          /* ignore */
+        }
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err
+      if (Date.now() > deadline) {
+        throw new Error(`Timed out waiting for SQLite init lock at ${lockPath}`)
+      }
+      const wait = new Int32Array(new SharedArrayBuffer(4))
+      Atomics.wait(wait, 0, 0, 40)
+    }
+  }
+}
 
 export type SessionUser = {
   id: string
@@ -395,6 +425,68 @@ function createSchema(db: Sql) {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+    CREATE TABLE shop_settings (
+      tenant_id TEXT PRIMARY KEY,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      demo_mode INTEGER NOT NULL DEFAULT 1,
+      razorpay_key_id TEXT,
+      razorpay_key_secret_enc TEXT,
+      razorpay_mode TEXT NOT NULL DEFAULT 'test'
+    );
+    CREATE TABLE shop_skus (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      property_id TEXT,
+      name TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      price_cents INTEGER NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      stock INTEGER,
+      slot_capacity INTEGER,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE shop_cart_items (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      tenant_id TEXT NOT NULL,
+      sku_id TEXT NOT NULL,
+      qty INTEGER NOT NULL DEFAULT 1,
+      slot_start TEXT,
+      UNIQUE (user_id, tenant_id, sku_id, slot_start)
+    );
+    CREATE TABLE shop_orders (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      property_id TEXT,
+      user_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      amount_cents INTEGER NOT NULL,
+      payment_provider TEXT NOT NULL,
+      payment_ref TEXT,
+      note TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      paid_at TEXT
+    );
+    CREATE TABLE shop_order_lines (
+      id TEXT PRIMARY KEY,
+      order_id TEXT NOT NULL,
+      sku_id TEXT NOT NULL,
+      sku_name TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      qty INTEGER NOT NULL,
+      unit_price_cents INTEGER NOT NULL,
+      slot_start TEXT
+    );
+    CREATE TABLE shop_rental_bookings (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      sku_id TEXT NOT NULL,
+      order_id TEXT NOT NULL,
+      slot_start TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      UNIQUE (sku_id, slot_start)
+    );
     CREATE INDEX idx_units_tenant ON units(tenant_id);
     CREATE INDEX idx_units_property ON units(property_id);
     CREATE INDEX idx_apps_tenant ON applications(tenant_id, status);
@@ -406,6 +498,11 @@ function createSchema(db: Sql) {
     CREATE INDEX idx_notes_user ON notifications(user_id, created_at);
     CREATE INDEX idx_properties_tenant ON properties(tenant_id);
     CREATE INDEX idx_media_unit ON unit_media(unit_id, sort_order);
+    CREATE INDEX idx_shop_skus_tenant ON shop_skus(tenant_id);
+    CREATE INDEX idx_shop_cart_user ON shop_cart_items(user_id, tenant_id);
+    CREATE INDEX idx_shop_orders_tenant ON shop_orders(tenant_id, created_at);
+    CREATE INDEX idx_shop_orders_user ON shop_orders(user_id);
+    CREATE INDEX idx_shop_rentals_sku ON shop_rental_bookings(sku_id, slot_start);
   `)
 }
 
@@ -422,6 +519,12 @@ function reset(db: Sql) {
     "applications",
     "visit_requests",
     "custom_domains",
+    "shop_rental_bookings",
+    "shop_order_lines",
+    "shop_orders",
+    "shop_cart_items",
+    "shop_skus",
+    "shop_settings",
     "unit_media",
     "units",
     "properties",
@@ -755,6 +858,26 @@ function seed(db: Sql) {
   note.run("n4", "u_luis", "Job assigned", "Weather seal on the north drive-in at BBM Bhiwandi Hub is waiting for you to accept.", "/provider", "2026-09-20T16:05:00.000Z", "in_app")
   note.run("n5", "u_jonah", "Open concierge job", "Sump alarm in H1 has no provider yet. Amrita Singh is approved for Sriperumbudur.", "/landlord/jobs", "2026-09-21T15:05:00.000Z", "in_app")
   note.run("n6", "u_meera", "NRI display currency", "Your landlord desk shows USD as a view. Charges and the ledger stay in INR.", "/landlord/settings", "2026-09-15T10:00:00.000Z", "in_app")
+
+  // Occupant shop (Slice G) — BBM enabled with seed SKUs; other landlords enabled empty-ready.
+  const shopSettings = db.prepare(
+    `INSERT INTO shop_settings (tenant_id, enabled, demo_mode, razorpay_key_id, razorpay_key_secret_enc, razorpay_mode)
+     VALUES (?, 1, 1, NULL, NULL, 'test')`,
+  )
+  shopSettings.run("t_bbm")
+  shopSettings.run("t_harbour")
+  shopSettings.run("t_nri")
+
+  const sku = db.prepare(
+    `INSERT INTO shop_skus (
+      id, tenant_id, property_id, name, kind, price_cents, enabled, stock, slot_capacity, sort_order
+    ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+  )
+  sku.run("sku_bbm_keys", "t_bbm", "p_waterman", "Extra Keys", "purchase", 50000, 50, null, 1)
+  sku.run("sku_bbm_fob", "t_bbm", "p_waterman", "FOB", "purchase", 150000, 40, null, 2)
+  sku.run("sku_bbm_filters", "t_bbm", "p_waterman", "Air Filters", "purchase", 80000, 100, null, 3)
+  sku.run("sku_bbm_toolkit", "t_bbm", "p_waterman", "Repair tool kit rental", "rental", 20000, null, 1, 4)
+  sku.run("sku_bbm_lift", "t_bbm", "p_waterman", "Service Lift Booking", "rental", 100000, null, 1, 5)
 
   // Languages: English is the source. No parked markets and no extra locales are seeded.
   db.prepare(
@@ -2669,5 +2792,559 @@ export function upsertLanguage(input: {
       .run(code, name, input.status, input.waitingReason, now, now)
   }
   return { ok: true as const, code }
+}
+
+// --- Occupant shop (PRD §15 / Slice G) ---
+
+export type ShopSkuKind = "purchase" | "rental"
+export type ShopOrderStatus =
+  | "pending_payment"
+  | "paid"
+  | "fulfilling"
+  | "completed"
+  | "cancelled"
+  | "refunded"
+
+export type OccupantLease = {
+  tenantId: string
+  tenantName: string
+  propertyId: string
+  propertyName: string
+  propertySlug: string
+  unitId: string
+  unitCode: string
+  applicationId: string
+}
+
+export type ShopSkuRecord = {
+  id: string
+  tenantId: string
+  propertyId: string | null
+  name: string
+  kind: ShopSkuKind
+  priceCents: number
+  enabled: boolean
+  stock: number | null
+  slotCapacity: number | null
+  sortOrder: number
+}
+
+export type ShopCartLine = {
+  id: string
+  skuId: string
+  name: string
+  kind: ShopSkuKind
+  qty: number
+  unitPriceCents: number
+  slotStart: string | null
+  lineCents: number
+}
+
+export type ShopSettingsPublic = {
+  tenantId: string
+  enabled: boolean
+  demoMode: boolean
+  razorpayMode: "test" | "live"
+  keyId: string | null
+  hasSecret: boolean
+  secretLast4: string | null
+}
+
+export type ShopOrderRecord = {
+  id: string
+  tenantId: string
+  propertyId: string | null
+  userId: string
+  userName: string
+  status: ShopOrderStatus
+  amountCents: number
+  paymentProvider: string
+  paymentRef: string | null
+  note: string
+  createdAt: string
+  paidAt: string | null
+  lines: {
+    id: string
+    skuId: string
+    skuName: string
+    kind: ShopSkuKind
+    qty: number
+    unitPriceCents: number
+    slotStart: string | null
+  }[]
+}
+
+/** Active leases = approved applications (occupant portal gate for /shop). */
+export function leasesForOccupant(userId: string): OccupantLease[] {
+  return asRows(
+    getDb()
+      .prepare(
+        `SELECT a.id AS application_id, a.tenant_id, t.name AS tenant_name,
+                p.id AS property_id, p.name AS property_name, p.slug AS property_slug,
+                u.id AS unit_id, u.code AS unit_code
+         FROM applications a
+         JOIN tenants t ON t.id = a.tenant_id
+         JOIN units u ON u.id = a.unit_id
+         JOIN properties p ON p.id = u.property_id
+         WHERE a.applicant_id = ? AND a.status = 'approved'
+         ORDER BY a.created_at`,
+      )
+      .all(userId),
+  ).map((row) => ({
+    tenantId: String(row.tenant_id),
+    tenantName: String(row.tenant_name),
+    propertyId: String(row.property_id),
+    propertyName: String(row.property_name),
+    propertySlug: String(row.property_slug),
+    unitId: String(row.unit_id),
+    unitCode: String(row.unit_code),
+    applicationId: String(row.application_id),
+  }))
+}
+
+function mapSku(row: Record<string, unknown>): ShopSkuRecord {
+  return {
+    id: String(row.id),
+    tenantId: String(row.tenant_id),
+    propertyId: str(row, "property_id"),
+    name: String(row.name),
+    kind: String(row.kind) as ShopSkuKind,
+    priceCents: Number(row.price_cents),
+    enabled: Number(row.enabled) === 1,
+    stock: num(row, "stock"),
+    slotCapacity: num(row, "slot_capacity"),
+    sortOrder: Number(row.sort_order),
+  }
+}
+
+function ensureShopSettings(tenantId: string) {
+  const existing = asRow(
+    getDb().prepare("SELECT tenant_id FROM shop_settings WHERE tenant_id = ?").get(tenantId),
+  )
+  if (existing) return
+  getDb()
+    .prepare(
+      `INSERT INTO shop_settings (tenant_id, enabled, demo_mode, razorpay_key_id, razorpay_key_secret_enc, razorpay_mode)
+       VALUES (?, 1, 1, NULL, NULL, 'test')`,
+    )
+    .run(tenantId)
+}
+
+export function getShopSettingsPublic(tenantId: string): ShopSettingsPublic {
+  ensureShopSettings(tenantId)
+  const row = asRow(getDb().prepare("SELECT * FROM shop_settings WHERE tenant_id = ?").get(tenantId))
+  if (!row) {
+    return {
+      tenantId,
+      enabled: true,
+      demoMode: true,
+      razorpayMode: "test",
+      keyId: null,
+      hasSecret: false,
+      secretLast4: null,
+    }
+  }
+  const enc = str(row, "razorpay_key_secret_enc")
+  let last4: string | null = null
+  if (enc) {
+    const plain = decryptSecret(enc)
+    last4 = plain ? secretLast4(plain) : "••••"
+  }
+  return {
+    tenantId,
+    enabled: Number(row.enabled) === 1,
+    demoMode: Number(row.demo_mode) === 1,
+    razorpayMode: (str(row, "razorpay_mode") as "test" | "live") ?? "test",
+    keyId: str(row, "razorpay_key_id"),
+    hasSecret: Boolean(enc),
+    secretLast4: last4,
+  }
+}
+
+/** Server-only: never expose to client serializers. */
+export function getShopSettingsInternal(tenantId: string) {
+  ensureShopSettings(tenantId)
+  const row = asRow(getDb().prepare("SELECT * FROM shop_settings WHERE tenant_id = ?").get(tenantId))
+  const enc = row ? str(row, "razorpay_key_secret_enc") : null
+  return {
+    tenantId,
+    enabled: row ? Number(row.enabled) === 1 : true,
+    demoMode: row ? Number(row.demo_mode) === 1 : true,
+    razorpayMode: (row ? (str(row, "razorpay_mode") as "test" | "live") : "test") ?? "test",
+    keyId: row ? str(row, "razorpay_key_id") : null,
+    secretEnc: enc,
+    hasSecret: Boolean(enc),
+  }
+}
+
+export function saveShopRazorpaySettings(
+  tenantId: string,
+  input: {
+    keyId: string | null
+    keySecret: string | null
+    demoMode: boolean
+    razorpayMode: "test" | "live"
+    enabled: boolean
+  },
+) {
+  ensureShopSettings(tenantId)
+  const current = getShopSettingsInternal(tenantId)
+  let secretEnc = current.secretEnc
+  if (input.keySecret && input.keySecret.trim().length > 0) {
+    secretEnc = encryptSecret(input.keySecret.trim())
+  }
+  const keyId =
+    input.keyId != null && input.keyId.trim().length > 0 ? input.keyId.trim() : current.keyId
+  getDb()
+    .prepare(
+      `UPDATE shop_settings
+       SET enabled = ?, demo_mode = ?, razorpay_key_id = ?, razorpay_key_secret_enc = ?, razorpay_mode = ?
+       WHERE tenant_id = ?`,
+    )
+    .run(
+      input.enabled ? 1 : 0,
+      input.demoMode ? 1 : 0,
+      keyId,
+      secretEnc,
+      input.razorpayMode,
+      tenantId,
+    )
+  return getShopSettingsPublic(tenantId)
+}
+
+export function listShopSkus(tenantId: string, opts?: { enabledOnly?: boolean; propertyId?: string }) {
+  const enabledOnly = opts?.enabledOnly ?? false
+  const rows = asRows(
+    getDb()
+      .prepare(
+        `SELECT * FROM shop_skus WHERE tenant_id = ?
+         ORDER BY sort_order, name`,
+      )
+      .all(tenantId),
+  )
+    .map(mapSku)
+    .filter((sku) => {
+      if (enabledOnly && !sku.enabled) return false
+      if (opts?.propertyId && sku.propertyId && sku.propertyId !== opts.propertyId) return false
+      return true
+    })
+  return rows
+}
+
+export function setShopSkuEnabled(tenantId: string, skuId: string, enabled: boolean) {
+  const row = asRow(
+    getDb().prepare("SELECT id FROM shop_skus WHERE id = ? AND tenant_id = ?").get(skuId, tenantId),
+  )
+  if (!row) return { ok: false as const, error: "SKU not found for this organisation." }
+  getDb().prepare("UPDATE shop_skus SET enabled = ? WHERE id = ? AND tenant_id = ?").run(
+    enabled ? 1 : 0,
+    skuId,
+    tenantId,
+  )
+  return { ok: true as const }
+}
+
+export function cartForUser(userId: string, tenantId: string): ShopCartLine[] {
+  return asRows(
+    getDb()
+      .prepare(
+        `SELECT c.id, c.sku_id, c.qty, c.slot_start, s.name, s.kind, s.price_cents
+         FROM shop_cart_items c
+         JOIN shop_skus s ON s.id = c.sku_id
+         WHERE c.user_id = ? AND c.tenant_id = ?
+         ORDER BY s.sort_order, s.name`,
+      )
+      .all(userId, tenantId),
+  ).map((row) => {
+    const qty = Number(row.qty)
+    const unit = Number(row.price_cents)
+    return {
+      id: String(row.id),
+      skuId: String(row.sku_id),
+      name: String(row.name),
+      kind: String(row.kind) as ShopSkuKind,
+      qty,
+      unitPriceCents: unit,
+      slotStart: str(row, "slot_start"),
+      lineCents: qty * unit,
+    }
+  })
+}
+
+export function addToCart(input: {
+  userId: string
+  tenantId: string
+  skuId: string
+  qty: number
+  slotStart: string | null
+}) {
+  const lease = leasesForOccupant(input.userId).find((l) => l.tenantId === input.tenantId)
+  if (!lease) {
+    return { ok: false as const, error: "Shop is for current occupants." }
+  }
+  const settings = getShopSettingsInternal(input.tenantId)
+  if (!settings.enabled) {
+    return { ok: false as const, error: "This landlord has disabled the shop." }
+  }
+  const skuRow = asRow(
+    getDb()
+      .prepare("SELECT * FROM shop_skus WHERE id = ? AND tenant_id = ? AND enabled = 1")
+      .get(input.skuId, input.tenantId),
+  )
+  if (!skuRow) return { ok: false as const, error: "That item is not available." }
+  const sku = mapSku(skuRow)
+  if (sku.kind === "rental") {
+    if (!input.slotStart) {
+      return { ok: false as const, error: "Pick a time slot for this rental." }
+    }
+    const taken = asRow(
+      getDb()
+        .prepare(
+          `SELECT id FROM shop_rental_bookings
+           WHERE sku_id = ? AND slot_start = ? AND status != 'cancelled'`,
+        )
+        .get(sku.id, input.slotStart),
+    )
+    if (taken) {
+      return { ok: false as const, error: "That slot is already booked." }
+    }
+  }
+  const qty = Math.max(1, Math.min(99, Math.floor(input.qty) || 1))
+  const slot = sku.kind === "rental" ? input.slotStart : null
+  const existing = asRow(
+    getDb()
+      .prepare(
+        `SELECT id, qty FROM shop_cart_items
+         WHERE user_id = ? AND tenant_id = ? AND sku_id = ?
+           AND ((slot_start IS NULL AND ? IS NULL) OR slot_start = ?)`,
+      )
+      .get(input.userId, input.tenantId, sku.id, slot, slot),
+  )
+  if (existing) {
+    getDb()
+      .prepare("UPDATE shop_cart_items SET qty = ? WHERE id = ?")
+      .run(Number(existing.qty) + qty, String(existing.id))
+  } else {
+    getDb()
+      .prepare(
+        `INSERT INTO shop_cart_items (id, user_id, tenant_id, sku_id, qty, slot_start)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(crypto.randomUUID(), input.userId, input.tenantId, sku.id, qty, slot)
+  }
+  return { ok: true as const }
+}
+
+export function clearCart(userId: string, tenantId: string) {
+  getDb()
+    .prepare("DELETE FROM shop_cart_items WHERE user_id = ? AND tenant_id = ?")
+    .run(userId, tenantId)
+}
+
+export function checkoutCart(input: {
+  userId: string
+  tenantId: string
+  note: string
+}) {
+  const lease = leasesForOccupant(input.userId).find((l) => l.tenantId === input.tenantId)
+  if (!lease) {
+    return { ok: false as const, error: "Shop is for current occupants." }
+  }
+  const settings = getShopSettingsInternal(input.tenantId)
+  if (!settings.enabled) {
+    return { ok: false as const, error: "This landlord has disabled the shop." }
+  }
+  const lines = cartForUser(input.userId, input.tenantId)
+  if (lines.length === 0) {
+    return { ok: false as const, error: "Cart is empty." }
+  }
+  for (const line of lines) {
+    if (line.kind === "rental" && line.slotStart) {
+      const taken = asRow(
+        getDb()
+          .prepare(
+            `SELECT id FROM shop_rental_bookings
+             WHERE sku_id = ? AND slot_start = ? AND status != 'cancelled'`,
+          )
+          .get(line.skuId, line.slotStart),
+      )
+      if (taken) {
+        return {
+          ok: false as const,
+          error: `Slot conflict for ${line.name}. Pick another time.`,
+        }
+      }
+    }
+  }
+
+  const provider = resolveShopPaymentProvider({
+    demoMode: settings.demoMode,
+    hasSecret: settings.hasSecret,
+    keyId: settings.keyId,
+  })
+
+  const amountCents = lines.reduce((sum, line) => sum + line.lineCents, 0)
+  const orderId = crypto.randomUUID()
+  const now = new Date().toISOString()
+  const pay = provider.createOrder({
+    tenantId: input.tenantId,
+    orderId,
+    amountCents,
+    description: `Shop order ${orderId.slice(0, 8)}`,
+  })
+
+  try {
+    transaction((tx) => {
+      tx.prepare(
+        `INSERT INTO shop_orders (
+          id, tenant_id, property_id, user_id, status, amount_cents,
+          payment_provider, payment_ref, note, created_at, paid_at
+        ) VALUES (?, ?, ?, ?, 'paid', ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        orderId,
+        input.tenantId,
+        lease.propertyId,
+        input.userId,
+        amountCents,
+        pay.provider,
+        pay.reference,
+        input.note.trim(),
+        now,
+        now,
+      )
+      const lineIns = tx.prepare(
+        `INSERT INTO shop_order_lines (
+          id, order_id, sku_id, sku_name, kind, qty, unit_price_cents, slot_start
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      const bookIns = tx.prepare(
+        `INSERT INTO shop_rental_bookings (
+          id, tenant_id, sku_id, order_id, slot_start, user_id, status
+        ) VALUES (?, ?, ?, ?, ?, ?, 'booked')`,
+      )
+      for (const line of lines) {
+        lineIns.run(
+          crypto.randomUUID(),
+          orderId,
+          line.skuId,
+          line.name,
+          line.kind,
+          line.qty,
+          line.unitPriceCents,
+          line.slotStart,
+        )
+        if (line.kind === "rental" && line.slotStart) {
+          bookIns.run(
+            crypto.randomUUID(),
+            input.tenantId,
+            line.skuId,
+            orderId,
+            line.slotStart,
+            input.userId,
+          )
+        }
+      }
+      tx.prepare("DELETE FROM shop_cart_items WHERE user_id = ? AND tenant_id = ?").run(
+        input.userId,
+        input.tenantId,
+      )
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (message.includes("UNIQUE") || message.includes("constraint")) {
+      return { ok: false as const, error: "That rental slot was just taken. Try another time." }
+    }
+    throw error
+  }
+
+  return {
+    ok: true as const,
+    orderId,
+    amountCents,
+    paymentProvider: pay.provider,
+    paymentRef: pay.reference,
+    labelledDemo: pay.labelledDemo,
+  }
+}
+
+function mapOrder(row: Record<string, unknown>): ShopOrderRecord {
+  const id = String(row.id)
+  const lines = asRows(
+    getDb().prepare("SELECT * FROM shop_order_lines WHERE order_id = ?").all(id),
+  ).map((line) => ({
+    id: String(line.id),
+    skuId: String(line.sku_id),
+    skuName: String(line.sku_name),
+    kind: String(line.kind) as ShopSkuKind,
+    qty: Number(line.qty),
+    unitPriceCents: Number(line.unit_price_cents),
+    slotStart: str(line, "slot_start"),
+  }))
+  return {
+    id,
+    tenantId: String(row.tenant_id),
+    propertyId: str(row, "property_id"),
+    userId: String(row.user_id),
+    userName: String(row.user_name ?? ""),
+    status: String(row.status) as ShopOrderStatus,
+    amountCents: Number(row.amount_cents),
+    paymentProvider: String(row.payment_provider),
+    paymentRef: str(row, "payment_ref"),
+    note: String(row.note ?? ""),
+    createdAt: String(row.created_at),
+    paidAt: str(row, "paid_at"),
+    lines,
+  }
+}
+
+export function ordersForOccupant(userId: string) {
+  return asRows(
+    getDb()
+      .prepare(
+        `SELECT o.*, u.name AS user_name
+         FROM shop_orders o
+         JOIN users u ON u.id = o.user_id
+         WHERE o.user_id = ?
+         ORDER BY o.created_at DESC`,
+      )
+      .all(userId),
+  ).map(mapOrder)
+}
+
+export function ordersForTenant(tenantId: string) {
+  return asRows(
+    getDb()
+      .prepare(
+        `SELECT o.*, u.name AS user_name
+         FROM shop_orders o
+         JOIN users u ON u.id = o.user_id
+         WHERE o.tenant_id = ?
+         ORDER BY o.created_at DESC`,
+      )
+      .all(tenantId),
+  ).map(mapOrder)
+}
+
+/** Test helper: book a rental slot directly (simulates prior order). */
+export function forceBookRentalSlot(input: {
+  tenantId: string
+  skuId: string
+  slotStart: string
+  userId: string
+}) {
+  getDb()
+    .prepare(
+      `INSERT INTO shop_rental_bookings (
+        id, tenant_id, sku_id, order_id, slot_start, user_id, status
+      ) VALUES (?, ?, ?, ?, ?, ?, 'booked')`,
+    )
+    .run(
+      crypto.randomUUID(),
+      input.tenantId,
+      input.skuId,
+      `seed_${crypto.randomUUID()}`,
+      input.slotStart,
+      input.userId,
+    )
 }
 

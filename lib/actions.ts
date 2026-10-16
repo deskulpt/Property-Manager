@@ -44,6 +44,11 @@ import {
   transitionJob,
   upsertLanguage,
   upsertMethod,
+  addToCart,
+  checkoutCart,
+  saveShopRazorpaySettings,
+  setShopSkuEnabled,
+  getShopSettingsPublic,
 } from "@/lib/db"
 import { TRADES } from "@/lib/format"
 import { t } from "@/lib/i18n"
@@ -1095,4 +1100,111 @@ export async function runStubListingAutofill(
   })
   refresh(["/landlord/ask"])
   return { ok: true }
+export type ShopActionState = {
+  error?: string | null
+  message?: string | null
+  orderId?: string | null
+}
+
+export async function addShopCartItem(
+  _prev: ShopActionState,
+  formData: FormData,
+): Promise<ShopActionState> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "applicant") {
+    return { error: "Shop is for current occupants." }
+  }
+  const tenantId = String(formData.get("tenantId") ?? "")
+  const skuId = String(formData.get("skuId") ?? "")
+  const qty = Number(formData.get("qty") ?? 1)
+  const slotStartRaw = String(formData.get("slotStart") ?? "").trim()
+  const result = addToCart({
+    userId: user.id,
+    tenantId,
+    skuId,
+    qty,
+    slotStart: slotStartRaw || null,
+  })
+  if (!result.ok) return { error: result.error }
+  refresh(["/shop"])
+  return { error: null, message: "Added to cart." }
+}
+
+export async function checkoutShopCart(
+  _prev: ShopActionState,
+  formData: FormData,
+): Promise<ShopActionState> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "applicant") {
+    return { error: "Shop is for current occupants." }
+  }
+  const tenantId = String(formData.get("tenantId") ?? "")
+  const note = String(formData.get("note") ?? "")
+  const result = checkoutCart({ userId: user.id, tenantId, note })
+  if (!result.ok) return { error: result.error }
+  notifyMany(
+    landlordIds(tenantId).map((id) => ({
+      userId: id,
+      title: "Shop order paid",
+      body: `${user.name} placed a shop order (${result.paymentProvider}).`,
+      href: "/landlord/shop",
+    })),
+  )
+  notify({
+    userId: user.id,
+    title: result.labelledDemo ? "Shop order paid (demo)" : "Shop order paid",
+    body: `Order ${result.orderId.slice(0, 8)} · ₹${(result.amountCents / 100).toFixed(0)} via ${result.paymentProvider}.`,
+    href: "/shop",
+  })
+  refresh(["/shop", "/landlord/shop", "/inbox"])
+  return {
+    error: null,
+    message: result.labelledDemo
+      ? "Paid with demo adapter — no live charge."
+      : "Paid via Razorpay stub — no live network charge in this build.",
+    orderId: result.orderId,
+  }
+}
+
+export async function saveRazorpaySettingsAction(
+  _prev: ShopActionState,
+  formData: FormData,
+): Promise<ShopActionState> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) {
+    return { error: "Landlord admin only." }
+  }
+  const keyId = String(formData.get("keyId") ?? "").trim()
+  const keySecret = String(formData.get("keySecret") ?? "")
+  const demoMode = formData.get("demoMode") === "on"
+  const enabled = formData.get("enabled") === "on"
+  const razorpayMode = formData.get("razorpayMode") === "live" ? "live" : "test"
+  const publicSettings = saveShopRazorpaySettings(user.tenantId, {
+    keyId: keyId || null,
+    keySecret: keySecret.trim() ? keySecret : null,
+    demoMode,
+    razorpayMode,
+    enabled,
+  })
+  // Guard: never return secret fields from the action payload beyond public shape
+  void publicSettings
+  refresh(["/landlord/settings", "/landlord/shop", "/shop"])
+  return { error: null, message: "Payment settings saved. Secret is write-only and was not echoed." }
+}
+
+export async function toggleShopSkuAction(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) return
+  const skuId = String(formData.get("skuId") ?? "")
+  const enabled = formData.get("enabled") === "1"
+  setShopSkuEnabled(user.tenantId, skuId, enabled)
+  refresh(["/landlord/shop", "/shop"])
+}
+
+export async function getShopSettingsPublicAction(tenantId: string) {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || user.tenantId !== tenantId) {
+    return null
+  }
+  return getShopSettingsPublic(tenantId)
 }
