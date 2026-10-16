@@ -30,8 +30,6 @@ function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
 }
 
-export type PackageTier = "starter" | "pro"
-
 /** Exclusive file lock so parallel Next build workers do not race seed/reset. */
 function withDbInitLock<T>(fn: () => T): T {
   const lockPath = `${dbPath()}.initlock`
@@ -59,6 +57,8 @@ function withDbInitLock<T>(fn: () => T): T {
     }
   }
 }
+
+export type PackageTier = "starter" | "pro"
 
 export type SessionUser = {
   id: string
