@@ -102,7 +102,8 @@ Unit B1 at BBM Bhiwandi Hub is the rich media example. The gallery tabs are:
 - **Stills:** dock, aisle, and yard photos under `public/media/`
 - **GIF and video:** a motion loop and a short walk-through clip
 - **360 photo:** an equirectangular image in [Pannellum](https://pannellum.org/) (MIT). Drag to look around
-- **Walkthrough:** an iframe slot. DeSkulpt stores a URL (`units.matterport_url`). Unit B1 points at a public Matterport show URL. The app does not ship Matterport's SDK. Other bays explain that the slot is empty until a URL is set
+- **Walkthrough:** an interactive iframe. DeSkulpt stores a Matterport show URL only (`units.matterport_url`). Seeded demos (PRD SaaS §4.6): B1 `PmWtWjyqpJs`, A2 `VpGQDT9DFjr`, C2 `caFmhpiUXSc`, H1 `7Fdpg6tCFwu`, U1 `U5p62iYcxeY` — all `https://my.matterport.com/show/?m=…`. No Matterport SDK or vendored assets. Other bays show an empty slot until a URL is set
+- **Map:** Leaflet + OpenStreetMap pins from property `latitude` / `longitude`. Clicks open generic Google Maps URLs. No Mapbox key
 
 ### Floor plans
 

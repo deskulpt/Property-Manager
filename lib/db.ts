@@ -22,7 +22,7 @@ import {
   type MarketChecklistKey,
 } from "@/lib/market-checklist"
 
-const SEED_VERSION = "6"
+const SEED_VERSION = "7"
 
 function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
@@ -81,6 +81,8 @@ export type PropertyRecord = {
   cityLine: string
   totalSqft: number
   floorPlanPath: string | null
+  latitude: number | null
+  longitude: number | null
   units: UnitRecord[]
 }
 
@@ -199,7 +201,23 @@ function createSchema(db: Sql) {
       area TEXT NOT NULL,
       city_line TEXT NOT NULL,
       total_sqft INTEGER NOT NULL,
-      floor_plan_path TEXT
+      floor_plan_path TEXT,
+      latitude REAL,
+      longitude REAL
+    );
+    CREATE TABLE visit_requests (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      property_id TEXT NOT NULL,
+      unit_id TEXT,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      note TEXT NOT NULL DEFAULT '',
+      visit_type TEXT NOT NULL,
+      preferred_at TEXT,
+      status TEXT NOT NULL,
+      created_at TEXT NOT NULL
     );
     CREATE TABLE units (
       id TEXT PRIMARY KEY,
@@ -354,6 +372,7 @@ function reset(db: Sql) {
     "jobs",
     "verifications",
     "applications",
+    "visit_requests",
     "unit_media",
     "units",
     "properties",
@@ -427,14 +446,16 @@ function seed(db: Sql) {
   approval.run("t_harbour", "u_idris", "pending")
 
   const property = db.prepare(
-    `INSERT INTO properties (id, tenant_id, name, slug, address, area, city_line, total_sqft, floor_plan_path)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO properties (
+      id, tenant_id, name, slug, address, area, city_line, total_sqft, floor_plan_path, latitude, longitude
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
-  property.run("p_waterman", "t_bbm", "BBM Bhiwandi Hub", "waterman", "Plot 19, Kalyan-Bhiwandi Road, Bhiwandi, Maharashtra 421302", "Bhiwandi", "BHIWANDI · PIN 421302 · 214,000 SF", 214000, "/floorplans/waterman.svg")
-  property.run("p_bartley", "t_bbm", "BBM Whitefield Sheds", "bartley", "161 ITPL Main Road, Whitefield, Bengaluru, Karnataka 560066", "Whitefield", "WHITEFIELD · PIN 560066 · 96,000 SF", 96000, "/floorplans/bartley.svg")
-  property.run("p_cranfield", "t_bbm", "BBM Andheri East", "cranfield", "12 MIDC Central Road, Andheri East, Mumbai, Maharashtra 400093", "Andheri East", "ANDHERI EAST · PIN 400093 · 74,500 SF", 74500, "/floorplans/cranfield.svg")
-  property.run("p_commissioners", "t_harbour", "Harbourline Sriperumbudur", "commissioners", "88 SIPCOT Industrial Park, Sriperumbudur, Tamil Nadu 602105", "Sriperumbudur", "SRIPERUMBUDUR · PIN 602105 · 86,000 SF", 86000, "/floorplans/commissioners.svg")
-  property.run("p_nri_thane", "t_nri", "Sahni Thane Warehouse", "thane", "45 Wagle Estate, Thane West, Maharashtra 400604", "Thane", "THANE · PIN 400604 · 42,000 SF", 42000, "/floorplans/cranfield.svg")
+  // Gate pins are approximate public coords for demo Leaflet embeds (no Mapbox key).
+  property.run("p_waterman", "t_bbm", "BBM Bhiwandi Hub", "waterman", "Plot 19, Kalyan-Bhiwandi Road, Bhiwandi, Maharashtra 421302", "Bhiwandi", "BHIWANDI · PIN 421302 · 214,000 SF", 214000, "/floorplans/waterman.svg", 19.2813, 73.0483)
+  property.run("p_bartley", "t_bbm", "BBM Whitefield Sheds", "bartley", "161 ITPL Main Road, Whitefield, Bengaluru, Karnataka 560066", "Whitefield", "WHITEFIELD · PIN 560066 · 96,000 SF", 96000, "/floorplans/bartley.svg", 12.9698, 77.75)
+  property.run("p_cranfield", "t_bbm", "BBM Andheri East", "cranfield", "12 MIDC Central Road, Andheri East, Mumbai, Maharashtra 400093", "Andheri East", "ANDHERI EAST · PIN 400093 · 74,500 SF", 74500, "/floorplans/cranfield.svg", 19.1136, 72.8697)
+  property.run("p_commissioners", "t_harbour", "Harbourline Sriperumbudur", "commissioners", "88 SIPCOT Industrial Park, Sriperumbudur, Tamil Nadu 602105", "Sriperumbudur", "SRIPERUMBUDUR · PIN 602105 · 86,000 SF", 86000, "/floorplans/commissioners.svg", 12.9675, 79.9473)
+  property.run("p_nri_thane", "t_nri", "Sahni Thane Warehouse", "thane", "45 Wagle Estate, Thane West, Maharashtra 400604", "Thane", "THANE · PIN 400604 · 42,000 SF", 42000, "/floorplans/cranfield.svg", 19.2183, 72.9781)
 
   const unitStmt = db.prepare(
     `INSERT INTO units (
@@ -443,13 +464,17 @@ function seed(db: Sql) {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
 
-  /** Public Matterport showcase models used as demo walkthrough embeds. */
+  /**
+   * Public Matterport showcase models — iframe src only (PRD SaaS §4.6).
+   * IDs: PmWtWjyqpJs (B1), VpGQDT9DFjr (A2), caFmhpiUXSc (C2),
+   * 7Fdpg6tCFwu (H1), U5p62iYcxeY (U1). Discover pages are not stored.
+   */
   const MATTERPORTS: Record<string, string> = {
-    "waterman:B1": "https://my.matterport.com/show/?m=JADuQHXd8ts",
-    "waterman:A2": "https://my.matterport.com/show/?m=L3sdz2m7jxp",
-    "cranfield:U3": "https://my.matterport.com/show/?m=x2aPXLXpbu1",
-    "commissioners:H1": "https://my.matterport.com/show/?m=VpGQDT9DFjr",
-    "thane:T1": "https://my.matterport.com/show/?m=iLToEwe2fAz",
+    "waterman:B1": "https://my.matterport.com/show/?m=PmWtWjyqpJs",
+    "waterman:A2": "https://my.matterport.com/show/?m=VpGQDT9DFjr",
+    "waterman:C2": "https://my.matterport.com/show/?m=caFmhpiUXSc",
+    "commissioners:H1": "https://my.matterport.com/show/?m=7Fdpg6tCFwu",
+    "cranfield:U1": "https://my.matterport.com/show/?m=U5p62iYcxeY",
   }
 
   function addUnits(
@@ -816,6 +841,8 @@ function mapProperty(row: Record<string, unknown>): PropertyRecord {
     cityLine: String(row.city_line),
     totalSqft: Number(row.total_sqft),
     floorPlanPath: str(row, "floor_plan_path"),
+    latitude: num(row, "latitude"),
+    longitude: num(row, "longitude"),
     units: unitsFor(String(row.id)),
   }
 }
@@ -1254,6 +1281,52 @@ function transaction(work: (db: Sql) => void) {
   } catch (error) {
     db.exec("ROLLBACK")
     throw error
+  }
+}
+
+export function createVisitRequest(input: {
+  unitId: string
+  name: string
+  email: string
+  phone: string
+  note: string
+  visitType: "in_person" | "virtual"
+  preferredAt: string | null
+}) {
+  const db = getDb()
+  const unitRow = asRow(db.prepare("SELECT * FROM units WHERE id = ?").get(input.unitId))
+  if (!unitRow) return { ok: false as const, error: "That bay is not listed." }
+  const unit = mapUnit(unitRow)
+  const property = asRow(
+    db.prepare("SELECT id, slug, name FROM properties WHERE id = ?").get(unit.propertyId),
+  )
+  if (!property) return { ok: false as const, error: "That building is not listed." }
+  const id = crypto.randomUUID()
+  const now = new Date().toISOString()
+  db.prepare(
+    `INSERT INTO visit_requests (
+      id, tenant_id, property_id, unit_id, name, email, phone, note, visit_type, preferred_at, status, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'requested', ?)`,
+  ).run(
+    id,
+    unit.tenantId,
+    String(property.id),
+    unit.id,
+    input.name,
+    input.email,
+    input.phone,
+    input.note,
+    input.visitType,
+    input.preferredAt,
+    now,
+  )
+  return {
+    ok: true as const,
+    id,
+    tenantId: unit.tenantId,
+    propertySlug: String(property.slug),
+    propertyName: String(property.name),
+    unitCode: unit.code,
   }
 }
 
@@ -1757,6 +1830,8 @@ export type ListingCard = {
   area: string
   cityLine: string
   floorPlanPath: string | null
+  latitude: number | null
+  longitude: number | null
   tenantId: string
   tenantName: string
 }
@@ -1787,7 +1862,7 @@ export function searchListings(filters: ListingFilters = {}): ListingCard[] {
            u.id AS unit_id, u.code, u.status, u.sqft, u.clear_height, u.docks, u.drive_ins,
            u.power, u.rate_psf, u.description, u.matterport_url,
            p.id AS property_id, p.name AS property_name, p.slug AS property_slug,
-           p.address, p.area, p.city_line, p.floor_plan_path,
+           p.address, p.area, p.city_line, p.floor_plan_path, p.latitude, p.longitude,
            t.id AS tenant_id, t.name AS tenant_name,
            EXISTS(SELECT 1 FROM unit_media m WHERE m.unit_id = u.id AND m.kind = 'pano') AS has_pano,
            (
@@ -1833,6 +1908,8 @@ export function searchListings(filters: ListingFilters = {}): ListingCard[] {
       area: String(row.area),
       cityLine: String(row.city_line),
       floorPlanPath: str(row, "floor_plan_path"),
+      latitude: num(row, "latitude"),
+      longitude: num(row, "longitude"),
       tenantId: String(row.tenant_id),
       tenantName: String(row.tenant_name),
     }

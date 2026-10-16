@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { FloorPlanView } from "@/components/floor/floor-plan"
+import { PropertyMap } from "@/components/map/property-map"
 import { PageHeader, StatusBadge } from "@/components/product"
 import { getPropertyBySlug } from "@/lib/db"
 import { money, monthlyRentCents, rateLabel, sqft } from "@/lib/format"
@@ -32,6 +33,19 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
         <span>Gold · pending</span>
         <span>Stone · leased</span>
       </div>
+      <section className="mt-10">
+        <h2 className="font-serif text-xl font-semibold">Map</h2>
+        <p className="mt-1 text-sm text-ink-soft">
+          OpenStreetMap pin for this building. Directions open Google Maps (no API key).
+        </p>
+        <div className="mt-4">
+          <PropertyMap
+            lat={property.latitude}
+            lng={property.longitude}
+            label={property.name}
+          />
+        </div>
+      </section>
       <div className="mt-8 grid gap-3">
         {property.units.map((unit) => (
           <Link key={unit.id} href={`/properties/${property.slug}/units/${unit.code}`} className="flex flex-wrap items-center justify-between gap-3 bg-card px-4 py-3 ring-1 ring-foreground/10">

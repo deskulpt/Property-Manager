@@ -1,7 +1,9 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { UnitGallery } from "@/components/gallery/unit-gallery"
+import { PropertyMap } from "@/components/map/property-map"
 import { SpecList, StatusBadge } from "@/components/product"
+import { BookVisitForm } from "@/components/visits/book-visit-form"
 import { getUnitPage } from "@/lib/db"
 import { money, monthlyRentCents, rateLabel, sqft } from "@/lib/format"
 
@@ -35,6 +37,17 @@ export default async function UnitPage({
         <p className="mt-3 max-w-2xl text-ink-soft">{unit.description}</p>
         <div className="mt-6">
           <UnitGallery media={media} matterportUrl={unit.matterportUrl} />
+        </div>
+        <div className="mt-10">
+          <h2 className="font-serif text-xl font-semibold">Location</h2>
+          <p className="mt-1 text-sm text-ink-soft">{property.address}</p>
+          <div className="mt-4">
+            <PropertyMap
+              lat={property.latitude}
+              lng={property.longitude}
+              label={property.name}
+            />
+          </div>
         </div>
       </div>
       <aside className="h-fit border border-white/10 bg-brand p-6 text-paper lg:sticky lg:top-24">
@@ -76,6 +89,13 @@ export default async function UnitPage({
           >
             Back to the plan
           </Link>
+        </div>
+        <div className="mt-6">
+          <BookVisitForm
+            unitId={unit.id}
+            unitCode={unit.code}
+            propertyName={property.name}
+          />
         </div>
       </aside>
     </div>

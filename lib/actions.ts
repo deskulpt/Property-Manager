@@ -10,6 +10,7 @@ import {
   assessLateFees,
   assignJob,
   createApplication,
+  createVisitRequest,
   createJob,
   createMarketDraft,
   decideApplication,
@@ -130,6 +131,72 @@ export async function submitApplication(_prev: ApplyState, formData: FormData): 
   )
   refresh(["/", "/properties", `/properties/${result.slug}`, `/properties/${result.slug}/units/${result.code}`, "/account", "/landlord", "/landlord/applications", "/inbox"])
   redirect("/account?notice=Application+submitted.+The+landlord+can+review+it+from+their+inbox.")
+}
+
+
+const visitSchema = z.object({
+  unitId: z.string().min(1),
+  name: z.string().trim().min(2, "Enter your name"),
+  email: z.string().trim().regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Enter an email"),
+  phone: z.string().trim().min(8, "Enter a phone number"),
+  note: z.string().trim().max(1000).optional(),
+  visitType: z.enum(["in_person", "virtual"]),
+  preferredAt: z.string().trim().optional(),
+})
+
+export type VisitFormState = {
+  ok?: boolean
+  error?: string | null
+  fieldErrors?: Record<string, string>
+}
+
+export async function requestVisit(
+  _prev: VisitFormState,
+  formData: FormData,
+): Promise<VisitFormState> {
+  const phoneRaw = String(formData.get("phone") ?? "").trim()
+  const digits = phoneRaw.replace(/\D/g, "")
+  const phone =
+    (phoneRaw.startsWith("+") ? phoneRaw.replace(/\s/g, "") : null) ||
+    toE164("+91", digits) ||
+    phoneRaw
+  const parsed = visitSchema.safeParse({
+    unitId: formData.get("unitId"),
+    name: formData.get("name"),
+    email: formData.get("email"),
+    phone,
+    note: formData.get("note") ?? "",
+    visitType: formData.get("visitType") || "in_person",
+    preferredAt: formData.get("preferredAt") || "",
+  })
+  if (!parsed.success) {
+    return { error: "Check the highlighted fields.", fieldErrors: issues(parsed.error) }
+  }
+  const result = createVisitRequest({
+    unitId: parsed.data.unitId,
+    name: parsed.data.name,
+    email: parsed.data.email,
+    phone: parsed.data.phone,
+    note: parsed.data.note ?? "",
+    visitType: parsed.data.visitType,
+    preferredAt: parsed.data.preferredAt || null,
+  })
+  if (!result.ok) return { error: result.error, fieldErrors: {} }
+  notifyMany(
+    landlordIds(result.tenantId).map((id) => ({
+      userId: id,
+      title: "Visit requested",
+      body: `${parsed.data.name} asked to visit Unit ${result.unitCode} at ${result.propertyName} (${parsed.data.visitType.replace("_", "-")}).`,
+      href: `/properties/${result.propertySlug}/units/${result.unitCode}`,
+    })),
+  )
+  refresh([
+    `/properties/${result.propertySlug}`,
+    `/properties/${result.propertySlug}/units/${result.unitCode}`,
+    "/inbox",
+    "/landlord",
+  ])
+  return { ok: true }
 }
 
 export async function reviewApplication(formData: FormData) {
