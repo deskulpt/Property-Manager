@@ -8,12 +8,13 @@
   },
   "scripts": {
     "dev": "next dev -H :: -p 43123",
+    "dev:3506": "next dev -H 127.0.0.1 -p 3506",
     "build": "next build",
     "start": "next start -H :: -p 43123",
     "lint": "eslint",
     "reset": "vitest run test/reset-cli.test.ts",
-    "test": "vitest run test/isolation.test.ts",
-    "test:watch": "vitest test/isolation.test.ts",
+    "test": "vitest run test/isolation.test.ts test/shop.test.ts",
+    "test:watch": "vitest test/isolation.test.ts test/shop.test.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {
