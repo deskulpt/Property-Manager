@@ -47,7 +47,7 @@ export function DomainSettings({
       <div>
         <p className="font-sans text-lg font-extrabold">Custom domain (PRO)</p>
         <p className="mt-1 text-sm text-ink-soft">
-          When a domain is active, prospects can open your listings on that hostname. DeSkulpt does
+          When a domain is active, prospects can open your listings on that hostname. Easy Rental does
           not host Matterport files — only your listing app. DNS is verified in this demo without a
           live nameserver call unless you paste the TXT value.
         </p>
@@ -131,7 +131,7 @@ export function DomainSettings({
                   <span className="mt-1 block text-ink-soft">
                     Listings can be opened on{" "}
                     <span className="font-mono text-ink">https://{active.hostname}</span> when this
-                    host points at DeSkulpt (demo: documented target below).
+                    host points at Easy Rental (demo: documented target below).
                   </span>
                 ) : null}
               </p>

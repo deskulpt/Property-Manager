@@ -19,7 +19,7 @@ test.describe("evaluator leasing path", () => {
   test("home loads, Nadia approves Maya, Maya sees rent, Jonah inbox empty", async ({ page }) => {
     await page.goto("/")
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
-    await expect(page.locator("body")).toContainText(/DeSkulpt|BBM|industrial|landlord/i)
+    await expect(page.locator("body")).toContainText(/Easy Rental|BBM|industrial|landlord/i)
 
     await switchIdentity(page, "u_nadia")
     await page.goto("/landlord/applications")

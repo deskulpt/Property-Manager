@@ -1,6 +1,8 @@
-# DeSkulpt
+# Easy Rental
 
-DeSkulpt (Property Manager) is an open-source, multi-tenant desk for **Indian industrial landlords**. A platform organisation, **DeSkulpt India Pvt Ltd**, onboards landlords, verifies providers, and merchandises listings through a role-scoped persona CMS. Landlord organisations keep their own properties, applications, jobs, and ledger. Applicants browse bays and apply. Service providers see only work a landlord has assigned after approving them for that building's area.
+**Easy Rental** ([easyrental.space](https://easyrental.space)) is a product of **DeSkulpt Inc.**
+
+Easy Rental (Property Manager) is an open-source, multi-tenant desk for **Indian industrial landlords**. A platform organisation, **DeSkulpt India Pvt Ltd**, onboards landlords, verifies providers, and merchandises listings through a role-scoped persona CMS. Landlord organisations keep their own properties, applications, jobs, and ledger. Applicants browse bays and apply. Service providers see only work a landlord has assigned after approving them for that building's area.
 
 The interface is English. Copy lives in `locales/en.json`. This repository is a working demo: the first request creates a local SQLite file and loads a seeded portfolio. It is not a live tenancy, a credit decision, or a payment account.
 
@@ -17,7 +19,7 @@ The public UI uses a **blueprint-paper / industrial leasing** look — cool draf
 | Mark `#0e6e8c` | Cyan accent (CSS token name `terra` is retained) |
 | Type | **Syne** (brand / headings), **IBM Plex Sans** (body), **IBM Plex Mono** (specs and labels) |
 
-The marketing home is brand-first: **DeSkulpt.** is the hero signal in the first viewport (one composition, full-bleed atmosphere). GSAP drives three motions on that page only — brand settle, hero rise, scroll reveals — and respects `prefers-reduced-motion`.
+The marketing home is brand-first: **Easy Rental.** is the hero signal in the first viewport (one composition, full-bleed atmosphere). GSAP drives three motions on that page only — brand settle, hero rise, scroll reveals — and respects `prefers-reduced-motion`.
 
 ### Role-clear navigation
 
@@ -87,7 +89,7 @@ Seeded landlord portfolios:
 
 ### Marketing home (`/`)
 
-Brand-first landing page: large **DeSkulpt.** mark, one headline, short lede, and CTA pair over a full-bleed blueprint grid. Portfolio stats and the leasing map sit below the first viewport. GSAP motion is on this page only (`components/marketing/motion.tsx`).
+Brand-first landing page: large **Easy Rental.** mark, one headline, short lede, and CTA pair over a full-bleed blueprint grid. Portfolio stats and the leasing map sit below the first viewport. GSAP motion is on this page only (`components/marketing/motion.tsx`).
 
 ### Listings (`/listings`)
 
@@ -102,7 +104,7 @@ Unit B1 at BBM Bhiwandi Hub is the rich media example. The gallery tabs are:
 - **Stills:** dock, aisle, and yard photos under `public/media/`
 - **GIF and video:** a motion loop and a short walk-through clip
 - **360 photo:** an equirectangular image in [Pannellum](https://pannellum.org/) (MIT). Drag to look around
-- **Walkthrough:** an interactive iframe. DeSkulpt stores a Matterport show URL only (`units.matterport_url`). Seeded demos (PRD SaaS §4.6): B1 `PmWtWjyqpJs`, A2 `VpGQDT9DFjr`, C2 `caFmhpiUXSc`, H1 `7Fdpg6tCFwu`, U1 `U5p62iYcxeY` — all `https://my.matterport.com/show/?m=…`. No Matterport SDK or vendored assets. Other bays show an empty slot until a URL is set
+- **Walkthrough:** an interactive iframe. Easy Rental stores a Matterport show URL only (`units.matterport_url`). Seeded demos (PRD SaaS §4.6): B1 `PmWtWjyqpJs`, A2 `VpGQDT9DFjr`, C2 `caFmhpiUXSc`, H1 `7Fdpg6tCFwu`, U1 `U5p62iYcxeY` — all `https://my.matterport.com/show/?m=…`. No Matterport SDK or vendored assets. Other bays show an empty slot until a URL is set
 - **Map:** Leaflet + OpenStreetMap pins from property `latitude` / `longitude`. Clicks open generic Google Maps URLs. No Mapbox key
 
 ### Floor plans
@@ -139,11 +141,11 @@ Requires a landlord admin. Nadia, Jonah, and Meera each see only their organisat
 
 ### CMS
 
-`/cms` is for platform staff only. Anyone else is asked to switch to a DeSkulpt operator. Same desk chrome as the landlord portal.
+`/cms` is for platform staff only. Anyone else is asked to switch to an Easy Rental operator. Same desk chrome as the landlord portal.
 
 | Path | Who | What |
 | --- | --- | --- |
-| `/cms/staff` | Super Admin | DeSkulpt operators |
+| `/cms/staff` | Super Admin | Easy Rental operators |
 | `/cms/landlords` | Super Admin, Account Manager | Landlord organisations. Invite a demo landlord |
 | `/cms/applicants` | Super Admin, Account Manager, Property Manager | Prospects and occupants. Property Manager email is masked |
 | `/cms/providers` | Super Admin, Service Manager | Verify a provider, then approve them for a landlord |
@@ -163,7 +165,7 @@ In-app notices for the current identity: application received, late fee, job ass
 
 ### PWA
 
-Manifest name is DeSkulpt. Display is `standalone`. Icons are `public/icons/icon-192.png` and `icon-512.png`. `components/pwa-register.tsx` registers `/sw.js` and shows an install button when the browser fires `beforeinstallprompt`.
+Manifest name is Easy Rental. Display is `standalone`. Icons are `public/icons/icon-192.png` and `icon-512.png`. `components/pwa-register.tsx` registers `/sw.js` and shows an install button when the browser fires `beforeinstallprompt`.
 
 ### Legal
 

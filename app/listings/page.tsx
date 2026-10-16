@@ -66,7 +66,7 @@ export default async function ListingsPage({
     <div className="mx-auto max-w-[1200px] px-4 py-10 md:px-8">
       <PageHeader
         kicker="Public listings"
-        title="Search every bay on DeSkulpt."
+        title="Search every bay on Easy Rental."
         lede="Filter across landlord organisations. Featured, grid, and directory layouts share the same live seed — open a card for gallery, floor plan, and apply."
       />
       <div className="grid gap-8 lg:grid-cols-[280px_1fr]">

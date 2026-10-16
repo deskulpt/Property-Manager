@@ -78,16 +78,17 @@ export function SiteHeader({
       <div className="mx-auto flex max-w-[1200px] items-center justify-between gap-3 px-4 py-3 md:px-8">
         <Link
           href="/"
-          className="group flex items-baseline gap-0 font-serif text-lg font-semibold tracking-tight text-brand md:text-xl"
+          className="group flex items-center gap-2 font-serif text-lg font-semibold tracking-tight text-brand md:text-xl"
         >
-          <span className="relative">
-            {t("app.name")}
-            <span
-              className="absolute -bottom-0.5 left-0 h-[2px] w-full bg-terra"
-              aria-hidden
-            />
-          </span>
-          <span className="text-terra">.</span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/logo.png"
+            alt=""
+            width={160}
+            height={90}
+            className="h-8 w-auto object-contain md:h-9"
+          />
+          <span className="sr-only">{t("app.name")}</span>
         </Link>
 
         <nav className="hidden items-center gap-1 lg:flex" aria-label="Primary">

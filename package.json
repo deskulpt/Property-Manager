@@ -1,5 +1,5 @@
 {
-  "name": "deskulpt",
+  "name": "easy-rental",
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
@@ -51,5 +51,6 @@
     "tsx": "^4.20.5",
     "typescript": "^5",
     "vitest": "^3.2.4"
-  }
+  },
+  "description": "Easy Rental (easyrental.space) \u2014 industrial leasing desk. A product of DeSkulpt Inc."
 }

@@ -199,7 +199,7 @@ export function UnitGallery({
                   />
                 </div>
                 <p className="mt-2 text-sm text-ink-soft">
-                  Interactive Matterport showcase (demo seed). DeSkulpt stores the iframe URL only —
+                  Interactive Matterport showcase (demo seed). Easy Rental stores the iframe URL only —
                   orbit and click inside the tour.
                 </p>
                 <a

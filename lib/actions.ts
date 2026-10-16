@@ -114,7 +114,7 @@ export async function signupLandlord(
   })
   notify({
     userId: result.userId,
-    title: "Welcome to DeSkulpt",
+    title: "Welcome to Easy Rental",
     body: `${parsed.data.company} is ready. Add a property from the landlord desk.`,
     href: "/landlord",
   })
@@ -874,7 +874,7 @@ export async function submitLandlordInvite(
   if (!result.ok) return { error: result.error, notice: null }
   notify({
     userId: result.userId,
-    title: "Welcome to DeSkulpt",
+    title: "Welcome to Easy Rental",
     body: `${result.companyName} is on the platform. Switch to this identity in the demo header to open the landlord desk.`,
     href: "/landlord",
   })
@@ -903,7 +903,7 @@ export async function submitProviderVerify(formData: FormData) {
     userId: providerId,
     title: verified ? "Provider verified" : "Verification removed",
     body: verified
-      ? "DeSkulpt marked you verified. A landlord can now approve you for their area."
+      ? "Easy Rental marked you verified. A landlord can now approve you for their area."
       : "Your verified flag was cleared by platform staff.",
     href: "/provider",
   })

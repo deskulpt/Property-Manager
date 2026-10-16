@@ -7,7 +7,7 @@ export default function PrivacyPage() {
     <article className="mx-auto max-w-3xl px-4 py-10">
       <PageHeader kicker="Legal" title="Privacy Policy" lede="What this build stores, what it refuses to store, and what the demo pretends to send." />
       <div className="grid gap-5 text-[17px] leading-relaxed text-ink-soft">
-        <p>DeSkulpt does not sell personal information. The demo does not have a data broker, an advertising pixel, or a customer list. If you operate the software for a real portfolio, you become the controller of whatever you choose to collect, and you should replace this policy with one that matches that operation.</p>
+        <p>Easy Rental is a product of DeSkulpt Inc. Easy Rental does not sell personal information. The demo does not have a data broker, an advertising pixel, or a customer list. If you operate the software for a real portfolio, you become the controller of whatever you choose to collect, and you should replace this policy with one that matches that operation.</p>
         <h2 className="font-sans text-2xl font-extrabold text-ink">What the demo stores</h2>
         <p>A local SQLite file holds seeded names, example emails on the .example domain, applications you submit, floor-plan images you upload, hotspot positions, ledger rows, job status, and verification metadata: country, region, document type, original filename, and a simulated score. A cookie named deskulpt_user remembers which fixture you picked.</p>
         <h2 className="font-sans text-2xl font-extrabold text-ink">What it does not store</h2>
