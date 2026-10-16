@@ -178,11 +178,11 @@ export function SiteHeader({
           <Link href="/" className="group flex shrink-0 items-center gap-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/logo.png"
+              src="/logo.svg"
               alt=""
-              width={140}
-              height={48}
-              className="h-7 w-auto object-contain md:h-8"
+              width={220}
+              height={40}
+              className="h-10 w-auto object-contain md:h-12"
             />
             <span className="sr-only">{t("app.name")}</span>
           </Link>
