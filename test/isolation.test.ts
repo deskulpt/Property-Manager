@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import { MARKET_CHECKLIST_KEYS } from "@/lib/market-checklist"
-import { useTempDatabase } from "./helpers/temp-db"
+import { installTempDatabase } from "./helpers/temp-db"
 
-useTempDatabase()
+installTempDatabase()
 
 async function db() {
   return import("@/lib/db")
