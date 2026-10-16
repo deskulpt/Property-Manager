@@ -3,7 +3,8 @@ import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach } from "vitest"
 
-export function useTempDatabase() {
+/** Vitest hooks for an isolated SQLite file — not a React hook. */
+export function installTempDatabase() {
   let dir: string
 
   beforeEach(() => {
