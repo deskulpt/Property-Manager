@@ -9,7 +9,6 @@ import {
   googleMapsStreetViewUrl,
   openStreetMapUrl,
   wazeUrl,
-  type MapPin,
 } from "@/lib/maps"
 import "leaflet/dist/leaflet.css"
 

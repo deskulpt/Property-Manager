@@ -25,16 +25,12 @@ export function PhoneOtpForm({
   const [requestState, requestAction] = useActionState(submitRequestOtp, initial)
   const [verifyState, verifyAction] = useActionState(submitVerifyOtp, initial)
   const [countryCode, setCountryCode] = useState("+91")
-  const [onFile, setOnFile] = useState(currentPhone)
   const meta = PHONE_COUNTRY_CODES.find((item) => item.code === countryCode)
-
-  useEffect(() => {
-    setOnFile(currentPhone)
-  }, [currentPhone])
+  const onFile =
+    verifyState.verified && verifyState.phoneE164 ? verifyState.phoneE164 : currentPhone
 
   useEffect(() => {
     if (verifyState.verified && verifyState.phoneE164) {
-      setOnFile(verifyState.phoneE164)
       router.refresh()
     }
   }, [verifyState, router])

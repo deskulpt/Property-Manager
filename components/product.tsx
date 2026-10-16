@@ -75,6 +75,11 @@ const tones: Record<string, string> = {
   rejected: "bg-destructive/10 text-destructive",
   verified: "bg-avail/15 text-[#1f6b38]",
   open: "bg-brand/10 text-brand",
+  pending_payment: "bg-pending/20 text-[#8a6312]",
+  fulfilling: "bg-brand/10 text-brand",
+  completed: "bg-avail/15 text-[#1f6b38]",
+  cancelled: "bg-destructive/10 text-destructive",
+  refunded: "bg-leased/20 text-ink-soft",
 }
 
 export function StatusBadge({ status }: { status: string }) {

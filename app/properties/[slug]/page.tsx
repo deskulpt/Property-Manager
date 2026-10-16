@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { FloorPlanView } from "@/components/floor/floor-plan"
+import { FloorStackViewer } from "@/components/floor/floor-stack-viewer"
 import { PropertyMap } from "@/components/map/property-map"
 import { PageHeader, StatusBadge } from "@/components/product"
 import { getPropertyBySlug } from "@/lib/db"
@@ -18,16 +19,48 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
       x: unit.hotspotX as number,
       y: unit.hotspotY as number,
       status: unit.status,
+      floorId: unit.floorId,
     }))
+  const multiFloor = property.floors.length >= 2
 
   return (
     <div className="mx-auto max-w-[1200px] px-4 py-10 md:px-8">
       <PageHeader
         kicker={property.tenantName}
         title={property.name}
-        lede={`${property.address}. Click a pin to open that bay. Coordinates are stored on the unit, not drawn into the image.`}
+        lede={
+          multiFloor
+            ? `${property.address}. Peel floors with the level list (scrolls when there are more than five). Pins on the active plate open that bay.`
+            : `${property.address}. Click a pin to open that bay. Coordinates are stored on the unit, not drawn into the image.`
+        }
       />
-      <FloorPlanView src={property.floorPlanPath} alt={`Floor plan of ${property.name}`} markers={markers} />
+      {multiFloor ? (
+        <FloorStackViewer
+          floors={property.floors.map((floor) => ({
+            id: floor.id,
+            label: floor.label,
+            levelIndex: floor.levelIndex,
+            planPath: floor.planPath ?? property.floorPlanPath,
+          }))}
+          markers={markers}
+          buildingName={property.name}
+        />
+      ) : (
+        <FloorPlanView
+          src={property.floorPlanPath}
+          alt={`Floor plan of ${property.name}`}
+          markers={markers}
+        />
+      )}
+      {property.modelPath ? (
+        <p className="mt-3 font-mono text-[11px] uppercase tracking-wider text-ink-soft">
+          3D model on file · {property.modelPath} (GLB/IFC viewer lands next)
+        </p>
+      ) : multiFloor ? (
+        <p className="mt-3 font-mono text-[11px] uppercase tracking-wider text-ink-soft">
+          Progressive 2D stack · GLB/IFC upload slot reserved on the property record
+        </p>
+      ) : null}
       <div className="mt-4 flex flex-wrap gap-4 font-mono text-[11px] uppercase tracking-wider text-ink-soft">
         <span>Green · available</span>
         <span>Gold · pending</span>
@@ -48,9 +81,16 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
       </section>
       <div className="mt-8 grid gap-3">
         {property.units.map((unit) => (
-          <Link key={unit.id} href={`/properties/${property.slug}/units/${unit.code}`} className="flex flex-wrap items-center justify-between gap-3 bg-card px-4 py-3 ring-1 ring-foreground/10">
+          <Link
+            key={unit.id}
+            href={`/properties/${property.slug}/units/${unit.code}`}
+            className="flex flex-wrap items-center justify-between gap-3 bg-card px-4 py-3 ring-1 ring-foreground/10"
+          >
             <span className="font-sans text-lg font-extrabold">Unit {unit.code}</span>
-            <span className="text-sm text-ink-soft">{sqft(unit.sqft)} · ₹{rateLabel(unit.ratePsf)} / SF · mo · {money(monthlyRentCents(unit.ratePsf, unit.sqft))} / mo</span>
+            <span className="text-sm text-ink-soft">
+              {sqft(unit.sqft)} · ₹{rateLabel(unit.ratePsf)} / SF · mo ·{" "}
+              {money(monthlyRentCents(unit.ratePsf, unit.sqft))} / mo
+            </span>
             <StatusBadge status={unit.status} />
           </Link>
         ))}

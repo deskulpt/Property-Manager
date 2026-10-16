@@ -151,6 +151,11 @@ export function statusLabel(status: string) {
   if (status === "paid") return "Paid"
   if (status === "rejected") return "Rejected"
   if (status === "verified") return "Verified"
+  if (status === "pending_payment") return "Pending payment"
+  if (status === "fulfilling") return "Fulfilling"
+  if (status === "completed") return "Completed"
+  if (status === "cancelled") return "Cancelled"
+  if (status === "refunded") return "Refunded"
   return status
 }
 
