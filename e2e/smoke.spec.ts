@@ -78,8 +78,11 @@ test.describe("Easy Rental critical paths (India demo)", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" })
     await expectPageOk(page)
 
-    const tel = page.locator('a[href^="tel:"]')
-    const wa = page.locator('a[href*="wa.me"], a[href*="whatsapp.com"], a[href*="api.whatsapp.com"]')
+    // Header ships responsive duplicates (sm:hidden + sm:flex); assert a visible one.
+    const tel = page.locator('a[href^="tel:"]:visible')
+    const wa = page.locator(
+      'a[href*="wa.me"]:visible, a[href*="whatsapp.com"]:visible, a[href*="api.whatsapp.com"]:visible',
+    )
     const telCount = await tel.count()
     const waCount = await wa.count()
     test.skip(telCount === 0 && waCount === 0, "phone/WhatsApp utility strip not on this branch yet")
