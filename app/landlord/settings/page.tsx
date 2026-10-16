@@ -1,8 +1,9 @@
 import { PageHeader } from "@/components/product"
 import { CurrencyForm } from "@/components/landlord/currency-form"
 import { DomainSettings } from "@/components/landlord/domain-settings"
+import { RazorpaySettings } from "@/components/landlord/razorpay-settings"
 import { PhoneOtpForm } from "@/components/otp/phone-otp"
-import { getTenantPackage, listCustomDomains } from "@/lib/db"
+import { getShopSettingsPublic, getTenantPackage, listCustomDomains } from "@/lib/db"
 import { getSessionUser } from "@/lib/session"
 
 export const metadata = { title: "Landlord settings" }
@@ -12,13 +13,14 @@ export default async function LandlordSettingsPage() {
   if (!user?.tenantId) return null
   const packageTier = user.tenantPackage ?? getTenantPackage(user.tenantId)
   const domains = listCustomDomains(user.tenantId)
+  const shopSettings = getShopSettingsPublic(user.tenantId)
 
   return (
     <div>
       <PageHeader
         kicker="Organisation"
         title="Settings"
-        lede="Display currency, phone OTP demo, and PRO custom domains for listings on your own hostname."
+        lede="Display currency, Razorpay shop keys, phone OTP demo, and PRO custom domains for listings on your own hostname."
       />
       <section className="mb-10 bg-card p-4 ring-1 ring-foreground/10 md:p-6">
         <h2 className="font-sans text-lg font-extrabold">Package</h2>
@@ -32,6 +34,9 @@ export default async function LandlordSettingsPage() {
       </section>
       <section className="mb-10 bg-card p-4 ring-1 ring-foreground/10 md:p-6">
         <DomainSettings packageTier={packageTier} domains={domains} />
+      </section>
+      <section className="mb-10 bg-card p-4 ring-1 ring-foreground/10 md:p-6">
+        <RazorpaySettings settings={shopSettings} />
       </section>
       <section className="mb-10 bg-card p-4 ring-1 ring-foreground/10 md:p-6">
         <h2 className="font-sans text-lg font-extrabold">Display currency</h2>
