@@ -22,11 +22,13 @@ import {
   type MarketChecklistKey,
 } from "@/lib/market-checklist"
 
-const SEED_VERSION = "6"
+const SEED_VERSION = "8"
 
 function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
 }
+
+export type PackageTier = "starter" | "pro"
 
 /** Exclusive file lock so parallel Next build workers do not race seed/reset. */
 function withDbInitLock<T>(fn: () => T): T {
@@ -68,8 +70,10 @@ export type SessionUser = {
   providerVerified: boolean
   tenantName: string | null
   tenantKind: "landlord" | "platform" | null
+  tenantPackage: PackageTier | null
   phone: string | null
   displayCurrency: DisplayCurrency
+  hasPassword: boolean
 }
 
 export type UnitRecord = {
@@ -109,6 +113,8 @@ export type PropertyRecord = {
   cityLine: string
   totalSqft: number
   floorPlanPath: string | null
+  latitude: number | null
+  longitude: number | null
   units: UnitRecord[]
 }
 
@@ -136,6 +142,7 @@ function num(row: Record<string, unknown>, key: string) {
 }
 
 function mapUser(row: Record<string, unknown>): SessionUser {
+  const pkg = str(row, "tenant_package")
   return {
     id: String(row.id),
     name: String(row.name),
@@ -148,8 +155,10 @@ function mapUser(row: Record<string, unknown>): SessionUser {
     providerVerified: Number(row.provider_verified) === 1,
     tenantName: str(row, "tenant_name"),
     tenantKind: (str(row, "tenant_kind") as "landlord" | "platform" | null) ?? null,
+    tenantPackage: pkg === "pro" || pkg === "starter" ? pkg : null,
     phone: str(row, "phone"),
     displayCurrency: (str(row, "display_currency") as DisplayCurrency | null) ?? "INR",
+    hasPassword: Boolean(str(row, "password_hash")),
   }
 }
 
@@ -175,8 +184,10 @@ function mapUnit(row: Record<string, unknown>): UnitRecord {
 
 const USER_SQL = `
   SELECT u.id, u.name, u.email, u.role, u.tenant_id, u.company, u.trade,
-         u.service_area, u.provider_verified, u.phone, t.name AS tenant_name,
-         t.kind AS tenant_kind, COALESCE(t.display_currency, 'INR') AS display_currency
+         u.service_area, u.provider_verified, u.phone, u.password_hash,
+         t.name AS tenant_name, t.kind AS tenant_kind,
+         COALESCE(t.display_currency, 'INR') AS display_currency,
+         COALESCE(t.package, 'starter') AS tenant_package
   FROM users u
   LEFT JOIN tenants t ON t.id = u.tenant_id
 `
@@ -189,19 +200,30 @@ function createSchema(db: Sql) {
       slug TEXT NOT NULL UNIQUE,
       city TEXT NOT NULL,
       kind TEXT NOT NULL DEFAULT 'landlord',
-      display_currency TEXT NOT NULL DEFAULT 'INR'
+      display_currency TEXT NOT NULL DEFAULT 'INR',
+      package TEXT NOT NULL DEFAULT 'starter'
     );
     CREATE TABLE users (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
-      email TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
       role TEXT NOT NULL,
       tenant_id TEXT,
       company TEXT,
       trade TEXT,
       service_area TEXT,
       provider_verified INTEGER NOT NULL DEFAULT 0,
-      phone TEXT
+      phone TEXT,
+      password_hash TEXT
+    );
+    CREATE TABLE custom_domains (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      hostname TEXT NOT NULL UNIQUE,
+      status TEXT NOT NULL,
+      txt_token TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      verified_at TEXT
     );
     CREATE TABLE otp_challenges (
       id TEXT PRIMARY KEY,
@@ -227,7 +249,23 @@ function createSchema(db: Sql) {
       area TEXT NOT NULL,
       city_line TEXT NOT NULL,
       total_sqft INTEGER NOT NULL,
-      floor_plan_path TEXT
+      floor_plan_path TEXT,
+      latitude REAL,
+      longitude REAL
+    );
+    CREATE TABLE visit_requests (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      property_id TEXT NOT NULL,
+      unit_id TEXT,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      note TEXT NOT NULL DEFAULT '',
+      visit_type TEXT NOT NULL,
+      preferred_at TEXT,
+      status TEXT NOT NULL,
+      created_at TEXT NOT NULL
     );
     CREATE TABLE units (
       id TEXT PRIMARY KEY,
@@ -382,6 +420,8 @@ function reset(db: Sql) {
     "jobs",
     "verifications",
     "applications",
+    "visit_requests",
+    "custom_domains",
     "unit_media",
     "units",
     "properties",
@@ -416,16 +456,17 @@ type UnitSeed = {
 
 function seed(db: Sql) {
   const tenant = db.prepare(
-    "INSERT INTO tenants (id, name, slug, city, kind, display_currency) VALUES (?, ?, ?, ?, ?, ?)",
+    "INSERT INTO tenants (id, name, slug, city, kind, display_currency, package) VALUES (?, ?, ?, ?, ?, ?, ?)",
   )
-  tenant.run("t_deskulpt", "DeSkulpt India Pvt Ltd", "deskulpt", "Bengaluru", "platform", "INR")
-  tenant.run("t_bbm", "BBM Logistics Parks", "bbm-parks", "Mumbai", "landlord", "INR")
-  tenant.run("t_harbour", "Harbourline Yards India", "harbourline-india", "Chennai", "landlord", "INR")
-  tenant.run("t_nri", "Sahni Global Realty (NRI)", "sahni-global", "Dubai / Mumbai", "landlord", "USD")
+  tenant.run("t_deskulpt", "DeSkulpt India Pvt Ltd", "deskulpt", "Bengaluru", "platform", "INR", "pro")
+  // BBM is PRO (custom domain unlocked); Harbour and NRI stay Starter for upgrade CTA demos
+  tenant.run("t_bbm", "BBM Logistics Parks", "bbm-parks", "Mumbai", "landlord", "INR", "pro")
+  tenant.run("t_harbour", "Harbourline Yards India", "harbourline-india", "Chennai", "landlord", "INR", "starter")
+  tenant.run("t_nri", "Sahni Global Realty (NRI)", "sahni-global", "Dubai / Mumbai", "landlord", "USD", "starter")
 
   const user = db.prepare(
-    `INSERT INTO users (id, name, email, role, tenant_id, company, trade, service_area, provider_verified, phone)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO users (id, name, email, role, tenant_id, company, trade, service_area, provider_verified, phone, password_hash)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
   )
   user.run("u_avery", "Avery Quinn", "avery@deskulpt.example", "super_admin", "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+918012345678")
   user.run("u_sam", "Sam Rivera", "sam@deskulpt.example", "account_manager", "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+918012345679")
@@ -455,14 +496,16 @@ function seed(db: Sql) {
   approval.run("t_harbour", "u_idris", "pending")
 
   const property = db.prepare(
-    `INSERT INTO properties (id, tenant_id, name, slug, address, area, city_line, total_sqft, floor_plan_path)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO properties (
+      id, tenant_id, name, slug, address, area, city_line, total_sqft, floor_plan_path, latitude, longitude
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
-  property.run("p_waterman", "t_bbm", "BBM Bhiwandi Hub", "waterman", "Plot 19, Kalyan-Bhiwandi Road, Bhiwandi, Maharashtra 421302", "Bhiwandi", "BHIWANDI · PIN 421302 · 214,000 SF", 214000, "/floorplans/waterman.svg")
-  property.run("p_bartley", "t_bbm", "BBM Whitefield Sheds", "bartley", "161 ITPL Main Road, Whitefield, Bengaluru, Karnataka 560066", "Whitefield", "WHITEFIELD · PIN 560066 · 96,000 SF", 96000, "/floorplans/bartley.svg")
-  property.run("p_cranfield", "t_bbm", "BBM Andheri East", "cranfield", "12 MIDC Central Road, Andheri East, Mumbai, Maharashtra 400093", "Andheri East", "ANDHERI EAST · PIN 400093 · 74,500 SF", 74500, "/floorplans/cranfield.svg")
-  property.run("p_commissioners", "t_harbour", "Harbourline Sriperumbudur", "commissioners", "88 SIPCOT Industrial Park, Sriperumbudur, Tamil Nadu 602105", "Sriperumbudur", "SRIPERUMBUDUR · PIN 602105 · 86,000 SF", 86000, "/floorplans/commissioners.svg")
-  property.run("p_nri_thane", "t_nri", "Sahni Thane Warehouse", "thane", "45 Wagle Estate, Thane West, Maharashtra 400604", "Thane", "THANE · PIN 400604 · 42,000 SF", 42000, "/floorplans/cranfield.svg")
+  // Gate pins are approximate public coords for demo Leaflet embeds (no Mapbox key).
+  property.run("p_waterman", "t_bbm", "BBM Bhiwandi Hub", "waterman", "Plot 19, Kalyan-Bhiwandi Road, Bhiwandi, Maharashtra 421302", "Bhiwandi", "BHIWANDI · PIN 421302 · 214,000 SF", 214000, "/floorplans/waterman.svg", 19.2813, 73.0483)
+  property.run("p_bartley", "t_bbm", "BBM Whitefield Sheds", "bartley", "161 ITPL Main Road, Whitefield, Bengaluru, Karnataka 560066", "Whitefield", "WHITEFIELD · PIN 560066 · 96,000 SF", 96000, "/floorplans/bartley.svg", 12.9698, 77.75)
+  property.run("p_cranfield", "t_bbm", "BBM Andheri East", "cranfield", "12 MIDC Central Road, Andheri East, Mumbai, Maharashtra 400093", "Andheri East", "ANDHERI EAST · PIN 400093 · 74,500 SF", 74500, "/floorplans/cranfield.svg", 19.1136, 72.8697)
+  property.run("p_commissioners", "t_harbour", "Harbourline Sriperumbudur", "commissioners", "88 SIPCOT Industrial Park, Sriperumbudur, Tamil Nadu 602105", "Sriperumbudur", "SRIPERUMBUDUR · PIN 602105 · 86,000 SF", 86000, "/floorplans/commissioners.svg", 12.9675, 79.9473)
+  property.run("p_nri_thane", "t_nri", "Sahni Thane Warehouse", "thane", "45 Wagle Estate, Thane West, Maharashtra 400604", "Thane", "THANE · PIN 400604 · 42,000 SF", 42000, "/floorplans/cranfield.svg", 19.2183, 72.9781)
 
   const unitStmt = db.prepare(
     `INSERT INTO units (
@@ -471,13 +514,17 @@ function seed(db: Sql) {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
 
-  /** Public Matterport showcase models used as demo walkthrough embeds. */
+  /**
+   * Public Matterport showcase models — iframe src only (PRD SaaS §4.6).
+   * IDs: PmWtWjyqpJs (B1), VpGQDT9DFjr (A2), caFmhpiUXSc (C2),
+   * 7Fdpg6tCFwu (H1), U5p62iYcxeY (U1). Discover pages are not stored.
+   */
   const MATTERPORTS: Record<string, string> = {
-    "waterman:B1": "https://my.matterport.com/show/?m=JADuQHXd8ts",
-    "waterman:A2": "https://my.matterport.com/show/?m=L3sdz2m7jxp",
-    "cranfield:U3": "https://my.matterport.com/show/?m=x2aPXLXpbu1",
-    "commissioners:H1": "https://my.matterport.com/show/?m=VpGQDT9DFjr",
-    "thane:T1": "https://my.matterport.com/show/?m=iLToEwe2fAz",
+    "waterman:B1": "https://my.matterport.com/show/?m=PmWtWjyqpJs",
+    "waterman:A2": "https://my.matterport.com/show/?m=VpGQDT9DFjr",
+    "waterman:C2": "https://my.matterport.com/show/?m=caFmhpiUXSc",
+    "commissioners:H1": "https://my.matterport.com/show/?m=7Fdpg6tCFwu",
+    "cranfield:U1": "https://my.matterport.com/show/?m=U5p62iYcxeY",
   }
 
   function addUnits(
@@ -849,6 +896,8 @@ function mapProperty(row: Record<string, unknown>): PropertyRecord {
     cityLine: String(row.city_line),
     totalSqft: Number(row.total_sqft),
     floorPlanPath: str(row, "floor_plan_path"),
+    latitude: num(row, "latitude"),
+    longitude: num(row, "longitude"),
     units: unitsFor(String(row.id)),
   }
 }
@@ -1287,6 +1336,259 @@ function transaction(work: (db: Sql) => void) {
   } catch (error) {
     db.exec("ROLLBACK")
     throw error
+  }
+}
+
+
+export function slugifyOrg(name: string) {
+  const base = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48)
+  return base || "org"
+}
+
+export function createLandlordAccount(input: {
+  name: string
+  email: string
+  passwordHash: string
+  company: string
+  packageTier?: PackageTier
+}) {
+  const db = getDb()
+  const email = input.email.trim().toLowerCase()
+  const existing = asRow(db.prepare("SELECT id FROM users WHERE lower(email) = ?").get(email))
+  if (existing) return { ok: false as const, error: "An account with that email already exists." }
+  const company = input.company.trim()
+  if (company.length < 2) return { ok: false as const, error: "Enter the organisation name." }
+  let slug = slugifyOrg(company)
+  let n = 0
+  while (asRow(db.prepare("SELECT id FROM tenants WHERE slug = ?").get(slug))) {
+    n += 1
+    slug = `${slugifyOrg(company)}-${n}`
+  }
+  const tenantId = crypto.randomUUID()
+  const userId = crypto.randomUUID()
+  const pkg: PackageTier = input.packageTier ?? "starter"
+  transaction((tx) => {
+    tx.prepare(
+      `INSERT INTO tenants (id, name, slug, city, kind, display_currency, package)
+       VALUES (?, ?, ?, ?, 'landlord', 'INR', ?)`,
+    ).run(tenantId, company, slug, "India", pkg)
+    tx.prepare(
+      `INSERT INTO users (
+        id, name, email, role, tenant_id, company, trade, service_area, provider_verified, phone, password_hash
+      ) VALUES (?, ?, ?, 'landlord_admin', ?, ?, NULL, NULL, 0, NULL, ?)`,
+    ).run(userId, input.name.trim(), email, tenantId, company, input.passwordHash)
+    tx.prepare(
+      "INSERT INTO late_fee_rules (tenant_id, grace_days, flat_cents, percent_bps) VALUES (?, 5, 1500000, 150)",
+    ).run(tenantId)
+  })
+  return { ok: true as const, userId, tenantId, slug }
+}
+
+export function getUserByEmail(email: string) {
+  const row = asRow(
+    getDb().prepare(`${USER_SQL} WHERE lower(u.email) = ?`).get(email.trim().toLowerCase()),
+  )
+  return row ? mapUser(row) : null
+}
+
+export function getPasswordHashForEmail(email: string): string | null {
+  const row = asRow(
+    getDb()
+      .prepare("SELECT password_hash FROM users WHERE lower(email) = ?")
+      .get(email.trim().toLowerCase()),
+  )
+  return str(row ?? {}, "password_hash")
+}
+
+export type CustomDomainRecord = {
+  id: string
+  tenantId: string
+  hostname: string
+  status: "pending" | "verified" | "active"
+  txtToken: string
+  createdAt: string
+  verifiedAt: string | null
+}
+
+function mapDomain(row: Record<string, unknown>): CustomDomainRecord {
+  return {
+    id: String(row.id),
+    tenantId: String(row.tenant_id),
+    hostname: String(row.hostname),
+    status: String(row.status) as CustomDomainRecord["status"],
+    txtToken: String(row.txt_token),
+    createdAt: String(row.created_at),
+    verifiedAt: str(row, "verified_at"),
+  }
+}
+
+export function listCustomDomains(tenantId: string) {
+  return asRows(
+    getDb()
+      .prepare(
+        "SELECT * FROM custom_domains WHERE tenant_id = ? ORDER BY created_at DESC",
+      )
+      .all(tenantId),
+  ).map(mapDomain)
+}
+
+export function getTenantPackage(tenantId: string): PackageTier {
+  const row = asRow(
+    getDb().prepare("SELECT package FROM tenants WHERE id = ?").get(tenantId),
+  )
+  return str(row ?? {}, "package") === "pro" ? "pro" : "starter"
+}
+
+function normalizeHostname(raw: string): string | null {
+  const host = raw.trim().toLowerCase().replace(/^https?:\/\//, "").split("/")[0]
+  if (!host || host.includes(" ") || !host.includes(".")) return null
+  if (host.length > 253) return null
+  if (!/^[a-z0-9.-]+$/.test(host)) return null
+  return host
+}
+
+export function addCustomDomain(tenantId: string, hostnameRaw: string) {
+  if (getTenantPackage(tenantId) !== "pro") {
+    return { ok: false as const, error: "Custom domains require the PRO package." }
+  }
+  const hostname = normalizeHostname(hostnameRaw)
+  if (!hostname) return { ok: false as const, error: "Enter a valid hostname such as listings.yourcompany.com." }
+  const clash = asRow(
+    getDb().prepare("SELECT id, tenant_id FROM custom_domains WHERE hostname = ?").get(hostname),
+  )
+  if (clash) {
+    if (String(clash.tenant_id) === tenantId) {
+      return { ok: false as const, error: "That hostname is already on your organisation." }
+    }
+    return { ok: false as const, error: "That hostname is already claimed." }
+  }
+  const id = crypto.randomUUID()
+  const txtToken = `deskulpt-verify=${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`
+  const now = new Date().toISOString()
+  getDb()
+    .prepare(
+      `INSERT INTO custom_domains (id, tenant_id, hostname, status, txt_token, created_at, verified_at)
+       VALUES (?, ?, ?, 'pending', ?, ?, NULL)`,
+    )
+    .run(id, tenantId, hostname, txtToken, now)
+  return { ok: true as const, domain: listCustomDomains(tenantId).find((d) => d.id === id)! }
+}
+
+/** Demo DNS check: marks verified when pending. Optional TXT match for guided step. */
+export function verifyCustomDomain(
+  tenantId: string,
+  domainId: string,
+  opts?: { demoForce?: boolean; observedTxt?: string | null },
+) {
+  if (getTenantPackage(tenantId) !== "pro") {
+    return { ok: false as const, error: "Custom domains require the PRO package." }
+  }
+  const row = asRow(
+    getDb()
+      .prepare("SELECT * FROM custom_domains WHERE id = ? AND tenant_id = ?")
+      .get(domainId, tenantId),
+  )
+  if (!row) return { ok: false as const, error: "Domain not found." }
+  const domain = mapDomain(row)
+  if (domain.status === "verified" || domain.status === "active") {
+    return { ok: true as const, domain }
+  }
+  const observed = opts?.observedTxt?.trim()
+  const demoOk = opts?.demoForce !== false
+  if (observed && observed !== domain.txtToken && !observed.includes(domain.txtToken)) {
+    return {
+      ok: false as const,
+      error: "TXT value does not match the challenge. Paste the exact deskulpt-verify=… token, or use Check DNS in demo mode.",
+    }
+  }
+  if (!demoOk && !observed) {
+    return { ok: false as const, error: "No TXT record observed yet." }
+  }
+  const now = new Date().toISOString()
+  getDb()
+    .prepare(
+      "UPDATE custom_domains SET status = 'active', verified_at = ? WHERE id = ? AND tenant_id = ?",
+    )
+    .run(now, domainId, tenantId)
+  return { ok: true as const, domain: listCustomDomains(tenantId).find((d) => d.id === domainId)! }
+}
+
+export function removeCustomDomain(tenantId: string, domainId: string) {
+  getDb()
+    .prepare("DELETE FROM custom_domains WHERE id = ? AND tenant_id = ?")
+    .run(domainId, tenantId)
+  return { ok: true as const }
+}
+
+export function findTenantByCustomHost(hostname: string) {
+  const host = normalizeHostname(hostname)
+  if (!host) return null
+  const row = asRow(
+    getDb()
+      .prepare(
+        `SELECT t.id, t.name, t.slug, d.hostname, d.status
+         FROM custom_domains d
+         JOIN tenants t ON t.id = d.tenant_id
+         WHERE d.hostname = ? AND d.status IN ('verified', 'active')`,
+      )
+      .get(host),
+  )
+  if (!row) return null
+  return {
+    tenantId: String(row.id),
+    tenantName: String(row.name),
+    slug: String(row.slug),
+    hostname: String(row.hostname),
+  }
+}
+
+export function createVisitRequest(input: {
+  unitId: string
+  name: string
+  email: string
+  phone: string
+  note: string
+  visitType: "in_person" | "virtual"
+  preferredAt: string | null
+}) {
+  const db = getDb()
+  const unitRow = asRow(db.prepare("SELECT * FROM units WHERE id = ?").get(input.unitId))
+  if (!unitRow) return { ok: false as const, error: "That bay is not listed." }
+  const unit = mapUnit(unitRow)
+  const property = asRow(
+    db.prepare("SELECT id, slug, name FROM properties WHERE id = ?").get(unit.propertyId),
+  )
+  if (!property) return { ok: false as const, error: "That building is not listed." }
+  const id = crypto.randomUUID()
+  const now = new Date().toISOString()
+  db.prepare(
+    `INSERT INTO visit_requests (
+      id, tenant_id, property_id, unit_id, name, email, phone, note, visit_type, preferred_at, status, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'requested', ?)`,
+  ).run(
+    id,
+    unit.tenantId,
+    String(property.id),
+    unit.id,
+    input.name,
+    input.email,
+    input.phone,
+    input.note,
+    input.visitType,
+    input.preferredAt,
+    now,
+  )
+  return {
+    ok: true as const,
+    id,
+    tenantId: unit.tenantId,
+    propertySlug: String(property.slug),
+    propertyName: String(property.name),
+    unitCode: unit.code,
   }
 }
 
@@ -1790,6 +2092,8 @@ export type ListingCard = {
   area: string
   cityLine: string
   floorPlanPath: string | null
+  latitude: number | null
+  longitude: number | null
   tenantId: string
   tenantName: string
 }
@@ -1820,7 +2124,7 @@ export function searchListings(filters: ListingFilters = {}): ListingCard[] {
            u.id AS unit_id, u.code, u.status, u.sqft, u.clear_height, u.docks, u.drive_ins,
            u.power, u.rate_psf, u.description, u.matterport_url,
            p.id AS property_id, p.name AS property_name, p.slug AS property_slug,
-           p.address, p.area, p.city_line, p.floor_plan_path,
+           p.address, p.area, p.city_line, p.floor_plan_path, p.latitude, p.longitude,
            t.id AS tenant_id, t.name AS tenant_name,
            EXISTS(SELECT 1 FROM unit_media m WHERE m.unit_id = u.id AND m.kind = 'pano') AS has_pano,
            (
@@ -1866,6 +2170,8 @@ export function searchListings(filters: ListingFilters = {}): ListingCard[] {
       area: String(row.area),
       cityLine: String(row.city_line),
       floorPlanPath: str(row, "floor_plan_path"),
+      latitude: num(row, "latitude"),
+      longitude: num(row, "longitude"),
       tenantId: String(row.tenant_id),
       tenantName: String(row.tenant_name),
     }

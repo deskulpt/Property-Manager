@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { EmptyState } from "@/components/product"
+import { matterportEmbedSrc } from "@/lib/matterport"
 import "pannellum/build/pannellum.css"
 
 type Media = { id: string; kind: "photo" | "gif" | "video" | "pano"; url: string; caption: string }
@@ -173,33 +174,45 @@ export function UnitGallery({
         ) : null}
 
         {tab === "walk" ? (
-          matterportUrl ? (
-            <div>
-              <iframe
-                title="Matterport walkthrough"
-                src={matterportUrl}
-                className="h-[480px] w-full border border-border bg-paper-2"
-                allow="fullscreen; xr-spatial-tracking"
-                allowFullScreen
-              />
-              <p className="mt-2 text-sm text-ink-soft">
-                Live Matterport showcase embed (demo seed). DeSkulpt stores the iframe URL only.
-              </p>
-              <a
-                href={matterportUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-2 inline-block text-sm font-semibold text-terra hover:underline"
-              >
-                Open walkthrough in a new tab →
-              </a>
-            </div>
-          ) : (
-            <EmptyState
-              title="No walkthrough URL"
-              body="Paste a Matterport show URL on the unit when you are ready. The slot stays an iframe."
-            />
-          )
+          (() => {
+            const embedSrc = matterportEmbedSrc(matterportUrl)
+            if (!embedSrc) {
+              return (
+                <EmptyState
+                  title="No walkthrough URL"
+                  body="Paste a Matterport show URL (https://my.matterport.com/show/?m=…) on the unit when you are ready. The slot stays an iframe."
+                />
+              )
+            }
+            return (
+              <div>
+                <div className="relative min-h-[520px] w-full border border-border bg-paper-2">
+                  <iframe
+                    title="Matterport walkthrough"
+                    src={embedSrc}
+                    className="absolute inset-0 h-full w-full pointer-events-auto"
+                    allow="fullscreen; xr-spatial-tracking; accelerometer; gyroscope"
+                    allowFullScreen
+                    referrerPolicy="no-referrer-when-downgrade"
+                    sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-presentation"
+                    loading="lazy"
+                  />
+                </div>
+                <p className="mt-2 text-sm text-ink-soft">
+                  Interactive Matterport showcase (demo seed). DeSkulpt stores the iframe URL only —
+                  orbit and click inside the tour.
+                </p>
+                <a
+                  href={embedSrc}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 inline-block text-sm font-semibold text-terra hover:underline"
+                >
+                  Open walkthrough in a new tab →
+                </a>
+              </div>
+            )
+          })()
         ) : null}
       </div>
     </div>

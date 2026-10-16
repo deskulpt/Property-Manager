@@ -1,3 +1,4 @@
+import Link from "next/link"
 import { notFound } from "next/navigation"
 import { HotspotEditor } from "@/components/floor/hotspot-editor"
 import { PageHeader } from "@/components/product"
@@ -29,6 +30,21 @@ export default async function FloorPlanEditorPage({ params }: { params: Promise<
         </label>
         <SubmitButton pendingLabel="Uploading…">Upload floor plan</SubmitButton>
       </form>
+      <div className="mb-6 border border-ink/10 bg-paper-2 p-4">
+        <p className="font-mono text-[11px] uppercase tracking-wider text-ink-faint">QR posters</p>
+        <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-sm">
+          {property.units.map((unit) => (
+            <li key={unit.id}>
+              <Link
+                href={`/landlord/poster/${unit.id}`}
+                className="font-semibold text-terra hover:underline"
+              >
+                Unit {unit.code} · Print QR poster
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </div>
       <HotspotEditor
         propertyId={property.id}
         src={property.floorPlanPath}

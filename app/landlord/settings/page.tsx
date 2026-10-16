@@ -1,6 +1,8 @@
 import { PageHeader } from "@/components/product"
 import { CurrencyForm } from "@/components/landlord/currency-form"
+import { DomainSettings } from "@/components/landlord/domain-settings"
 import { PhoneOtpForm } from "@/components/otp/phone-otp"
+import { getTenantPackage, listCustomDomains } from "@/lib/db"
 import { getSessionUser } from "@/lib/session"
 
 export const metadata = { title: "Landlord settings" }
@@ -8,14 +10,29 @@ export const metadata = { title: "Landlord settings" }
 export default async function LandlordSettingsPage() {
   const user = await getSessionUser()
   if (!user?.tenantId) return null
+  const packageTier = user.tenantPackage ?? getTenantPackage(user.tenantId)
+  const domains = listCustomDomains(user.tenantId)
 
   return (
     <div>
       <PageHeader
         kicker="Organisation"
-        title="Display currency and phone"
-        lede="NRI landlords can view books in USD, CAD, or GBP. Charges, GST, UPI, and eNACH stay in INR. OTP accepts any E.164 number — not only +91."
+        title="Settings"
+        lede="Display currency, phone OTP demo, and PRO custom domains for listings on your own hostname."
       />
+      <section className="mb-10 bg-card p-4 ring-1 ring-foreground/10 md:p-6">
+        <h2 className="font-sans text-lg font-extrabold">Package</h2>
+        <p className="mt-1 text-sm text-ink-soft">
+          Current plan:{" "}
+          <span className="font-bold uppercase tracking-wide text-ink">{packageTier}</span>
+          {packageTier === "pro"
+            ? " — custom domains unlocked."
+            : " — upgrade to PRO for a custom listings hostname."}
+        </p>
+      </section>
+      <section className="mb-10 bg-card p-4 ring-1 ring-foreground/10 md:p-6">
+        <DomainSettings packageTier={packageTier} domains={domains} />
+      </section>
       <section className="mb-10 bg-card p-4 ring-1 ring-foreground/10 md:p-6">
         <h2 className="font-sans text-lg font-extrabold">Display currency</h2>
         <p className="mt-1 text-sm text-ink-soft">

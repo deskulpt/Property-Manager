@@ -69,6 +69,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           currentId={session?.id ?? ""}
           unread={unread}
           role={session?.role ?? null}
+          signedIn={Boolean(session)}
         />
         <div className="flex-1">{children}</div>
         <footer className="border-t border-white/10 bg-brand-deep px-4 py-12 text-paper/65 md:px-8">

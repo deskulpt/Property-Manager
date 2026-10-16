@@ -1,5 +1,6 @@
 import { EmptyState, PageHeader } from "@/components/product"
 import { ListingBoard } from "@/components/listings/listing-board"
+import { ListingsMap } from "@/components/map/listings-map"
 import { ListingsFilterForm } from "@/components/listings/filter-form"
 import { listingFacets, searchListings, type ListingFilters } from "@/lib/db"
 import type { UnitStatus } from "@/lib/format"
@@ -71,6 +72,24 @@ export default async function ListingsPage({
       <div className="grid gap-8 lg:grid-cols-[280px_1fr]">
         <ListingsFilterForm facets={facets} filters={filters} />
         <div>
+          <ListingsMap
+            pins={Array.from(
+              new Map(
+                results
+                  .filter((card) => card.latitude != null && card.longitude != null)
+                  .map((card) => [
+                    card.propertyId,
+                    {
+                      id: card.propertyId,
+                      lat: card.latitude as number,
+                      lng: card.longitude as number,
+                      label: `${card.propertyName} · Unit ${card.code}`,
+                      href: `/properties/${card.propertySlug}/units/${card.code}`,
+                    },
+                  ]),
+              ).values(),
+            )}
+          />
           <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.16em] text-ink-faint">
             {results.length} bay{results.length === 1 ? "" : "s"}
           </p>

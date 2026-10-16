@@ -9,7 +9,16 @@ import { z } from "zod"
 import {
   assessLateFees,
   assignJob,
+  addCustomDomain,
   createApplication,
+  createLandlordAccount,
+  createVisitRequest,
+  getPasswordHashForEmail,
+  getUserByEmail,
+  getTenantPackage,
+  listCustomDomains,
+  removeCustomDomain,
+  verifyCustomDomain,
   createJob,
   createMarketDraft,
   decideApplication,
@@ -38,6 +47,7 @@ import { t } from "@/lib/i18n"
 import { toE164, type DisplayCurrency, type PaymentMethodKind } from "@/lib/market"
 import { MARKET_CHECKLIST_KEYS, type MarketChecklistKey } from "@/lib/market-checklist"
 import { notify, notifyMany } from "@/lib/notifications"
+import { hashPassword, passwordPolicyError, verifyPassword } from "@/lib/password"
 import { demoOtpCode, requestDemoOtp, verifyDemoOtp } from "@/lib/otp"
 import { demoPayments } from "@/lib/payments"
 import { staffCapabilities } from "@/lib/permissions"
@@ -56,6 +66,148 @@ function issues(error: z.ZodError) {
     if (!fieldErrors[key]) fieldErrors[key] = issue.message
   }
   return fieldErrors
+}
+
+
+export type AuthFormState = {
+  error?: string | null
+  fieldErrors?: Record<string, string>
+}
+
+const signupSchema = z.object({
+  name: z.string().trim().min(2, "Enter your name"),
+  email: z.string().trim().email("Enter a work email"),
+  password: z.string().min(8, "Use at least 8 characters"),
+  company: z.string().trim().min(2, "Enter the organisation name"),
+})
+
+export async function signupLandlord(
+  _prev: AuthFormState,
+  formData: FormData,
+): Promise<AuthFormState> {
+  const parsed = signupSchema.safeParse({
+    name: formData.get("name"),
+    email: formData.get("email"),
+    password: formData.get("password"),
+    company: formData.get("company"),
+  })
+  if (!parsed.success) {
+    return { error: "Check the highlighted fields.", fieldErrors: issues(parsed.error) }
+  }
+  const policy = passwordPolicyError(parsed.data.password)
+  if (policy) return { error: policy, fieldErrors: { password: policy } }
+  const passwordHash = await hashPassword(parsed.data.password)
+  const result = createLandlordAccount({
+    name: parsed.data.name,
+    email: parsed.data.email,
+    passwordHash,
+    company: parsed.data.company,
+    packageTier: "starter",
+  })
+  if (!result.ok) return { error: result.error, fieldErrors: {} }
+  const jar = await cookies()
+  jar.set(SESSION_COOKIE, result.userId, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 30,
+  })
+  notify({
+    userId: result.userId,
+    title: "Welcome to DeSkulpt",
+    body: `${parsed.data.company} is ready. Add a property from the landlord desk.`,
+    href: "/landlord",
+  })
+  refresh(["/", "/landlord", "/landlord/settings", "/inbox"])
+  redirect("/landlord")
+}
+
+const loginSchema = z.object({
+  email: z.string().trim().email("Enter your email"),
+  password: z.string().min(1, "Enter your password"),
+})
+
+export async function loginWithPassword(
+  _prev: AuthFormState,
+  formData: FormData,
+): Promise<AuthFormState> {
+  const parsed = loginSchema.safeParse({
+    email: formData.get("email"),
+    password: formData.get("password"),
+  })
+  if (!parsed.success) {
+    return { error: "Check the highlighted fields.", fieldErrors: issues(parsed.error) }
+  }
+  const hash = getPasswordHashForEmail(parsed.data.email)
+  if (!hash) {
+    return {
+      error: "No password login for that email. Use Sign up, or the Demo identity switcher for fixtures.",
+      fieldErrors: {},
+    }
+  }
+  const ok = await verifyPassword(parsed.data.password, hash)
+  if (!ok) return { error: "Email or password is incorrect.", fieldErrors: {} }
+  const account = getUserByEmail(parsed.data.email)
+  if (!account) return { error: "Email or password is incorrect.", fieldErrors: {} }
+  const jar = await cookies()
+  jar.set(SESSION_COOKIE, account.id, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 30,
+  })
+  refresh(["/", "/landlord", "/inbox"])
+  if (account.role === "landlord_admin") redirect("/landlord")
+  redirect("/")
+}
+
+export async function logoutSession() {
+  const jar = await cookies()
+  jar.delete(SESSION_COOKIE)
+  revalidatePath("/", "layout")
+  redirect("/")
+}
+
+export async function addLandlordDomain(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user?.tenantId || user.role !== "landlord_admin") {
+    return { ok: false as const, error: "Landlord admin session required." }
+  }
+  const result = addCustomDomain(user.tenantId, String(formData.get("hostname") ?? ""))
+  if (!result.ok) return result
+  refresh(["/landlord/settings"])
+  return { ok: true as const, id: result.domain.id, hostname: result.domain.hostname }
+}
+
+export async function checkLandlordDomainDns(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user?.tenantId || user.role !== "landlord_admin") {
+    return { ok: false as const, error: "Landlord admin session required." }
+  }
+  const domainId = String(formData.get("domainId") ?? "")
+  const observedTxt = String(formData.get("observedTxt") ?? "") || null
+  const demoForce = formData.get("demoForce") === "1" || formData.get("demoForce") === "on"
+  const result = verifyCustomDomain(user.tenantId, domainId, {
+    demoForce,
+    observedTxt,
+  })
+  if (!result.ok) return result
+  refresh(["/landlord/settings"])
+  return {
+    ok: true as const,
+    hostname: result.domain.hostname,
+    status: result.domain.status,
+  }
+}
+
+export async function removeLandlordDomain(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user?.tenantId || user.role !== "landlord_admin") {
+    return { ok: false as const, error: "Landlord admin session required." }
+  }
+  removeCustomDomain(user.tenantId, String(formData.get("domainId") ?? ""))
+  refresh(["/landlord/settings"])
+  return { ok: true as const }
 }
 
 export async function switchSession(userId: string) {
@@ -130,6 +282,72 @@ export async function submitApplication(_prev: ApplyState, formData: FormData): 
   )
   refresh(["/", "/properties", `/properties/${result.slug}`, `/properties/${result.slug}/units/${result.code}`, "/account", "/landlord", "/landlord/applications", "/inbox"])
   redirect("/account?notice=Application+submitted.+The+landlord+can+review+it+from+their+inbox.")
+}
+
+
+const visitSchema = z.object({
+  unitId: z.string().min(1),
+  name: z.string().trim().min(2, "Enter your name"),
+  email: z.string().trim().regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Enter an email"),
+  phone: z.string().trim().min(8, "Enter a phone number"),
+  note: z.string().trim().max(1000).optional(),
+  visitType: z.enum(["in_person", "virtual"]),
+  preferredAt: z.string().trim().optional(),
+})
+
+export type VisitFormState = {
+  ok?: boolean
+  error?: string | null
+  fieldErrors?: Record<string, string>
+}
+
+export async function requestVisit(
+  _prev: VisitFormState,
+  formData: FormData,
+): Promise<VisitFormState> {
+  const phoneRaw = String(formData.get("phone") ?? "").trim()
+  const digits = phoneRaw.replace(/\D/g, "")
+  const phone =
+    (phoneRaw.startsWith("+") ? phoneRaw.replace(/\s/g, "") : null) ||
+    toE164("+91", digits) ||
+    phoneRaw
+  const parsed = visitSchema.safeParse({
+    unitId: formData.get("unitId"),
+    name: formData.get("name"),
+    email: formData.get("email"),
+    phone,
+    note: formData.get("note") ?? "",
+    visitType: formData.get("visitType") || "in_person",
+    preferredAt: formData.get("preferredAt") || "",
+  })
+  if (!parsed.success) {
+    return { error: "Check the highlighted fields.", fieldErrors: issues(parsed.error) }
+  }
+  const result = createVisitRequest({
+    unitId: parsed.data.unitId,
+    name: parsed.data.name,
+    email: parsed.data.email,
+    phone: parsed.data.phone,
+    note: parsed.data.note ?? "",
+    visitType: parsed.data.visitType,
+    preferredAt: parsed.data.preferredAt || null,
+  })
+  if (!result.ok) return { error: result.error, fieldErrors: {} }
+  notifyMany(
+    landlordIds(result.tenantId).map((id) => ({
+      userId: id,
+      title: "Visit requested",
+      body: `${parsed.data.name} asked to visit Unit ${result.unitCode} at ${result.propertyName} (${parsed.data.visitType.replace("_", "-")}).`,
+      href: `/properties/${result.propertySlug}/units/${result.unitCode}`,
+    })),
+  )
+  refresh([
+    `/properties/${result.propertySlug}`,
+    `/properties/${result.propertySlug}/units/${result.unitCode}`,
+    "/inbox",
+    "/landlord",
+  ])
+  return { ok: true }
 }
 
 export async function reviewApplication(formData: FormData) {
