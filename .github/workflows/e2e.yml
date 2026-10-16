@@ -35,6 +35,8 @@ jobs:
         run: npm run build
         env:
           DESKULPT_DIST_DIR: .next
+          # Isolated seed DB so parallel prerender workers do not contend with a shared checkout DB.
+          DESKULPT_DB_PATH: ${{ runner.temp }}/deskulpt-build.sqlite
 
       - name: Run e2e
         run: npm run test:e2e
