@@ -1,5 +1,5 @@
 /**
- * Ask DeSkulpt — Slice L.0 approval queue (PRD §21).
+ * Ask Easy — Slice L.0 approval queue (PRD §21).
  * Stub runtime only: no LLM keys, no @cursor/bdk.
  * Mutating tools stay proposed until a landlord seat approves.
  */
@@ -175,7 +175,7 @@ export function stubAutofillListing(input: {
   const codeMatch = prompt.match(/\b([A-Z]\d{1,2}|U\d|P\d)\b/)
   const sqftMatch = prompt.match(/(\d{3,6})\s*(sf|sqft|sq\.?\s*ft)?/i)
   const draft: ListingDraft = {
-    propertyName: "Draft from Ask DeSkulpt",
+    propertyName: "Draft from Ask Easy",
     unitCode: codeMatch?.[1] ?? "X1",
     sqft: sqftMatch ? Number(sqftMatch[1]) : 12000,
     ratePsf: 68,

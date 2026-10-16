@@ -20,7 +20,6 @@ import {
   getPasswordHashForEmail,
   getUserByEmail,
   getTenantPackage,
-  listCustomDomains,
   removeCustomDomain,
   verifyCustomDomain,
   createJob,
@@ -1031,7 +1030,7 @@ export async function listPublicFormCountriesAction() {
   return publicFormCountries()
 }
 
-/* ── Ask DeSkulpt · Slice L.0 (PRD §21) ───────────────────────────── */
+/* ── Ask Easy · Slice L.0 (PRD §21) ───────────────────────────── */
 
 export async function approveAgenticProposal(
   proposalId: string,
@@ -1041,7 +1040,7 @@ export async function approveAgenticProposal(
     return { ok: false, error: "Switch to a landlord admin to approve proposals." }
   }
   if ((user.tenantPackage ?? getTenantPackage(user.tenantId)) !== "pro") {
-    return { ok: false, error: "Ask DeSkulpt is a PRO feature." }
+    return { ok: false, error: "Ask Easy is a PRO feature." }
   }
   const result = decideProposal({
     tenantId: user.tenantId,
@@ -1062,7 +1061,7 @@ export async function rejectAgenticProposal(
     return { ok: false, error: "Switch to a landlord admin to reject proposals." }
   }
   if ((user.tenantPackage ?? getTenantPackage(user.tenantId)) !== "pro") {
-    return { ok: false, error: "Ask DeSkulpt is a PRO feature." }
+    return { ok: false, error: "Ask Easy is a PRO feature." }
   }
   const result = decideProposal({
     tenantId: user.tenantId,
@@ -1083,7 +1082,7 @@ export async function runStubListingAutofill(
     return { ok: false, error: "Switch to a landlord admin to run autofill." }
   }
   if ((user.tenantPackage ?? getTenantPackage(user.tenantId)) !== "pro") {
-    return { ok: false, error: "Ask DeSkulpt is a PRO feature." }
+    return { ok: false, error: "Ask Easy is a PRO feature." }
   }
   const trimmed = prompt.trim()
   if (trimmed.length < 8) {

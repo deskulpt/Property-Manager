@@ -4,7 +4,7 @@ import { listAudits, listDrafts, listProposals } from "@/lib/agentic/queue"
 import { getTenantPackage } from "@/lib/db"
 import { getSessionUser } from "@/lib/session"
 
-export const metadata = { title: "Ask Easy Rental" }
+export const metadata = { title: "Ask Easy" }
 
 export default async function AskDeskulptPage() {
   const user = await getSessionUser()
@@ -18,7 +18,7 @@ export default async function AskDeskulptPage() {
     <div>
       <PageHeader
         kicker="Slice L.0 · PRD §21"
-        title="Ask Easy Rental"
+        title="Ask Easy"
         lede="Stub agent proposes tools; you approve before any job, notify, or publish. No live LLM and no @cursor/bdk dependency."
       />
       <AskDeskulptPanel
