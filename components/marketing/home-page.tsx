@@ -21,7 +21,7 @@ export function HomePage({
           className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_20%_0%,rgb(14_110_140/0.14),transparent_55%),radial-gradient(ellipse_at_90%_40%,rgb(19_37_58/0.08),transparent_50%)]"
           aria-hidden
         />
-        <div className="mx-auto grid min-h-[min(78vh,720px)] max-w-[1200px] items-center gap-10 overflow-visible px-4 pb-14 pt-12 md:grid-cols-[0.95fr_1.05fr] md:gap-12 md:px-8 md:pb-28 md:pt-16">
+        <div className="mx-auto grid min-h-[min(78vh,720px)] max-w-[1200px] items-center gap-10 overflow-visible px-4 pb-14 pt-12 md:grid-cols-[0.95fr_1.05fr] md:gap-12 md:px-8 md:pb-16 md:pt-16">
           <div>
             <p className="hero-brand">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -30,7 +30,7 @@ export function HomePage({
                 alt="Easy Rental"
                 width={420}
                 height={78}
-                className="h-16 w-auto object-contain md:h-24"
+                className="h-20 w-auto object-contain md:h-28"
               />
             </p>
             <h1 className="hero-rise mt-6 max-w-[22ch] font-serif text-2xl font-medium leading-snug tracking-tight text-ink md:text-3xl">
@@ -57,8 +57,8 @@ export function HomePage({
           </div>
 
           {/* Portal showcase — dominant right visual; stacks under copy on mobile */}
-          <div className="hero-rise relative w-full" aria-label="Product screenshots">
-            <div className="relative mx-auto max-w-[560px] md:max-w-none">
+          <div className="hero-rise w-full" aria-label="Product screenshots">
+            <div className="mx-auto flex max-w-[560px] flex-col gap-3 md:max-w-none">
               <Link
                 href="/listings"
                 className="group relative block overflow-hidden border border-ink/20 bg-brand shadow-[0_24px_60px_-28px_rgb(19_37_58/0.55)]"
@@ -81,10 +81,10 @@ export function HomePage({
                 />
               </Link>
 
-              <div className="mt-3 grid grid-cols-2 gap-3 md:mt-0 md:absolute md:-bottom-6 md:-left-4 md:w-[58%] md:grid-cols-1 md:gap-3 lg:-left-8">
+              <div className="grid grid-cols-2 gap-3">
                 <Link
                   href="/properties/waterman/units/B1"
-                  className="group overflow-hidden border border-ink/20 bg-paper shadow-[0_18px_40px_-24px_rgb(19_37_58/0.5)]"
+                  className="group overflow-hidden border border-ink/20 bg-paper"
                 >
                   <div className="border-b border-ink/10 bg-paper-2 px-2.5 py-1.5 font-mono text-[9px] uppercase tracking-[0.14em] text-ink-faint">
                     Unit · Matterport
@@ -95,12 +95,12 @@ export function HomePage({
                     alt="Unit B1 Matterport walkthrough"
                     width={1280}
                     height={800}
-                    className="aspect-[16/10] w-full object-cover object-top transition duration-500 group-hover:scale-[1.02]"
+                    className="aspect-[16/11] w-full object-cover object-top transition duration-500 group-hover:scale-[1.02]"
                   />
                 </Link>
                 <Link
                   href="/landlord/ask"
-                  className="group overflow-hidden border border-ink/20 bg-paper shadow-[0_18px_40px_-24px_rgb(19_37_58/0.5)] md:ml-8"
+                  className="group overflow-hidden border border-ink/20 bg-paper"
                 >
                   <div className="border-b border-ink/10 bg-paper-2 px-2.5 py-1.5 font-mono text-[9px] uppercase tracking-[0.14em] text-ink-faint">
                     Landlord · Ask Easy
@@ -111,12 +111,12 @@ export function HomePage({
                     alt="Ask Easy landlord assistant"
                     width={1280}
                     height={800}
-                    className="aspect-[16/10] w-full object-cover object-top transition duration-500 group-hover:scale-[1.02]"
+                    className="aspect-[16/11] w-full object-cover object-top transition duration-500 group-hover:scale-[1.02]"
                   />
                 </Link>
               </div>
             </div>
-            <p className="mt-10 hidden font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint md:block md:mt-14">
+            <p className="mt-4 font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
               Portal · listings · walkthrough · landlord desk
             </p>
           </div>

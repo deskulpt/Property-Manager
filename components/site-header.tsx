@@ -174,7 +174,7 @@ export function SiteHeader({
     <header className="sticky top-0 z-40 print:hidden">
       <UtilityStrip />
       <div className="border-b border-ink/10 bg-paper/95 backdrop-blur-md">
-        <div className="mx-auto flex max-w-[1200px] items-center justify-between gap-3 px-4 py-2.5 md:px-8">
+        <div className="mx-auto flex max-w-[1200px] items-center justify-between gap-3 px-4 py-3 md:px-8">
           <Link href="/" className="group flex shrink-0 items-center gap-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -182,7 +182,7 @@ export function SiteHeader({
               alt=""
               width={220}
               height={40}
-              className="h-10 w-auto object-contain md:h-12"
+              className="h-11 w-auto object-contain md:h-14"
             />
             <span className="sr-only">{t("app.name")}</span>
           </Link>
