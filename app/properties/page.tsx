@@ -21,7 +21,7 @@ export default function PropertiesPage() {
       <PageHeader
         kicker="Public portfolio"
         title="Buildings you can walk."
-        lede="Every landlord on DeSkulpt publishes here. Open a floor plan, then a bay. Seeded organisations do not share a ledger."
+        lede="Every landlord on Easy Rental publishes here. Open a floor plan, then a bay. Seeded organisations do not share a ledger."
       />
       <div className="grid gap-6 md:grid-cols-2">
         {portfolio.map((property, index) => {

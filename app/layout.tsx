@@ -31,16 +31,20 @@ const mono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "DeSkulpt",
-    template: "%s · DeSkulpt",
+    default: "Easy Rental",
+    template: "%s · Easy Rental",
   },
   description:
     "Multi-tenant industrial leasing desk. Browse bays, apply, and run a landlord portfolio with demo verification and demo payments.",
-  applicationName: "DeSkulpt",
+  applicationName: "Easy Rental",
   icons: {
-    icon: "/icons/icon-192.png",
-    apple: "/icons/icon-192.png",
+    icon: [
+      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    apple: "/apple-touch-icon.png",
   },
+  metadataBase: new URL("https://easyrental.space"),
 }
 
 export const viewport: Viewport = {
@@ -75,11 +79,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <footer className="border-t border-white/10 bg-brand-deep px-4 py-12 text-paper/65 md:px-8">
           <div className="mx-auto flex max-w-[1200px] flex-col gap-8 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="font-serif text-2xl font-semibold tracking-tight text-paper">
-                {t("app.name")}
-                <span className="text-terra">.</span>
-              </p>
-              <p className="mt-2 max-w-sm font-mono text-xs leading-relaxed">{t("app.tagline")}</p>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="Easy Rental" className="h-10 w-auto object-contain brightness-110" />
+              <p className="mt-3 max-w-sm font-mono text-xs leading-relaxed">{t("app.tagline")}</p>
+              <p className="mt-2 max-w-sm text-sm text-paper/80">{t("app.legal")}</p>
             </div>
             <nav
               className="flex flex-wrap gap-x-5 gap-y-2 font-mono text-xs uppercase tracking-[0.12em]"

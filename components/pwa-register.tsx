@@ -32,7 +32,7 @@ export function InstallButton() {
   }, [])
 
   if (installed) {
-    return <p className="text-sm text-ink-soft">DeSkulpt is installed on this device.</p>
+    return <p className="text-sm text-ink-soft">Easy Rental is installed on this device.</p>
   }
   if (!prompt) {
     return (
@@ -48,7 +48,7 @@ export function InstallButton() {
         void prompt.prompt()
       }}
     >
-      Install DeSkulpt
+      Install Easy Rental
     </Button>
   )
 }

@@ -14,7 +14,7 @@ export default async function CmsHomePage() {
 
   const cards = [
     caps.personas.includes("platform_staff")
-      ? { href: "/cms/staff", title: "Platform staff", body: "DeSkulpt operators and their roles." }
+      ? { href: "/cms/staff", title: "Platform staff", body: "Easy Rental operators and their roles." }
       : null,
     caps.personas.includes("landlords")
       ? { href: "/cms/landlords", title: "Landlords", body: "Organisations and admin accounts. Invite a demo landlord." }

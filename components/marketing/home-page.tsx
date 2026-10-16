@@ -23,8 +23,15 @@ export function HomePage({
         />
         <div className="mx-auto grid min-h-[min(72vh,640px)] max-w-[1200px] items-end gap-10 px-4 pb-14 pt-16 md:grid-cols-[1.1fr_0.9fr] md:px-8 md:pb-20 md:pt-24">
           <div>
-            <p className="hero-brand font-serif text-4xl font-semibold tracking-tight text-brand md:text-5xl">
-              DeSkulpt<span className="text-terra">.</span>
+            <p className="hero-brand">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/logo.png"
+                alt="Easy Rental"
+                width={480}
+                height={270}
+                className="h-14 w-auto object-contain md:h-20"
+              />
             </p>
             <h1 className="hero-rise mt-5 max-w-[22ch] font-serif text-2xl font-medium leading-snug tracking-tight text-ink md:text-3xl">
               Industrial bays, mapped and leased online.
@@ -99,7 +106,7 @@ export function HomePage({
           BBM Logistics Parks and Harbourline Yards India run quality industrial space across
           Bhiwandi, Whitefield, and Sriperumbudur — and the old pattern is familiar: availabilities
           stuck on “Coming Soon,” every lead in one WhatsApp thread, tenants with no way to
-          transact. DeSkulpt closes that gap for more than one landlord.
+          transact. Easy Rental closes that gap for more than one landlord.
         </p>
         <div className="reveal mt-10 grid border border-ink/20 md:grid-cols-2">
           <div className="bg-paper-2 p-6 md:p-9">
@@ -126,7 +133,7 @@ export function HomePage({
           </div>
           <div className="bg-brand p-6 text-paper md:p-9">
             <h3 className="font-mono text-xs font-bold tracking-[0.14em] text-[#7eb8cc] uppercase">
-              Where DeSkulpt takes it
+              Where Easy Rental takes it
             </h3>
             <ul className="mt-4">
               {[

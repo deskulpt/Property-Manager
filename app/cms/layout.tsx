@@ -21,7 +21,7 @@ export default async function CmsLayout({ children }: { children: React.ReactNod
     return (
       <RoleGate
         title="Platform CMS"
-        body="Switch to a DeSkulpt staff identity — Avery (Super Admin), Sam (Account Manager), Priya (Service Manager), Chris (Property Manager), or Jordan (Merchandiser)."
+        body="Switch to an Easy Rental staff identity — Avery (Super Admin), Sam (Account Manager), Priya (Service Manager), Chris (Property Manager), or Jordan (Merchandiser)."
       />
     )
   }
@@ -32,7 +32,7 @@ export default async function CmsLayout({ children }: { children: React.ReactNod
   return (
     <PortalFrame
       kicker="SaaS Super Admin Org"
-      title={`${roleLabel(user.role)} · DeSkulpt`}
+      title={`${roleLabel(user.role)} · Easy Rental`}
       links={links}
     >
       {children}

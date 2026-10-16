@@ -1,5 +1,5 @@
 /**
- * Matterport show-URL allowlist. DeSkulpt stores an iframe src only —
+ * Matterport show-URL allowlist. Easy Rental stores an iframe src only —
  * never hosts Matterport assets or the Showcase SDK.
  *
  * Accepted form: https://my.matterport.com/show/?m=<modelId>

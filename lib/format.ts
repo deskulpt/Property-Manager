@@ -125,7 +125,7 @@ export function identityLabel(user: {
   serviceArea?: string | null
 }) {
   if (isStaffRole(user.role)) {
-    return `${user.name} · DeSkulpt · ${roleLabel(user.role)}`
+    return `${user.name} · Easy Rental · ${roleLabel(user.role)}`
   }
   if (user.role === "landlord_admin") {
     return `${user.name} · ${user.tenantName ?? "Landlord"} admin`

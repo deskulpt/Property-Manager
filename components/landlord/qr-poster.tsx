@@ -120,7 +120,7 @@ export function QrPoster(props: QrPosterDetails) {
 
           <footer className="flex items-end justify-between gap-4 border-t border-ink/10 pt-6">
             <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
-              DeSkulpt · industrial leasing
+              Easy Rental · industrial leasing
             </p>
             <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
               A4 poster
