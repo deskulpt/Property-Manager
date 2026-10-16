@@ -7,6 +7,10 @@ import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import {
+  decideProposal,
+  stubAutofillListing,
+} from "@/lib/agentic/queue"
+import {
   assessLateFees,
   assignJob,
   addCustomDomain,
@@ -1025,4 +1029,71 @@ export async function submitAddLanguage(
 /** Used by the verify page to pass countries without importing db in the client. */
 export async function listPublicFormCountriesAction() {
   return publicFormCountries()
+}
+
+/* ── Ask DeSkulpt · Slice L.0 (PRD §21) ───────────────────────────── */
+
+export async function approveAgenticProposal(
+  proposalId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) {
+    return { ok: false, error: "Switch to a landlord admin to approve proposals." }
+  }
+  if ((user.tenantPackage ?? getTenantPackage(user.tenantId)) !== "pro") {
+    return { ok: false, error: "Ask DeSkulpt is a PRO feature." }
+  }
+  const result = decideProposal({
+    tenantId: user.tenantId,
+    proposalId,
+    actorId: user.id,
+    decision: "approved",
+  })
+  if (!result.ok) return result
+  refresh(["/landlord/ask", "/landlord/jobs", "/landlord", "/provider", "/inbox"])
+  return { ok: true }
+}
+
+export async function rejectAgenticProposal(
+  proposalId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) {
+    return { ok: false, error: "Switch to a landlord admin to reject proposals." }
+  }
+  if ((user.tenantPackage ?? getTenantPackage(user.tenantId)) !== "pro") {
+    return { ok: false, error: "Ask DeSkulpt is a PRO feature." }
+  }
+  const result = decideProposal({
+    tenantId: user.tenantId,
+    proposalId,
+    actorId: user.id,
+    decision: "rejected",
+  })
+  if (!result.ok) return result
+  refresh(["/landlord/ask"])
+  return { ok: true }
+}
+
+export async function runStubListingAutofill(
+  prompt: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) {
+    return { ok: false, error: "Switch to a landlord admin to run autofill." }
+  }
+  if ((user.tenantPackage ?? getTenantPackage(user.tenantId)) !== "pro") {
+    return { ok: false, error: "Ask DeSkulpt is a PRO feature." }
+  }
+  const trimmed = prompt.trim()
+  if (trimmed.length < 8) {
+    return { ok: false, error: "Describe the bay in a short prompt (at least 8 characters)." }
+  }
+  stubAutofillListing({
+    tenantId: user.tenantId,
+    prompt: trimmed,
+    actorId: user.id,
+  })
+  refresh(["/landlord/ask"])
+  return { ok: true }
 }
