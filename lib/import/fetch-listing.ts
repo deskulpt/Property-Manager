@@ -18,6 +18,18 @@ export type FetchListingResult = {
 
 const FETCH_TIMEOUT_MS = 6_000
 
+/** Reject thin/marketing-shell parses so the demo fixture can take over. */
+function isUsableParse(listing: ImportedListing): boolean {
+  if (!listing.title || listing.sqft < 200) return false
+  if (listing.rent <= 1) return false
+  if (listing.address === "Address TBD") return false
+  // Generic portal chrome titles (homepage / search shells)
+  if (/without brokerage|buy,? sale|search properties|find (a )?home/i.test(listing.title)) {
+    return false
+  }
+  return true
+}
+
 async function tryFetchPublicHtml(url: string): Promise<string | null> {
   try {
     const ctrl = new AbortController()
@@ -78,7 +90,7 @@ export async function fetchAndParseListing(input: {
     if (live) {
       try {
         const listing = adapter.parse(live, parsedUrl)
-        if (listing.title && listing.sqft > 0) {
+        if (isUsableParse(listing)) {
           return {
             listing,
             usedFixture: false,
