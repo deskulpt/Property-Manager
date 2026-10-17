@@ -59,7 +59,13 @@ import { hashPassword, passwordPolicyError, verifyPassword } from "@/lib/passwor
 import { demoOtpCode, requestDemoOtp, verifyDemoOtp } from "@/lib/otp"
 import { demoPayments } from "@/lib/payments"
 import { staffCapabilities } from "@/lib/permissions"
-import { getSessionUser, SESSION_COOKIE } from "@/lib/session"
+import { agentCanAccessTenant } from "@/lib/agent-context"
+import {
+  clearAgentTenantCookie,
+  getSessionUser,
+  SESSION_COOKIE,
+  setAgentTenantCookie,
+} from "@/lib/session"
 import { translateEnglishCatalog, writeLocaleFile } from "@/lib/translate"
 import { simulateMatch } from "@/lib/verification"
 
@@ -222,6 +228,7 @@ export async function switchSession(userId: string) {
   const jar = await cookies()
   if (!userId || userId === "visitor") {
     jar.delete(SESSION_COOKIE)
+    await clearAgentTenantCookie()
   } else {
     const user = getUser(userId)
     if (!user) return
@@ -231,8 +238,21 @@ export async function switchSession(userId: string) {
       path: "/",
       maxAge: 60 * 60 * 24 * 30,
     })
+    if (user.role !== "managing_agent") {
+      await clearAgentTenantCookie()
+    }
   }
   revalidatePath("/", "layout")
+}
+
+export async function setAgentLandlordForm(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user || user.role !== "managing_agent") return
+  const tenantId = String(formData.get("tenantId") ?? "")
+  if (!tenantId || !agentCanAccessTenant(user.id, tenantId)) return
+  await setAgentTenantCookie(tenantId)
+  revalidatePath("/agent", "layout")
+  redirect("/agent")
 }
 
 const applicationSchema = z.object({

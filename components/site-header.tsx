@@ -34,6 +34,8 @@ function deskLinks(role: Role | null | undefined, unread: number): NavLink[] {
   const links: NavLink[] = []
   if (role === "landlord_admin") {
     links.push({ href: "/landlord", label: t("nav.desk.landlord") })
+  } else if (role === "managing_agent") {
+    links.push({ href: "/agent", label: "Managing agent" })
   } else if (role === "applicant") {
     links.push({ href: "/account", label: t("nav.desk.applicant") })
     links.push({ href: "/shop", label: "Shop" })
