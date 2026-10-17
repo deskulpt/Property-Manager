@@ -1,6 +1,6 @@
 /**
- * Public contact strip for Easy Rental (India).
- * E.164 links are real format for click-to-call / WhatsApp.
+ * Public contact strip for Easy Rental.
+ * E.164 links are demo format for click-to-call / WhatsApp.
  */
 export const BRAND_CONTACT = {
   supportPhoneE164: "+912240012345",
@@ -11,6 +11,21 @@ export const BRAND_CONTACT = {
   email: "hello@easyrental.space",
   label: "Contact",
 } as const
+
+/** Canada market display hints (demo numbers — not live CA support lines). */
+export const BRAND_CONTACT_CA = {
+  supportPhoneE164: "+14165550142",
+  supportPhoneDisplay: "+1 (416) 555-0142",
+  salesPhoneE164: "+14165550143",
+  salesPhoneDisplay: "+1 (416) 555-0143",
+  whatsappE164: "14165550142",
+  email: "hello@easyrental.space",
+  label: "Contact",
+} as const
+
+export function contactForMarket(marketId: "IN" | "CA") {
+  return marketId === "CA" ? BRAND_CONTACT_CA : BRAND_CONTACT
+}
 
 export function telHref(e164: string) {
   return `tel:${e164}`

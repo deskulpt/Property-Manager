@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { Building2, Handshake, Landmark, Scale, Sparkles, Wrench } from "lucide-react"
+import { MarketFooterBlurb } from "@/components/market/market-footer-blurb"
 import { BRAND_CONTACT, mailtoHref } from "@/lib/brand-contact"
 
 const COLUMNS: { title: string; links: { href: string; label: string }[] }[] = [
@@ -45,7 +46,7 @@ const COLUMNS: { title: string; links: { href: string; label: string }[] }[] = [
     title: "Company",
     links: [
       { href: "/about", label: "About Easy Rental" },
-      { href: "/about#markets", label: "Markets (India)" },
+      { href: "/about#markets", label: "Markets (India + Canada)" },
       { href: "/about#trust", label: "Trust & safety" },
       { href: "/careers", label: "Careers" },
     ],
@@ -74,13 +75,7 @@ export function SiteFooter() {
               height={45}
               className="h-10 w-auto"
             />
-            <p className="mt-4 text-sm leading-relaxed text-paper/75">
-              Industrial leasing desk for India — warehouses, yards, and parks. A product of
-              DeSkulpt Inc.
-            </p>
-            <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.14em] text-paper/45">
-              INR · +91 · India
-            </p>
+            <MarketFooterBlurb />
           </div>
           <nav
             className="grid flex-1 grid-cols-2 gap-8 sm:grid-cols-3 lg:grid-cols-6 lg:gap-6"

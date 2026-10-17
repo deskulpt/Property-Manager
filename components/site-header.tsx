@@ -10,6 +10,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet"
 import { FlagSwitcher } from "@/components/market/flag-switcher"
+import { MarketContactStrip } from "@/components/market/market-contact-strip"
 import type { SwitchUser } from "@/components/session-switcher"
 import { logoutSession } from "@/lib/actions"
 import {
@@ -73,96 +74,6 @@ function NavItem({ link }: { link: NavLink }) {
   )
 }
 
-function UtilityStrip() {
-  const wa = whatsappHref(
-    BRAND_CONTACT.whatsappE164,
-    "Hello Easy Rental — I have a question about industrial leasing.",
-  )
-  return (
-    <div className="border-b border-white/10 bg-brand text-paper">
-      <div className="mx-auto flex max-w-[1200px] items-center justify-between gap-3 px-4 py-1.5 md:px-8">
-        {/* Desktop: full numbers + CTAs */}
-        <div className="hidden min-w-0 flex-1 items-center gap-x-4 gap-y-1 text-[12px] sm:flex">
-          <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.12em] text-paper/55">
-            {BRAND_CONTACT.label}
-          </span>
-          <a
-            href={telHref(BRAND_CONTACT.supportPhoneE164)}
-            className="truncate text-paper/90 transition-colors hover:text-paper"
-          >
-            Support {BRAND_CONTACT.supportPhoneDisplay}
-          </a>
-          <span className="text-paper/30" aria-hidden>
-            ·
-          </span>
-          <a
-            href={telHref(BRAND_CONTACT.salesPhoneE164)}
-            className="truncate text-paper/90 transition-colors hover:text-paper"
-          >
-            Sales {BRAND_CONTACT.salesPhoneDisplay}
-          </a>
-        </div>
-
-        {/* Mobile: compact icon buttons */}
-        <div className="flex flex-1 items-center gap-1 sm:hidden">
-          <a
-            href={telHref(BRAND_CONTACT.supportPhoneE164)}
-            className="inline-flex h-8 w-8 items-center justify-center text-paper/90"
-            aria-label={`Call support ${BRAND_CONTACT.supportPhoneDisplay}`}
-          >
-            <Phone className="h-4 w-4" />
-          </a>
-          <a
-            href={wa}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex h-8 w-8 items-center justify-center text-paper/90"
-            aria-label="WhatsApp Easy Rental"
-          >
-            <MessageCircle className="h-4 w-4" />
-          </a>
-          <a
-            href={mailtoHref(BRAND_CONTACT.email)}
-            className="inline-flex h-8 w-8 items-center justify-center text-paper/90"
-            aria-label={`Email ${BRAND_CONTACT.email}`}
-          >
-            <Mail className="h-4 w-4" />
-          </a>
-          <span className="ml-1 truncate font-mono text-[10px] text-paper/55">
-            {BRAND_CONTACT.supportPhoneDisplay}
-          </span>
-        </div>
-
-        <div className="hidden items-center gap-2 sm:flex">
-          <a
-            href={wa}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 border border-paper/25 bg-paper/10 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-paper transition-colors hover:bg-paper/20"
-          >
-            <MessageCircle className="h-3.5 w-3.5" aria-hidden />
-            WhatsApp
-          </a>
-          <a
-            href={telHref(BRAND_CONTACT.supportPhoneE164)}
-            className="inline-flex items-center gap-1.5 border border-paper/25 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-paper transition-colors hover:bg-paper/10"
-          >
-            <Phone className="h-3.5 w-3.5" aria-hidden />
-            Call
-          </a>
-          <a
-            href={mailtoHref(BRAND_CONTACT.email)}
-            className="inline-flex items-center gap-1.5 px-2 py-1 text-[11px] font-medium tracking-wide text-paper/80 transition-colors hover:text-paper"
-          >
-            <Mail className="h-3.5 w-3.5" aria-hidden />
-            Email
-          </a>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 export function SiteHeader({
   users: _users,
   currentId: _currentId,
@@ -185,7 +96,7 @@ export function SiteHeader({
 
   return (
     <header className="sticky top-0 z-40 print:hidden">
-      <UtilityStrip />
+      <MarketContactStrip />
       <div className="border-b border-ink/10 bg-paper/95 backdrop-blur-md">
         <div className="mx-auto flex max-w-[1200px] items-center justify-between gap-3 px-4 py-2.5 md:px-8">
           <Link href="/" className="group flex shrink-0 items-center gap-2">
