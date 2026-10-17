@@ -29,24 +29,24 @@ export function AdminSessionBar({
       className="pointer-events-none fixed inset-x-0 bottom-0 z-50 print:hidden"
     >
       <div
-        className="pointer-events-auto border-t border-[#9ed0e0]/35 bg-brand text-paper"
+        className="pointer-events-auto sticky-bar-accent bg-brand text-paper"
         style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
       >
         <div className="mx-auto flex max-w-[1200px] flex-wrap items-center justify-between gap-3 px-4 py-2.5 md:px-8">
           <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-[12px]">
             <p className="flex min-w-0 items-center gap-1.5 truncate">
-              <Building2 className="h-3.5 w-3.5 shrink-0 text-[#9ed0e0]" aria-hidden />
-              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#9ed0e0]">
+              <Building2 className="h-3.5 w-3.5 shrink-0 text-brand-2-light" aria-hidden />
+              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-brand-2-light">
                 Landlord org
               </span>{" "}
               <span className="font-semibold text-paper">{orgLabel}</span>
             </p>
-            <span className="hidden text-paper/25 sm:inline" aria-hidden>
+            <span className="hidden text-brand-3-light/70 sm:inline" aria-hidden>
               ·
             </span>
             <p className="flex min-w-0 items-center gap-1.5 truncate">
-              <UserCog className="h-3.5 w-3.5 shrink-0 text-[#9ed0e0]" aria-hidden />
-              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#9ed0e0]">
+              <UserCog className="h-3.5 w-3.5 shrink-0 text-brand-3-light" aria-hidden />
+              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-brand-3-light">
                 Staff role
               </span>{" "}
               <span className="font-semibold text-paper">{staffLabel}</span>

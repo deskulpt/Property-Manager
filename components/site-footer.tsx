@@ -68,11 +68,11 @@ export function SiteFooter() {
           <div className="max-w-sm">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/logo.svg"
+              src="/logo-white.svg"
               alt="Easy Rental"
               width={200}
               height={45}
-              className="h-10 w-auto brightness-110"
+              className="h-10 w-auto"
             />
             <p className="mt-4 text-sm leading-relaxed text-paper/75">
               Industrial leasing desk for India — warehouses, yards, and parks. A product of
@@ -101,8 +101,8 @@ export function SiteFooter() {
                           : Scale
               return (
               <div key={col.title}>
-                <p className="flex items-center gap-1.5 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-[#9ed0e0]">
-                  <Icon className="h-3.5 w-3.5" aria-hidden />
+                <p className="flex items-center gap-1.5 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-2-light">
+                  <Icon className="h-3.5 w-3.5 text-brand-3-light" aria-hidden />
                   {col.title}
                 </p>
                 <ul className="mt-3 grid gap-2">

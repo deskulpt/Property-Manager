@@ -5,9 +5,10 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
-  DeSkulpt visual system — blueprint paper / industrial leasing.
-  Cool drafting paper (not cream), steel navy brand, cyan mark accent.
-  Rejects purple SaaS, cream+terracotta Fable skins, and glow/pill clusters.
+  Easy Rental brand — industrial leasing desk.
+  1 primary navy · 2 cyan mark · 3 steel gold (warm accent).
+  Success teal for positive states. Blueprint paper (not cream).
+  Rejects purple SaaS, cream+terracotta Fable skins, glow/pill clusters.
 */
 
 @theme inline {
@@ -17,27 +18,36 @@
   --font-mono: var(--font-mono-face), "IBM Plex Mono", ui-monospace, monospace;
   --font-heading: var(--font-serif-face), "Source Serif 4", Georgia, serif;
   --font-serif: var(--font-serif-face), "Source Serif 4", Georgia, serif;
+  /* Brand triad — WCAG AA on paper / navy */
+  --color-brand: #13253a;
+  --color-brand-deep: #0a1624;
+  --color-brand-2: #0e6e8c;
+  --color-brand-2-dark: #0a5570;
+  --color-brand-2-light: #9ed0e0;
+  --color-brand-3: #8f6f1f;
+  --color-brand-3-dark: #6b5210;
+  --color-brand-3-light: #d4b85a;
+  /* Aliases — cyan mark (literal hex so Tailwind utilities resolve) */
   --color-terra: #0e6e8c;
   --color-terra-dark: #0a5570;
   --color-mark: #0e6e8c;
   --color-mark-dark: #0a5570;
-  --color-brand: #13253a;
-  --color-brand-deep: #0a1624;
   --color-paper: #eef2f5;
   --color-paper-2: #e3e9ef;
   --color-paper-3: #d5dee7;
   --color-ink: #12151a;
   --color-ink-soft: #3d4654;
   --color-ink-faint: #5c6573;
-  --color-avail: #2f7a4e;
-  --color-pending: #8a6b1f;
+  --color-avail: #1f6b4a;
+  --color-success: #1f6b4a;
+  --color-pending: #8f6f1f;
   --color-leased: #5c6573;
-  /* Section accent cues — navy / cyan / paper family, no purple or neon */
+  /* Section accent cues — navy / cyan / gold family, no purple or neon */
   --color-section-landlord: #0e6e8c;
   --color-section-cms: #1a5f7a;
   --color-section-console: #13253a;
-  --color-section-provider: #2f7a4e;
-  --color-section-occupant: #8a6b1f;
+  --color-section-provider: #1f6b4a;
+  --color-section-occupant: #8f6f1f;
   --color-focus: #0a5570;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -98,8 +108,8 @@
   --ring: #0a5570;
   --chart-1: #0e6e8c;
   --chart-2: #13253a;
-  --chart-3: #2f7a4e;
-  --chart-4: #9a7b2f;
+  --chart-3: #1f6b4a;
+  --chart-4: #8f6f1f;
   --chart-5: #6b7585;
   --radius: 0.125rem;
   --sidebar: #f7f9fb;
@@ -247,7 +257,10 @@
     background: linear-gradient(180deg, rgb(19 37 58 / 0.08), transparent 160px);
   }
   .section-tint-provider {
-    background: linear-gradient(180deg, rgb(47 122 78 / 0.08), transparent 160px);
+    background: linear-gradient(180deg, rgb(31 107 74 / 0.08), transparent 160px);
+  }
+  .section-tint-occupant {
+    background: linear-gradient(180deg, rgb(143 111 31 / 0.1), transparent 160px);
   }
   .btn-primary {
     background: var(--color-brand);
@@ -257,11 +270,44 @@
     background: var(--color-brand-deep);
   }
   .btn-accent {
-    background: var(--color-terra);
+    background: var(--color-brand-2);
     color: #fff;
   }
   .btn-accent:hover {
-    background: var(--color-terra-dark);
+    background: var(--color-brand-2-dark);
+  }
+  .btn-gold {
+    background: var(--color-brand-3);
+    color: #fff;
+  }
+  .btn-gold:hover {
+    background: var(--color-brand-3-dark);
+  }
+  .link-brand {
+    color: var(--color-brand-2-dark);
+  }
+  .link-brand:hover {
+    color: var(--color-brand);
+  }
+  .badge-brand {
+    background: rgb(19 37 58 / 0.1);
+    color: var(--color-brand);
+  }
+  .badge-cyan {
+    background: rgb(14 110 140 / 0.15);
+    color: var(--color-brand-2-dark);
+  }
+  .badge-gold {
+    background: rgb(143 111 31 / 0.18);
+    color: var(--color-brand-3-dark);
+  }
+  .badge-success {
+    background: rgb(31 107 74 / 0.15);
+    color: #145239;
+  }
+  .sticky-bar-accent {
+    border-top: 2px solid var(--color-brand-3-light);
+    box-shadow: inset 0 1px 0 rgb(158 208 224 / 0.35);
   }
 }
 

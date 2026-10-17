@@ -64,7 +64,7 @@ export function SessionSwitcher({
           key={value}
           className={
             bar
-              ? "h-9 max-w-[min(100vw-2rem,280px)] rounded-sm border border-[#9ed0e0]/40 bg-brand-deep px-2 text-[12px] text-paper outline-none focus-visible:ring-2 focus-visible:ring-[#9ed0e0]/50 disabled:opacity-50"
+              ? "h-9 max-w-[min(100vw-2rem,280px)] rounded-sm border border-brand-2-light/40 bg-brand-deep px-2 text-[12px] text-paper outline-none focus-visible:ring-2 focus-visible:ring-brand-3-light/50 disabled:opacity-50"
               : "h-8 max-w-[200px] rounded-sm border border-ink/15 bg-paper px-1.5 text-[11px] text-ink-soft outline-none focus-visible:ring-2 focus-visible:ring-terra/40 disabled:opacity-50"
           }
           onChange={(event) => {
