@@ -235,7 +235,7 @@ test.describe("account + rent calculator", () => {
   })
 
   test("rent calculator (soft-skip if absent)", async ({ page }) => {
-    for (const path of ["/rent-calculator", "/tools/rent-calculator", "/estimate", "/rent-estimate"]) {
+    for (const path of ["/tools/rent-estimate", "/rent-estimate", "/rent-calculator", "/tools/rent-calculator", "/estimate"]) {
       const { missing } = await gotoMaybe(page, path)
       if (missing) continue
       await expectPageOk(page)
