@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { Building2, Handshake, Landmark, Scale, Sparkles, Wrench } from "lucide-react"
 import { BRAND_CONTACT, mailtoHref } from "@/lib/brand-contact"
 
 const COLUMNS: { title: string; links: { href: string; label: string }[] }[] = [
@@ -9,6 +10,7 @@ const COLUMNS: { title: string; links: { href: string; label: string }[] }[] = [
       { href: "/#map", label: "Map" },
       { href: "/properties", label: "Portfolio" },
       { href: "/shop", label: "Shop" },
+      { href: "/account", label: "Applicant desk" },
       { href: "/landlord/ask", label: "Ask Easy" },
     ],
   },
@@ -84,9 +86,23 @@ export function SiteFooter() {
             className="grid flex-1 grid-cols-2 gap-8 sm:grid-cols-3 lg:grid-cols-6 lg:gap-6"
             aria-label="Site"
           >
-            {COLUMNS.map((col) => (
+            {COLUMNS.map((col) => {
+              const Icon =
+                col.title === "Product"
+                  ? Sparkles
+                  : col.title === "Landlords"
+                    ? Landmark
+                    : col.title === "Partners"
+                      ? Handshake
+                      : col.title === "Services"
+                        ? Wrench
+                        : col.title === "Company"
+                          ? Building2
+                          : Scale
+              return (
               <div key={col.title}>
-                <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-[#9ed0e0]">
+                <p className="flex items-center gap-1.5 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-[#9ed0e0]">
+                  <Icon className="h-3.5 w-3.5" aria-hidden />
                   {col.title}
                 </p>
                 <ul className="mt-3 grid gap-2">
@@ -102,7 +118,7 @@ export function SiteFooter() {
                   ))}
                 </ul>
               </div>
-            ))}
+            )})}
           </nav>
         </div>
         <p className="mt-12 border-t border-white/10 pt-6 font-mono text-[11px] text-paper/40">

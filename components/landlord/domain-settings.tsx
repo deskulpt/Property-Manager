@@ -9,6 +9,8 @@ import {
 } from "@/lib/actions"
 import type { CustomDomainRecord } from "@/lib/db"
 import type { PackageTier } from "@/lib/db"
+import Link from "next/link"
+import { Globe } from "lucide-react"
 import { SubmitButton } from "@/components/submit-button"
 
 export function DomainSettings({
@@ -28,16 +30,28 @@ export function DomainSettings({
   if (packageTier !== "pro") {
     return (
       <div className="border border-ink/10 bg-paper-2 p-4">
-        <p className="font-sans text-lg font-extrabold">Custom domain (PRO)</p>
+        <p className="flex items-center gap-2 font-sans text-lg font-extrabold"><Globe className="h-5 w-5 text-terra" aria-hidden />Custom domain (PRO)</p>
         <p className="mt-2 text-sm text-ink-soft">
           Serve public listings on your own hostname (for example{" "}
           <span className="font-mono text-ink">listings.yourcompany.com</span>). Starter organisations
           see this upgrade path; switch to Nadia (BBM · PRO) in the Demo identity menu to try the
           full connect flow, or ask platform staff to move you to PRO.
         </p>
-        <p className="mt-4 inline-block border border-terra/40 bg-terra/10 px-3 py-2 text-sm font-semibold text-terra">
-          Upgrade to PRO to unlock custom domains
-        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Link
+            href="/pricing"
+            className="inline-flex items-center gap-1.5 border border-terra/40 bg-terra/10 px-3 py-2 text-sm font-semibold text-terra hover:bg-terra/20"
+          >
+            <Globe className="h-3.5 w-3.5" aria-hidden />
+            View PRO plans and unlock custom domain
+          </Link>
+          <Link
+            href="/landlord/settings"
+            className="inline-flex items-center gap-1.5 border border-ink/15 px-3 py-2 text-sm font-semibold text-ink-soft"
+          >
+            Stay on hosted Easy Rental URL
+          </Link>
+        </div>
       </div>
     )
   }
@@ -45,7 +59,7 @@ export function DomainSettings({
   return (
     <div className="grid gap-6">
       <div>
-        <p className="font-sans text-lg font-extrabold">Custom domain (PRO)</p>
+        <p className="flex items-center gap-2 font-sans text-lg font-extrabold"><Globe className="h-5 w-5 text-terra" aria-hidden />Custom domain (PRO)</p>
         <p className="mt-1 text-sm text-ink-soft">
           When a domain is active, prospects can open your listings on that hostname. Easy Rental does
           not host Matterport files — only your listing app. DNS is verified in this demo without a

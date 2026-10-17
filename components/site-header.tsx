@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { Mail, Menu, MessageCircle, Phone } from "lucide-react"
+import { iconForHref } from "@/components/nav-icons"
 import { Button } from "@/components/ui/button"
 import {
   Sheet,
@@ -53,11 +54,13 @@ function deskLinks(role: Role | null | undefined, unread: number): NavLink[] {
 }
 
 function NavItem({ link }: { link: NavLink }) {
+  const Icon = iconForHref(link.href)
   return (
     <Link
       href={link.href}
-      className="text-[13px] font-medium tracking-tight text-ink-soft transition-colors hover:text-brand"
+      className="inline-flex items-center gap-1.5 text-[13px] font-medium tracking-tight text-ink-soft transition-colors hover:text-brand"
     >
+      <Icon className="h-3.5 w-3.5 text-terra" aria-hidden />
       {link.label}
       {link.badge != null ? <span className="ml-1 text-terra">{link.badge}</span> : null}
     </Link>
@@ -277,15 +280,19 @@ export function SiteHeader({
                       Browse
                     </p>
                     <nav className="grid gap-2" aria-label="Mobile browse">
-                      {browse.map((link) => (
+                      {browse.map((link) => {
+                        const Icon = iconForHref(link.href)
+                        return (
                         <Link
                           key={link.href}
                           href={link.href}
-                          className="text-base font-semibold tracking-tight"
+                          className="inline-flex items-center gap-2 text-base font-semibold tracking-tight"
                         >
+                          <Icon className="h-4 w-4 text-terra" aria-hidden />
                           {link.label}
                         </Link>
-                      ))}
+                        )
+                      })}
                     </nav>
                   </div>
                   <div>
@@ -293,16 +300,20 @@ export function SiteHeader({
                       {role ? `${roleHint} desk` : "Tools"}
                     </p>
                     <nav className="grid gap-2" aria-label="Mobile desk">
-                      {desk.map((link) => (
+                      {desk.map((link) => {
+                        const Icon = iconForHref(link.href)
+                        return (
                         <Link
                           key={link.href}
                           href={link.href}
-                          className="text-base font-semibold tracking-tight"
+                          className="inline-flex items-center gap-2 text-base font-semibold tracking-tight"
                         >
+                          <Icon className="h-4 w-4 text-terra" aria-hidden />
                           {link.label}
                           {link.badge != null ? ` (${link.badge})` : ""}
                         </Link>
-                      ))}
+                        )
+                      })}
                     </nav>
                   </div>
                   <nav className="grid gap-2 border-t border-ink/10 pt-4" aria-label="Account">

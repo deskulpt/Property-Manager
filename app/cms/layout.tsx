@@ -36,6 +36,7 @@ export default async function CmsLayout({ children }: { children: React.ReactNod
       kicker="SaaS Super Admin Org"
       title={`${roleLabel(user.role)} · Easy Rental`}
       links={links}
+      accent="cms"
     >
       {children}
     </PortalFrame>

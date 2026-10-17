@@ -4,7 +4,7 @@ import { requirePlatformAdmin } from "@/lib/console-gate"
 const LINKS = [
   { href: "/console", label: "Overview" },
   { href: "/console/analytics", label: "Analytics" },
-  { href: "/console/tenants", label: "Tenants" },
+  { href: "/console/tenants", label: "Landlord orgs" },
   { href: "/console/shops", label: "Shops" },
   { href: "/console/providers", label: "Providers" },
   { href: "/console/partners", label: "Partners" },
@@ -19,6 +19,7 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
       kicker="Platform console"
       title={`${user.name} · Super Admin`}
       links={LINKS}
+      accent="console"
     >
       {children}
     </PortalFrame>

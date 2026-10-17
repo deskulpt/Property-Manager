@@ -17,7 +17,8 @@
     "test:watch": "vitest test/isolation.test.ts test/shop.test.ts",
     "test:e2e": "playwright test",
     "dev:3510": "next dev -H 127.0.0.1 -p 3510",
-    "test:unit": "vitest run test/isolation.test.ts test/shop.test.ts test/partners-geo.test.ts test/partners-match.test.ts"
+    "test:unit": "vitest run test/isolation.test.ts test/shop.test.ts test/partners-geo.test.ts test/partners-match.test.ts",
+    "dev:3518": "next dev -H 127.0.0.1 -p 3518"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

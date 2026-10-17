@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { iconForHref } from "@/components/nav-icons"
 import { PageHeader } from "@/components/product"
 import { staffCapabilities } from "@/lib/permissions"
 import { getSessionUser } from "@/lib/session"
@@ -41,7 +42,7 @@ export default async function CmsHomePage() {
       <PageHeader
         kicker={roleLabel(user.role)}
         title="Persona CMS"
-        lede="List and act on people and listings your role is allowed to see. Merchandisers never receive emails. Property Managers see masked applicant contacts."
+        lede="List and act on people and listings your role is allowed to see. Landlord organisations are SaaS tenants; applicants and occupants are separate. Merchandisers never receive emails."
       />
       <ul className="mb-6 grid gap-2 text-sm text-ink-soft">
         <li>Full email: {caps.seeFullEmail ? "yes" : "no"}</li>
@@ -51,16 +52,24 @@ export default async function CmsHomePage() {
         <li>Verify / approve providers: {caps.verifyProvider || caps.approveProvider ? "yes" : "no"}</li>
       </ul>
       <div className="grid gap-3 md:grid-cols-2">
-        {cards.map((card) => (
+        {cards.map((card) => {
+          const Icon = iconForHref(card.href)
+          return (
           <Link
             key={card.href}
             href={card.href}
-            className="desk-chrome border border-ink/10 bg-card p-5 transition-colors hover:border-terra/40"
+            className="desk-chrome-cms flex gap-4 border border-ink/10 bg-card p-5 transition-colors hover:border-terra/40"
           >
-            <h2 className="font-serif text-xl font-semibold">{card.title}</h2>
-            <p className="mt-2 text-sm text-ink-soft">{card.body}</p>
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center border border-terra/25 bg-accent text-terra">
+              <Icon className="h-5 w-5" aria-hidden />
+            </span>
+            <span>
+              <h2 className="font-serif text-xl font-semibold">{card.title}</h2>
+              <p className="mt-2 text-sm text-ink-soft">{card.body}</p>
+            </span>
           </Link>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

@@ -17,6 +17,7 @@ export default async function ProviderLayout({ children }: { children: React.Rea
       kicker="Provider"
       title={`${user.trade ?? "Trade"} · ${user.serviceArea ?? ""}`}
       links={[{ href: "/provider", label: "Jobs" }, { href: "/inbox", label: "Inbox" }]}
+      accent="provider"
     >
       {children}
     </PortalFrame>

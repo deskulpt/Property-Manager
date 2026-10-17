@@ -8,7 +8,7 @@ import {
 import { requirePlatformAdmin } from "@/lib/console-gate"
 import { platformLandlordDirectory } from "@/lib/db"
 
-export const metadata = { title: "Tenants · Console" }
+export const metadata = { title: "Landlord orgs · Console" }
 
 export default async function ConsoleTenantsPage() {
   await requirePlatformAdmin()
@@ -17,8 +17,8 @@ export default async function ConsoleTenantsPage() {
     <div>
       <PageHeader
         kicker="Directory"
-        title="Landlord tenants"
-        lede="View organisations, change Starter/Pro entitlements, suspend, or switch into a landlord admin via the sticky bar."
+        title="Landlord organisations"
+        lede="SaaS tenants = landlord or property-management companies. Change Starter/Pro entitlements, suspend, or switch into a landlord admin via the sticky bar. Occupants are not listed here."
       />
       <div className="grid gap-4">
         {orgs.map((org) => (
@@ -31,7 +31,7 @@ export default async function ConsoleTenantsPage() {
                   {org.propertyCount === 1 ? "" : "s"}
                 </p>
                 <p className="mt-1 font-mono text-[11px] uppercase tracking-wider text-ink-faint">
-                  TenantID: {org.id}
+                  Org ID: {org.id}
                   {org.adminName ? ` · Admin: ${org.adminName}` : ""}
                 </p>
               </div>

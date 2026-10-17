@@ -21,12 +21,17 @@ export default async function LandlordLayout({ children }: { children: React.Rea
     return (
       <RoleGate
         title="This desk is for a landlord admin"
-        body="Create an account at Sign up, log in, or use the Demo identity switcher (Nadia for BBM, Jonah for Harbourline, Meera for Sahni NRI). Each organisation only sees its own data."
+        body="Create an account at Sign up or log in as a landlord organisation admin. Super admins can switch landlord orgs from the sticky bar (Nadia for BBM, Jonah for Harbourline, Meera for Sahni NRI). Each organisation only sees its own data — occupants use the applicant desk."
       />
     )
   }
   return (
-    <PortalFrame kicker="Landlord" title={user.tenantName ?? "Portfolio"} links={links}>
+    <PortalFrame
+      kicker="Landlord"
+      title={user.tenantName ?? "Portfolio"}
+      links={links}
+      accent="landlord"
+    >
       {children}
     </PortalFrame>
   )

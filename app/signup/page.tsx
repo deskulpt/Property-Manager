@@ -15,18 +15,17 @@ export default async function SignupPage() {
       <PageHeader
         kicker="Landlord account"
         title="Create your organisation"
-        lede="Self-serve signup for Indian landlords. You land in the landlord desk with a Starter package — no payment processor in this demo."
+        lede="Self-serve signup for Indian landlord organisations and property managers. You land in the landlord desk with a Starter package and a hosted listings link — upgrade to PRO for a custom domain."
       />
       <div className="mt-8 border border-ink/10 bg-card p-5 md:p-6">
         <SignupForm />
       </div>
       <p className="mt-6 text-sm text-ink-soft">
-        Evaluating the OSS demo without an account? Use the{" "}
-        <span className="font-semibold text-ink">Demo</span> identity switcher in the header, or{" "}
+        Already an organisation admin?{" "}
         <Link href="/login" className="font-semibold text-terra hover:underline">
-          log in
+          Log in
         </Link>
-        .
+        . Occupants and applicants apply from public listings — they do not create a landlord org here.
       </p>
     </div>
   )

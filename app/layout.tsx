@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next"
 import { IBM_Plex_Mono, Source_Sans_3, Source_Serif_4 } from "next/font/google"
-import Link from "next/link"
 import "./globals.css"
 import { AdminSessionBar } from "@/components/admin/admin-session-bar"
 import { SiteHeader } from "@/components/site-header"
@@ -8,7 +7,6 @@ import { SiteFooter } from "@/components/site-footer"
 import { PwaRegister } from "@/components/pwa-register"
 import { Toaster } from "@/components/ui/sonner"
 import { listSessionUsers, unreadCount } from "@/lib/db"
-import { t } from "@/lib/i18n"
 import { getAdminSessionUser, getSessionUser } from "@/lib/session"
 
 /** Helvetica-adjacent UI sans — professional, not display/stretched. */
@@ -37,7 +35,7 @@ export const metadata: Metadata = {
     template: "%s · Easy Rental",
   },
   description:
-    "Multi-tenant industrial leasing desk. Browse bays, apply, and run a landlord portfolio with verification and payments.",
+    "Industrial leasing desk for landlord organisations and property managers. Browse bays, apply as an occupant, and run a portfolio with verification and payments.",
   applicationName: "Easy Rental",
   icons: {
     icon: [
@@ -78,6 +76,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body
         className={`flex min-h-full flex-col bg-paper font-sans text-ink ${showAdminBar ? "pb-20" : ""}`}
       >
+        <a href="#main-content" className="skip-link">
+          Skip to main content
+        </a>
         <SiteHeader
           users={switchUsers}
           currentId={session?.id ?? ""}
@@ -85,7 +86,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           role={session?.role ?? null}
           signedIn={Boolean(session)}
         />
-        <div className="flex-1">{children}</div>
+        <main id="main-content" className="flex-1" tabIndex={-1}>
+          {children}
+        </main>
         <SiteFooter />
         {showAdminBar ? (
           <AdminSessionBar

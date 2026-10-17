@@ -52,12 +52,12 @@ export function SessionSwitcher({
         }}
       >
         <label className="sr-only" htmlFor="demo-identity">
-          Role and tenant switcher
+          Landlord organisation and staff role switcher
         </label>
         <select
           id="demo-identity"
           name="userId"
-          aria-label="Role and tenant switcher"
+          aria-label="Landlord organisation and staff role switcher"
           data-testid="demo-identity"
           disabled={pending}
           defaultValue={value}
