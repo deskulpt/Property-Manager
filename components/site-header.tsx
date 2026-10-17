@@ -181,9 +181,9 @@ export function SiteHeader({
             <img
               src="/logo.svg"
               alt=""
-              width={200}
+              width={240}
               height={56}
-              className="h-9 w-auto object-contain md:h-11"
+              className="h-11 w-auto object-contain md:h-14"
             />
             <span className="sr-only">{t("app.name")}</span>
           </Link>
