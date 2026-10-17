@@ -1,8 +1,24 @@
 import Link from "next/link"
+import dynamic from "next/dynamic"
 import { notFound } from "next/navigation"
-import { UnitGallery } from "@/components/gallery/unit-gallery"
-import { PropertyMap } from "@/components/map/property-map"
 import { SpecList, StatusBadge } from "@/components/product"
+
+const UnitGallery = dynamic(
+  () => import("@/components/gallery/unit-gallery").then((mod) => mod.UnitGallery),
+  {
+    loading: () => (
+      <div className="min-h-[280px] border border-ink/10 bg-paper-2" aria-hidden />
+    ),
+  },
+)
+const PropertyMap = dynamic(
+  () => import("@/components/map/property-map").then((mod) => mod.PropertyMap),
+  {
+    loading: () => (
+      <div className="h-[320px] border border-ink/10 bg-paper-2" aria-hidden />
+    ),
+  },
+)
 import { JsonLd } from "@/components/seo/json-ld"
 import { BookVisitForm } from "@/components/visits/book-visit-form"
 import { getUnitPage } from "@/lib/db"

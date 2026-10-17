@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react"
 import { EmptyState } from "@/components/product"
 import { matterportEmbedSrc } from "@/lib/matterport"
-import "pannellum/build/pannellum.css"
 
 type Media = { id: string; kind: "photo" | "gif" | "video" | "pano"; url: string; caption: string }
 
@@ -46,6 +45,7 @@ export function UnitGallery({
     let viewer: { destroy: () => void } | null = null
     let cancelled = false
     ;(async () => {
+      await import("pannellum/build/pannellum.css")
       await import("pannellum")
       if (cancelled || !mount.current || !window.pannellum) return
       viewer = window.pannellum.viewer(mount.current, {

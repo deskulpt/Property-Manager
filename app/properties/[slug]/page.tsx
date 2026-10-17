@@ -1,9 +1,18 @@
 import Link from "next/link"
+import dynamic from "next/dynamic"
 import { notFound } from "next/navigation"
 import { FloorPlanView } from "@/components/floor/floor-plan"
 import { FloorStackViewer } from "@/components/floor/floor-stack-viewer"
-import { PropertyMap } from "@/components/map/property-map"
 import { PageHeader, StatusBadge } from "@/components/product"
+
+const PropertyMap = dynamic(
+  () => import("@/components/map/property-map").then((mod) => mod.PropertyMap),
+  {
+    loading: () => (
+      <div className="h-[320px] border border-ink/10 bg-paper-2" aria-hidden />
+    ),
+  },
+)
 import { JsonLd } from "@/components/seo/json-ld"
 import { getPropertyBySlug } from "@/lib/db"
 import { money, monthlyRentCents, rateLabel, sqft } from "@/lib/format"

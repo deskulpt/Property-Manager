@@ -1315,7 +1315,11 @@ function floorsFor(propertyId: string): FloorRecord[] {
   )
 }
 
-function mapProperty(row: Record<string, unknown>): PropertyRecord {
+function mapProperty(
+  row: Record<string, unknown>,
+  floors?: FloorRecord[],
+  units?: UnitRecord[],
+): PropertyRecord {
   const id = String(row.id)
   return {
     id,
@@ -1332,9 +1336,44 @@ function mapProperty(row: Record<string, unknown>): PropertyRecord {
     latitude: num(row, "latitude"),
     longitude: num(row, "longitude"),
     pinCode: str(row, "pin_code"),
-    floors: floorsFor(id),
-    units: unitsFor(id),
+    floors: floors ?? floorsFor(id),
+    units: units ?? unitsFor(id),
   }
+}
+
+/** Batch floors+units for a property list — avoids per-row N+1 on catalog reads. */
+function attachPortfolioChildren(rows: Record<string, unknown>[]): PropertyRecord[] {
+  if (rows.length === 0) return []
+  const db = getDb()
+  const floorRows = asRows(
+    db.prepare("SELECT * FROM floors ORDER BY property_id, level_index ASC").all(),
+  )
+  const unitRows = asRows(db.prepare("SELECT * FROM units ORDER BY property_id, code").all())
+  const floorsByProp = new Map<string, FloorRecord[]>()
+  for (const row of floorRows) {
+    const propertyId = String(row.property_id)
+    const list = floorsByProp.get(propertyId) ?? []
+    list.push({
+      id: String(row.id),
+      tenantId: String(row.tenant_id),
+      propertyId,
+      label: String(row.label),
+      levelIndex: Number(row.level_index),
+      planPath: str(row, "plan_path"),
+    })
+    floorsByProp.set(propertyId, list)
+  }
+  const unitsByProp = new Map<string, UnitRecord[]>()
+  for (const row of unitRows) {
+    const propertyId = String(row.property_id)
+    const list = unitsByProp.get(propertyId) ?? []
+    list.push(mapUnit(row))
+    unitsByProp.set(propertyId, list)
+  }
+  return rows.map((row) => {
+    const id = String(row.id)
+    return mapProperty(row, floorsByProp.get(id) ?? [], unitsByProp.get(id) ?? [])
+  })
 }
 
 const PROPERTY_SQL = `
@@ -1348,7 +1387,9 @@ const PROPERTY_SQL = `
  * the property slug alone. Do not read the session in this function.
  */
 export function listPortfolio() {
-  return asRows(getDb().prepare(`${PROPERTY_SQL} ORDER BY t.name, p.name`).all()).map(mapProperty)
+  return attachPortfolioChildren(
+    asRows(getDb().prepare(`${PROPERTY_SQL} ORDER BY t.name, p.name`).all()),
+  )
 }
 
 export function getPropertyBySlug(slug: string) {

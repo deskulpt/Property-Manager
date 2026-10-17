@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef } from "react"
 import { googleMapsOpenUrl, isValidMapPin } from "@/lib/maps"
-import "leaflet/dist/leaflet.css"
 
 export type ListingMapPin = {
   id: string
@@ -25,6 +24,7 @@ export function ListingsMap({ pins }: { pins: ListingMapPin[] }) {
     let cancelled = false
 
     ;(async () => {
+      await import("leaflet/dist/leaflet.css")
       const L = (await import("leaflet")).default
       if (cancelled || !host.current) return
 

@@ -1,12 +1,24 @@
 import Link from "next/link"
+import dynamic from "next/dynamic"
 import { EmptyState, PageHeader } from "@/components/product"
 import { ListingBoard } from "@/components/listings/listing-board"
-import { ListingsMap } from "@/components/map/listings-map"
 import { ListingsFilterForm } from "@/components/listings/filter-form"
 import { JsonLd } from "@/components/seo/json-ld"
 import { listingFacets, searchListings, type ListingFilters } from "@/lib/db"
 import type { UnitStatus } from "@/lib/format"
 import { buildMetadata, organizationJsonLd } from "@/lib/seo"
+
+const ListingsMap = dynamic(
+  () => import("@/components/map/listings-map").then((mod) => mod.ListingsMap),
+  {
+    loading: () => (
+      <div
+        className="mb-6 h-[340px] border border-ink/10 bg-paper-2"
+        aria-hidden
+      />
+    ),
+  },
+)
 
 export const metadata = buildMetadata({
   title: "Listings",

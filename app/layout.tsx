@@ -69,11 +69,10 @@ export const viewport: Viewport = {
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const [users, session, adminSession] = await Promise.all([
-    listSessionUsers(),
-    getSessionUser(),
-    getAdminSessionUser(),
-  ])
+  // Session cookies first — skip the full role-switcher user list for anonymous traffic.
+  const [session, adminSession] = await Promise.all([getSessionUser(), getAdminSessionUser()])
+  const needsSwitcher = Boolean(session || adminSession)
+  const users = needsSwitcher ? listSessionUsers() : []
   const unread = session ? unreadCount(session.id) : 0
   const switchUsers = users.map((user) => ({
     id: user.id,

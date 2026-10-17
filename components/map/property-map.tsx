@@ -10,7 +10,6 @@ import {
   openStreetMapUrl,
   wazeUrl,
 } from "@/lib/maps"
-import "leaflet/dist/leaflet.css"
 
 type Props = {
   lat: number | null
@@ -30,6 +29,7 @@ export function PropertyMap({ lat, lng, label, zoom = 16, className }: Props) {
     let cancelled = false
 
     ;(async () => {
+      await import("leaflet/dist/leaflet.css")
       const L = (await import("leaflet")).default
       if (cancelled || !host.current) return
 
