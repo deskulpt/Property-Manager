@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 112" role="img" aria-label="Easy Rental">
+  <title>Easy Rental</title>
+  <g transform="translate(4 10)" fill="none" stroke="#13253a" stroke-width="8" stroke-linejoin="miter" stroke-linecap="square">
+    <path d="M54 8 H84 A30 30 0 0 1 54 38 Z" fill="#0e6e8c" stroke="none"/>
+    <path d="M8 8 H84 V84 H56 L48 72 L40 84 H8 V8 Z"/>
+    <line x1="8" y1="48" x2="84" y2="48"/>
+    <line x1="46" y1="8" x2="46" y2="48"/>
+  </g>
+  <text x="120" y="78" fill="#13253a" font-family="Source Sans 3, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="64" font-weight="700" letter-spacing="-0.02em">Easy Rental</text>
+</svg>

@@ -24,7 +24,7 @@ import {
 import { decryptSecret, encryptSecret, secretLast4 } from "@/lib/shop-crypto"
 import { resolveShopPaymentProvider } from "@/lib/shop-payments"
 
-const SEED_VERSION = "9"
+const SEED_VERSION = "10"
 
 function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
@@ -128,6 +128,7 @@ export type PropertyRecord = {
   modelPath: string | null
   latitude: number | null
   longitude: number | null
+  pinCode: string | null
   floors: FloorRecord[]
   units: UnitRecord[]
 }
@@ -267,8 +268,59 @@ function createSchema(db: Sql) {
       floor_plan_path TEXT,
       model_path TEXT,
       latitude REAL,
-      longitude REAL
+      longitude REAL,
+      pin_code TEXT
     );
+    CREATE TABLE partner_applications (
+      id TEXT PRIMARY KEY,
+      track TEXT NOT NULL,
+      subtype TEXT NOT NULL,
+      status TEXT NOT NULL,
+      name TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      email TEXT NOT NULL,
+      pan TEXT,
+      aadhaar_last4 TEXT,
+      aadhaar_consent_at TEXT,
+      gstin TEXT,
+      licence_ref TEXT,
+      docs_json TEXT NOT NULL DEFAULT '[]',
+      notes_staff TEXT NOT NULL DEFAULT '',
+      id_check_result TEXT NOT NULL DEFAULT 'pending',
+      demand_ok INTEGER NOT NULL DEFAULT 0,
+      user_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE partner_service_areas (
+      id TEXT PRIMARY KEY,
+      application_id TEXT NOT NULL,
+      city_slug TEXT,
+      pin_prefix TEXT,
+      radius_km REAL,
+      home_lat REAL,
+      home_lng REAL,
+      active INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE partner_referrals (
+      id TEXT PRIMARY KEY,
+      referrer_name TEXT NOT NULL,
+      referrer_phone TEXT NOT NULL,
+      referrer_email TEXT NOT NULL,
+      referred_name TEXT NOT NULL,
+      referred_phone TEXT NOT NULL,
+      referred_email TEXT NOT NULL,
+      track TEXT NOT NULL,
+      subtype TEXT NOT NULL,
+      city TEXT NOT NULL,
+      pin TEXT NOT NULL,
+      status TEXT NOT NULL,
+      converted_application_id TEXT,
+      consent_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX idx_partner_apps_status ON partner_applications(status, track);
+    CREATE INDEX idx_partner_areas_app ON partner_service_areas(application_id);
     CREATE TABLE floors (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -526,6 +578,9 @@ function reset(db: Sql) {
     "units",
     "floors",
     "properties",
+    "partner_service_areas",
+    "partner_referrals",
+    "partner_applications",
     "provider_approvals",
     "users",
     "tenants",
@@ -599,17 +654,19 @@ function seed(db: Sql) {
 
   const property = db.prepare(
     `INSERT INTO properties (
-      id, tenant_id, name, slug, address, area, city_line, total_sqft, floor_plan_path, model_path, latitude, longitude
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id, tenant_id, name, slug, address, area, city_line, total_sqft, floor_plan_path, model_path, latitude, longitude, pin_code
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
   // Gate pins are approximate public coords for demo Leaflet embeds (no Mapbox key).
-  property.run("p_waterman", "t_bbm", "BBM Bhiwandi Hub", "waterman", "Plot 19, Kalyan-Bhiwandi Road, Bhiwandi, Maharashtra 421302", "Bhiwandi", "BHIWANDI · PIN 421302 · 214,000 SF", 214000, "/floorplans/waterman.svg", null, 19.2813, 73.0483)
-  property.run("p_bartley", "t_bbm", "BBM Whitefield Sheds", "bartley", "161 ITPL Main Road, Whitefield, Bengaluru, Karnataka 560066", "Whitefield", "WHITEFIELD · PIN 560066 · 96,000 SF", 96000, "/floorplans/bartley.svg", null, 12.9698, 77.75)
-  property.run("p_cranfield", "t_bbm", "BBM Andheri East", "cranfield", "12 MIDC Central Road, Andheri East, Mumbai, Maharashtra 400093", "Andheri East", "ANDHERI EAST · PIN 400093 · 74,500 SF", 74500, "/floorplans/cranfield.svg", null, 19.1136, 72.8697)
-  property.run("p_commissioners", "t_harbour", "Harbourline Sriperumbudur", "commissioners", "88 SIPCOT Industrial Park, Sriperumbudur, Tamil Nadu 602105", "Sriperumbudur", "SRIPERUMBUDUR · PIN 602105 · 86,000 SF", 86000, "/floorplans/commissioners.svg", null, 12.9675, 79.9473)
-  property.run("p_nri_thane", "t_nri", "Sahni Thane Warehouse", "thane", "45 Wagle Estate, Thane West, Maharashtra 400604", "Thane", "THANE · PIN 400604 · 42,000 SF", 42000, "/floorplans/cranfield.svg", null, 19.2183, 72.9781)
+  property.run("p_waterman", "t_bbm", "BBM Bhiwandi Hub", "waterman", "Plot 19, Kalyan-Bhiwandi Road, Bhiwandi, Maharashtra 421302", "Bhiwandi", "BHIWANDI · PIN 421302 · 214,000 SF", 214000, "/floorplans/waterman.svg", null, 19.2813, 73.0483, "421302")
+  property.run("p_bartley", "t_bbm", "BBM Whitefield Sheds", "bartley", "161 ITPL Main Road, Whitefield, Bengaluru, Karnataka 560066", "Whitefield", "WHITEFIELD · PIN 560066 · 96,000 SF", 96000, "/floorplans/bartley.svg", null, 12.9698, 77.75, "560066")
+  property.run("p_cranfield", "t_bbm", "BBM Andheri East", "cranfield", "12 MIDC Central Road, Andheri East, Mumbai, Maharashtra 400093", "Andheri East", "ANDHERI EAST · PIN 400093 · 74,500 SF", 74500, "/floorplans/cranfield.svg", null, 19.1136, 72.8697, "400093")
+  property.run("p_commissioners", "t_harbour", "Harbourline Sriperumbudur", "commissioners", "88 SIPCOT Industrial Park, Sriperumbudur, Tamil Nadu 602105", "Sriperumbudur", "SRIPERUMBUDUR · PIN 602105 · 86,000 SF", 86000, "/floorplans/commissioners.svg", null, 12.9675, 79.9473, "602105")
+  property.run("p_nri_thane", "t_nri", "Sahni Thane Warehouse", "thane", "45 Wagle Estate, Thane West, Maharashtra 400604", "Thane", "THANE · PIN 400604 · 42,000 SF", 42000, "/floorplans/cranfield.svg", null, 19.2183, 72.9781, "400604")
   // Multi-floor stack/peel demo (PRD §4.4) — 8 levels so the selector scrolls (>5).
-  property.run("p_powai", "t_bbm", "BBM Powai Tower", "powai", "12 Hiranandani Gardens, Powai, Mumbai, Maharashtra 400076", "Powai", "POWAI · PIN 400076 · 96,000 SF · 8 FLOORS", 96000, "/floorplans/powai-plate.svg", null, 19.1197, 72.9051)
+  property.run("p_powai", "t_bbm", "BBM Powai Tower", "powai", "12 Hiranandani Gardens, Powai, Mumbai, Maharashtra 400076", "Powai", "POWAI · PIN 400076 · 96,000 SF · 8 FLOORS", 96000, "/floorplans/powai-plate.svg", null, 19.1197, 72.9051, "400076")
+  // Slice M geo demo — inside Pune 4110* catchment vs outside (Powai / Bhiwandi).
+  property.run("p_pune", "t_bbm", "BBM Hinjewadi Park", "hinjewadi", "Phase 2, Rajiv Gandhi Infotech Park, Hinjewadi, Pune, Maharashtra 411057", "Hinjewadi", "PUNE · PIN 411057 · 120,000 SF", 120000, "/floorplans/bartley.svg", null, 18.5912, 73.7389, "411057")
 
   const floorStmt = db.prepare(
     `INSERT INTO floors (id, tenant_id, property_id, label, level_index, plan_path)
@@ -932,6 +989,172 @@ function seed(db: Sql) {
     `INSERT INTO languages (code, name, status, waiting_reason, created_at, updated_at)
      VALUES (?, ?, ?, NULL, ?, ?)`,
   ).run("en", "English", "ready", "2026-09-01T00:00:00.000Z", "2026-09-01T00:00:00.000Z")
+
+  // Slice M — Partner & Service Network demo seeds (§19C)
+  addUnits("t_bbm", "p_pune", "BBM Hinjewadi Park", "hinjewadi", [
+    {
+      code: "P1",
+      sqft: 24000,
+      h: "32'",
+      dock: 4,
+      drive: 2,
+      pwr: "400A / 415V",
+      rate: 42,
+      status: "available",
+      x: 40,
+      y: 45,
+    },
+  ])
+
+  const partnerApp = db.prepare(
+    `INSERT INTO partner_applications (
+      id, track, subtype, status, name, phone, email, pan, aadhaar_last4, aadhaar_consent_at,
+      gstin, licence_ref, docs_json, notes_staff, id_check_result, demand_ok, user_id,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+  const partnerArea = db.prepare(
+    `INSERT INTO partner_service_areas (
+      id, application_id, city_slug, pin_prefix, radius_km, home_lat, home_lng, active
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+  )
+  const nowSeed = "2026-10-01T10:00:00.000Z"
+
+  // 1. Active electrician — Pune PIN 4110* · radius 20 km · demo_verified
+  partnerApp.run(
+    "pa_elec_pune",
+    "service",
+    "electrician",
+    "active",
+    "Vikram Deshmukh",
+    "+919822334455",
+    "vikram@puneelectric.example",
+    "ABCDE1234F",
+    "4321",
+    nowSeed,
+    null,
+    null,
+    '[{"name":"trade-cert-stub.pdf","kind":"upload_stub"}]',
+    "Seed active — matches Hinjewadi / PIN 4110*",
+    "demo_verified",
+    1,
+    "u_vikram_pune",
+    nowSeed,
+    nowSeed,
+  )
+  partnerArea.run("psa_pune_1", "pa_elec_pune", "Hinjewadi", "4110", 20, 18.5204, 73.8567)
+  user.run(
+    "u_vikram_pune",
+    "Vikram Deshmukh",
+    "vikram@puneelectric.example",
+    "service_provider",
+    null,
+    "Pune Electric Co",
+    "electrician",
+    "Hinjewadi",
+    1,
+    "+919822334455",
+  )
+  db.prepare("INSERT INTO provider_approvals (tenant_id, user_id, status) VALUES (?, ?, ?)").run(
+    "t_bbm",
+    "u_vikram_pune",
+    "approved",
+  )
+
+  // 2. Plumber — Chennai · area_approval · demand_ok=false (hidden from jobs)
+  partnerApp.run(
+    "pa_plumb_chennai",
+    "service",
+    "plumber",
+    "area_approval",
+    "Lakshmi Iyer",
+    "+919840012345",
+    "lakshmi@chennaiplumb.example",
+    "FGHIJ5678K",
+    "9988",
+    nowSeed,
+    "33AAAAA0000A1Z5",
+    null,
+    "[]",
+    "Waiting on demand_ok for Chennai PINs",
+    "demo_verified",
+    0,
+    null,
+    nowSeed,
+    nowSeed,
+  )
+  partnerArea.run("psa_chennai_1", "pa_plumb_chennai", "Sriperumbudur", "6021", 25, 12.9675, 79.9473)
+
+  // 3. Affiliate realtor — Bengaluru · docs_review
+  partnerApp.run(
+    "pa_aff_blr",
+    "affiliate",
+    "realtor",
+    "docs_review",
+    "Ananya Rao",
+    "+919900112200",
+    "ananya@raoestates.example",
+    "KLMNO9012P",
+    "1122",
+    nowSeed,
+    null,
+    "KA-RERA-P1234",
+    "[]",
+    "RERA field collected; docs pending",
+    "pending",
+    0,
+    null,
+    nowSeed,
+    nowSeed,
+  )
+  partnerArea.run("psa_blr_1", "pa_aff_blr", "Whitefield", "5600", null, 12.9698, 77.75)
+
+  // 4. Cleaning — Hyderabad · suspended
+  partnerApp.run(
+    "pa_clean_hyd",
+    "service",
+    "cleaning",
+    "suspended",
+    "Suresh Reddy",
+    "+919848877665",
+    "suresh@hydclean.example",
+    "QRSTU3456V",
+    "5566",
+    nowSeed,
+    null,
+    null,
+    "[]",
+    "Suspended for demo quality flag",
+    "demo_verified",
+    1,
+    null,
+    nowSeed,
+    nowSeed,
+  )
+  partnerArea.run("psa_hyd_1", "pa_clean_hyd", "Hyderabad", "5000", 30, 17.385, 78.4867)
+
+  // 5. Refer-partner lead — new electrician referral in NCR
+  db.prepare(
+    `INSERT INTO partner_referrals (
+      id, referrer_name, referrer_phone, referrer_email,
+      referred_name, referred_phone, referred_email,
+      track, subtype, city, pin, status, converted_application_id, consent_at, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', NULL, ?, ?)`,
+  ).run(
+    "pr_ncr_elec",
+    "Meera Kapoor",
+    "+919811223344",
+    "meera@kapoor.example",
+    "Rohit Malhotra",
+    "+919811998877",
+    "rohit@ncrelectric.example",
+    "service",
+    "electrician",
+    "Noida",
+    "201301",
+    nowSeed,
+    nowSeed,
+  )
 }
 
 function openDatabase() {
@@ -1090,6 +1313,7 @@ function mapProperty(row: Record<string, unknown>): PropertyRecord {
     modelPath: str(row, "model_path"),
     latitude: num(row, "latitude"),
     longitude: num(row, "longitude"),
+    pinCode: str(row, "pin_code"),
     floors: floorsFor(id),
     units: unitsFor(id),
   }
@@ -1364,6 +1588,98 @@ export function eligibleProviders(tenantId: string, area: string, trade: string)
       provider.trade === trade,
   )
 }
+
+/**
+ * Slice M geo gate: partner-network active+demand_ok providers whose catchment
+ * covers the property, unioned with legacy area-matched approved providers.
+ */
+export function eligibleProvidersForProperty(
+  tenantId: string,
+  propertyId: string,
+  trade: Trade,
+): ProviderRecord[] {
+  const property = asRow(
+    getDb()
+      .prepare(
+        `SELECT id, area, pin_code, latitude, longitude, address, city_line
+         FROM properties WHERE id = ? AND tenant_id = ?`,
+      )
+      .get(propertyId, tenantId),
+  )
+  if (!property) return []
+
+  const pin =
+    str(property, "pin_code") ||
+    (String(property.address).match(/\b([1-9][0-9]{5})\b/) || [])[1] ||
+    null
+  const plat = num(property, "latitude")
+  const plng = num(property, "longitude")
+  const areaName = String(property.area)
+
+  const partnerRows = asRows(
+    getDb()
+      .prepare(
+        `SELECT a.id AS app_id, a.user_id, a.name, a.email, a.subtype AS trade,
+                s.city_slug, s.pin_prefix, s.radius_km, s.home_lat, s.home_lng
+         FROM partner_applications a
+         JOIN partner_service_areas s ON s.application_id = a.id AND s.active = 1
+         WHERE a.track = 'service'
+           AND a.status = 'active'
+           AND a.demand_ok = 1
+           AND a.subtype = ?
+           AND a.user_id IS NOT NULL`,
+      )
+      .all(trade),
+  )
+
+  const matchedIds = new Set<string>()
+  const fromPartners: ProviderRecord[] = []
+  for (const row of partnerRows) {
+    const userId = str(row, "user_id")
+    if (!userId || matchedIds.has(userId)) continue
+    const prefix = str(row, "pin_prefix")
+    const city = str(row, "city_slug")?.toLowerCase()
+    const radius = num(row, "radius_km")
+    const hLat = num(row, "home_lat")
+    const hLng = num(row, "home_lng")
+    let covers = false
+    if (prefix && pin && pin.startsWith(prefix)) covers = true
+    if (!covers && city && areaName.toLowerCase() === city) covers = true
+    if (
+      !covers &&
+      radius != null &&
+      radius > 0 &&
+      hLat != null &&
+      hLng != null &&
+      plat != null &&
+      plng != null
+    ) {
+      const toRad = (d: number) => (d * Math.PI) / 180
+      const dLat = toRad(plat - hLat)
+      const dLng = toRad(plng - hLng)
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(hLat)) * Math.cos(toRad(plat)) * Math.sin(dLng / 2) ** 2
+      const km = 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(a)))
+      covers = km <= radius
+    }
+    if (!covers) continue
+    matchedIds.add(userId)
+    fromPartners.push({
+      id: userId,
+      name: String(row.name),
+      email: String(row.email),
+      trade: String(row.trade) as Trade,
+      serviceArea: [city, prefix ? `PIN ${prefix}*` : null].filter(Boolean).join(" · ") || areaName,
+      verified: true,
+      approval: "approved",
+    })
+  }
+
+  const legacy = eligibleProviders(tenantId, areaName, trade).filter((p) => !matchedIds.has(p.id))
+  return [...fromPartners, ...legacy]
+}
+
 
 export type LedgerRecord = {
   id: string
@@ -1976,11 +2292,15 @@ export function createJob(input: {
   }
   let providerId: string | null = null
   if (input.providerId) {
-    const eligible = eligibleProviders(input.tenantId, String(property.area), input.trade)
+    const eligible = eligibleProvidersForProperty(
+      input.tenantId,
+      input.propertyId,
+      input.trade,
+    )
     if (!eligible.some((provider) => provider.id === input.providerId)) {
       return {
         ok: false as const,
-        error: "That provider is not approved for this trade and area.",
+        error: "That provider is not approved for this trade and catchment.",
       }
     }
     providerId = input.providerId
@@ -2018,9 +2338,9 @@ export function assignJob(tenantId: string, jobId: string, providerId: string) {
   if (!job) return { ok: false as const, error: "That job is not in this organisation." }
   const mapped = mapJob(job)
   if (mapped.status === "complete") return { ok: false as const, error: "That job is already complete." }
-  const eligible = eligibleProviders(tenantId, mapped.area, mapped.trade)
+  const eligible = eligibleProvidersForProperty(tenantId, mapped.propertyId, mapped.trade)
   if (!eligible.some((provider) => provider.id === providerId)) {
-    return { ok: false as const, error: "That provider is not approved for this trade and area." }
+    return { ok: false as const, error: "That provider is not approved for this trade and catchment." }
   }
   db.prepare(
     "UPDATE jobs SET provider_id = ?, status = 'assigned' WHERE id = ? AND tenant_id = ?",
