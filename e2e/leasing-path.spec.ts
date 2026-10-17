@@ -1,19 +1,5 @@
-import { expect, test, type Page } from "@playwright/test"
-
-async function switchIdentity(page: Page, userId: string) {
-  await page.context().addCookies([
-    {
-      name: "deskulpt_user",
-      value: userId,
-      domain: "127.0.0.1",
-      path: "/",
-      httpOnly: true,
-      sameSite: "Lax",
-    },
-  ])
-  await page.goto("/", { waitUntil: "networkidle" })
-  await expect(page.getByTestId("demo-identity")).toHaveValue(userId)
-}
+import { expect, test } from "@playwright/test"
+import { setDemoIdentity } from "./helpers"
 
 test.describe("evaluator leasing path", () => {
   test("home loads, Nadia approves Maya, Maya sees rent, Jonah inbox empty", async ({ page }) => {
@@ -21,7 +7,8 @@ test.describe("evaluator leasing path", () => {
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
     await expect(page.locator("body")).toContainText(/Easy Rental|DeSkulpt|BBM|industrial|landlord/i)
 
-    await switchIdentity(page, "u_nadia")
+    // Cookie identity only — sticky demo-identity UI is admin-gated on this tip.
+    await setDemoIdentity(page, "u_nadia")
     await page.goto("/landlord/applications")
     const mayaCard = page.locator("article").filter({ hasText: "Apex Logistics India" })
     await expect(mayaCard).toBeVisible()
@@ -30,7 +17,7 @@ test.describe("evaluator leasing path", () => {
     await page.getByTestId("approve-app_maya").click()
     await expect(mayaCard.getByText("Approved")).toBeVisible({ timeout: 15_000 })
 
-    await switchIdentity(page, "u_maya")
+    await setDemoIdentity(page, "u_maya")
     await page.goto("/account")
     const accountCard = page.locator("article").filter({ hasText: "Unit B2" })
     await expect(accountCard).toBeVisible()
@@ -40,7 +27,7 @@ test.describe("evaluator leasing path", () => {
     await expect(page.locator("table")).toContainText(/Rent/i)
     await expect(page.locator("table")).toContainText(/₹/)
 
-    await switchIdentity(page, "u_jonah")
+    await setDemoIdentity(page, "u_jonah")
     await page.goto("/landlord/applications")
     await expect(page.getByText("The inbox is clear")).toBeVisible()
   })

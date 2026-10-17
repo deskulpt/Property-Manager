@@ -3,6 +3,7 @@ import path from "node:path"
 import os from "node:os"
 import fs from "node:fs"
 
+/** Playwright webServer port. Override with E2E_PORT. Dev UI stays on 43123. */
 const e2ePort = Number(process.env.E2E_PORT || 43124)
 const isCI = !!process.env.CI
 const e2eDbDir = fs.mkdtempSync(path.join(os.tmpdir(), "deskulpt-e2e-"))
@@ -10,8 +11,8 @@ const e2eDb = path.join(e2eDbDir, "deskulpt.sqlite")
 const distDir = process.env.DESKULPT_DIST_DIR || (isCI ? ".next" : ".next-e2e")
 
 /**
- * Local: `next dev` on a throwaway port/DB/dist so desktop `npm run dev` (43123) is untouched.
- * CI: workflow runs `npm run build` first; webServer uses `next start` against that build.
+ * Local: `next dev` on throwaway port **43124** (E2E_PORT) / DB / dist so desktop `npm run dev` (**43123**) is untouched.
+ * CI (`.github/workflows/e2e.yml`): `npm run build` then `next start` on the same E2E_PORT.
  * Seed: empty DESKULPT_DB_PATH auto-seeds India demo (no Razorpay/OTP).
  */
 export default defineConfig({

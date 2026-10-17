@@ -236,7 +236,7 @@ npm run test  # isolation + shop:e2e
 
 - `npm test` runs `test/isolation.test.ts` on a temporary SQLite file. It checks tenant isolation, approving Maya (rent plus GST, and a second approve fails), late-fee idempotence, CMS email redaction, provider area approval, and that public form countries stay India-only until a draft checklist is complete. It does not use `data/deskulpt.sqlite`.
 - `npm run test:watch` runs the same file under Vitest watch.
-- `npm run test:e2e` runs Playwright (`e2e/leasing-path.spec.ts`) against its own Next process on **port 43124** and a throwaway database. It does not reuse the dev server on 43123. The script loads the home page, switches to Nadia, approves Maya's application, confirms Maya sees approved status and an INR rent row, then confirms Jonah's inbox is empty.
+- `npm run test:e2e` runs Playwright (`e2e/*.spec.ts`) against its own Next process on **port 43124** (`E2E_PORT`, see `playwright.config.ts`) and a throwaway database. It does not reuse the desktop `npm run dev` server on **43123**. Suite covers marketing (home, pricing, partners, refer, about), auth, listings/map/unit/QR poster, console (super admin), landlord applications/properties, account, optional rent calculator (soft-skip if absent), leasing approval path, and a same-origin home+footer no-404 crawl. Soft-skips only when a route is truly missing (HTTP 404 / Not Found). Set `E2E_ADMIN_PASSWORD` to exercise password login for the sticky admin switcher; console pages otherwise use the `u_platform_admin` demo cookie.
 - `npm run lint` runs ESLint.
 
 Playwright downloads a browser on first use (`npx playwright install` if the run asks for one).

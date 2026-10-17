@@ -6,15 +6,17 @@ on:
     branches: [main]
 
 # Sibling CI owns lint/unit/build; this workflow only runs Playwright.
+# webServer port: E2E_PORT (default 43124) — see playwright.config.ts.
+# Local: `next dev` on that port + throwaway SQLite. CI: `next start` after build.
 concurrency:
   group: e2e-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   playwright:
-    name: Playwright smoke
+    name: Playwright full suite
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,7 +45,10 @@ jobs:
         env:
           CI: "true"
           DESKULPT_DIST_DIR: .next
+          # Must match playwright.config.ts default (webServer listens here).
           E2E_PORT: "43124"
+          # Optional: unlock password login assertion for sticky admin switcher.
+          E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
 
       - name: Upload failure artifacts
         if: failure()
