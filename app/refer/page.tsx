@@ -26,10 +26,10 @@ export default function ReferLandingPage() {
           </p>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/logo.png"
+            src="/logo.svg"
             alt="Easy Rental"
             width={420}
-            height={236}
+            height={84}
             className="mt-5 h-12 w-auto object-contain md:h-16"
           />
           <h1 className="mt-5 max-w-[22ch] font-serif text-3xl font-medium leading-snug tracking-tight text-ink md:text-4xl">

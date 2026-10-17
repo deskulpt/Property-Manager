@@ -26,11 +26,11 @@ export function HomePage({
             <p className="hero-brand">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="/logo.png"
+                src="/logo.svg"
                 alt="Easy Rental"
                 width={480}
-                height={270}
-                className="h-14 w-auto object-contain md:h-20"
+                height={96}
+                className="h-16 w-auto object-contain md:h-24"
               />
             </p>
             <h1 className="hero-rise mt-5 max-w-[22ch] font-serif text-2xl font-medium leading-snug tracking-tight text-ink md:text-3xl">
