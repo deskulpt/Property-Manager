@@ -24,7 +24,7 @@ import {
 import { decryptSecret, encryptSecret, secretLast4 } from "@/lib/shop-crypto"
 import { resolveShopPaymentProvider } from "@/lib/shop-payments"
 
-const SEED_VERSION = "9"
+const SEED_VERSION = "10"
 
 function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
@@ -417,6 +417,23 @@ function createSchema(db: Sql) {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE agent_landlord_access (
+      agent_user_id TEXT NOT NULL,
+      tenant_id TEXT NOT NULL,
+      PRIMARY KEY (agent_user_id, tenant_id)
+    );
+    CREATE TABLE listing_import_drafts (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      property_id TEXT NOT NULL,
+      unit_id TEXT NOT NULL,
+      source_site TEXT NOT NULL,
+      source_url TEXT NOT NULL,
+      used_fixture INTEGER NOT NULL DEFAULT 0,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      created_by TEXT NOT NULL
+    );
     CREATE TABLE meta (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
@@ -532,6 +549,8 @@ function reset(db: Sql) {
     "market_checklist_items",
     "market_drafts",
     "languages",
+    "listing_import_drafts",
+    "agent_landlord_access",
     "meta",
   ]) {
     db.exec(`DROP TABLE IF EXISTS ${table}`)
@@ -580,6 +599,14 @@ function seed(db: Sql) {
   user.run("u_nadia", "Nadia Okonkwo", "nadia@bbmparks.example", "landlord_admin", "t_bbm", null, null, null, 0, "+912240012345")
   user.run("u_jonah", "Jonah Ellis", "jonah@harbourline.example", "landlord_admin", "t_harbour", null, null, null, 0, "+914440056789")
   user.run("u_meera", "Meera Sahni", "meera@sahniglobal.example", "landlord_admin", "t_nri", null, null, null, 0, "+14155550198")
+  // Managing agent (UI label) — multi-landlord collaborator; not platform staff Property Manager.
+  user.run("u_riya", "Riya Kapoor", "riya@deskulpt.example", "managing_agent", null, "Kapoor Portfolio Desk", null, null, 0, "+919820099001")
+
+  const agentAccess = db.prepare(
+    "INSERT INTO agent_landlord_access (agent_user_id, tenant_id) VALUES (?, ?)",
+  )
+  agentAccess.run("u_riya", "t_bbm")
+  agentAccess.run("u_riya", "t_harbour")
   user.run("u_luis", "Luis Ortega", "luis@ortegaelectric.example", "service_provider", null, null, "electrician", "Bhiwandi", 1, "+919820011122")
   user.run("u_rosa", "Rosa Delgado", "rosa@clearbay.example", "service_provider", null, null, "cleaning", "Bhiwandi", 1, "+919820011133")
   user.run("u_kei", "Kei Watanabe", "kei@lanterncourier.example", "service_provider", null, null, "courier", "Bhiwandi", 1, "+919820011144")
@@ -982,7 +1009,8 @@ export function listSessionUsers() {
            WHEN u.role IN ('super_admin','account_manager','service_manager','property_manager','merchandiser') THEN 0
            WHEN u.role = 'applicant' THEN 1
            WHEN u.role = 'landlord_admin' THEN 2
-           ELSE 3
+           WHEN u.role = 'managing_agent' THEN 3
+           ELSE 4
          END, u.name`,
       )
       .all(),
