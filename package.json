@@ -20,6 +20,7 @@
     "dev:3518": "next dev -H 127.0.0.1 -p 3518",
     "dev:3520": "next dev -H 127.0.0.1 -p 3520",
     "dev:3522": "next dev -H 127.0.0.1 -p 3522",
+    "dev:3526": "next dev -H 127.0.0.1 -p 3526",
     "test:unit": "vitest run test/isolation.test.ts test/shop.test.ts test/partners-geo.test.ts test/partners-match.test.ts"
   },
   "dependencies": {

@@ -28,7 +28,7 @@ export const MARKET_CHECKLIST_LABELS: Record<MarketChecklistKey, string> = {
 
 /**
  * ISO codes that must never be seeded as live or demo markets.
- * Canada is active dual-market (template switch) — not parked.
+ * Canada is active dual-market (settings/preferences only) — not parked.
  */
 export const PARKED_MARKET_ISOS = ["US", "BR", "GB"] as const
 
@@ -37,7 +37,7 @@ export const LIVE_MARKET = {
   name: "India",
 } as const
 
-/** Dual-market live set. India remains default; Canada is template switch. */
+/** Dual-market live set. India remains default; Canada is settings-layer prefs. */
 export const LIVE_MARKETS = [
   { iso: "IN", name: "India", default: true },
   { iso: "CA", name: "Canada", default: false },

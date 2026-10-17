@@ -3556,6 +3556,7 @@ export function checkoutCart(input: {
   userId: string
   tenantId: string
   note: string
+  marketId?: "IN" | "CA"
 }) {
   const lease = leasesForOccupant(input.userId).find((l) => l.tenantId === input.tenantId)
   if (!lease) {
@@ -3588,11 +3589,14 @@ export function checkoutCart(input: {
     }
   }
 
-  const provider = resolveShopPaymentProvider({
-    demoMode: settings.demoMode,
-    hasSecret: settings.hasSecret,
-    keyId: settings.keyId,
-  })
+  const provider = resolveShopPaymentProvider(
+    {
+      demoMode: settings.demoMode,
+      hasSecret: settings.hasSecret,
+      keyId: settings.keyId,
+    },
+    input.marketId ?? "IN",
+  )
 
   const amountCents = lines.reduce((sum, line) => sum + line.lineCents, 0)
   const orderId = crypto.randomUUID()

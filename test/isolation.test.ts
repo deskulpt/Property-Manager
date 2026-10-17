@@ -110,19 +110,19 @@ describe("tenant isolation and leasing commands", () => {
     expect(approval.ok).toBe(false)
   })
 
-  it("public form countries stay India-only until a draft checklist is complete", async () => {
+  it("public form countries are IN+CA live; parked drafts need full checklist", async () => {
     const { publicFormCountries, createMarketDraft, setChecklistItem } = await db()
 
-    expect(publicFormCountries().map((c) => c.iso)).toEqual(["IN"])
+    expect(publicFormCountries().map((c) => c.iso).sort()).toEqual(["CA", "IN"])
 
     const draft = createMarketDraft({ isoCode: "NZ", name: "New Zealand" })
     expect(draft.ok).toBe(true)
     if (!draft.ok) return
-    expect(publicFormCountries().map((c) => c.iso)).toEqual(["IN"])
+    expect(publicFormCountries().map((c) => c.iso).sort()).toEqual(["CA", "IN"])
 
     for (const key of MARKET_CHECKLIST_KEYS) {
       setChecklistItem(draft.id, key, { done: true, notes: "e2e" })
     }
-    expect(publicFormCountries().map((c) => c.iso).sort()).toEqual(["IN", "NZ"])
+    expect(publicFormCountries().map((c) => c.iso).sort()).toEqual(["CA", "IN", "NZ"])
   })
 })

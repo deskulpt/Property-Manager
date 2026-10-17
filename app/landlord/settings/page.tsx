@@ -3,7 +3,8 @@ import { ExternalLink, Globe, Package } from "lucide-react"
 import { PageHeader } from "@/components/product"
 import { CurrencyForm } from "@/components/landlord/currency-form"
 import { DomainSettings } from "@/components/landlord/domain-settings"
-import { RazorpaySettings } from "@/components/landlord/razorpay-settings"
+import { MarketPaymentsSettings } from "@/components/landlord/market-payments-settings"
+import { IndiaShopPayments } from "@/components/landlord/india-shop-payments"
 import { PhoneOtpForm } from "@/components/otp/phone-otp"
 import { getShopSettingsPublic, getTenantPackage, listCustomDomains } from "@/lib/db"
 import { publicOriginForTenant } from "@/lib/listing-url"
@@ -24,7 +25,7 @@ export default async function LandlordSettingsPage() {
       <PageHeader
         kicker="Landlord organisation"
         title="Settings"
-        lede="Hosted listings link, PRO custom domains, display currency, Razorpay shop keys, and phone OTP demo."
+        lede="Market prefs (IN/CA), payment gateways, hosted listings, PRO domains, display currency, and phone OTP demo."
       />
       <section className="mb-10 border border-terra/25 bg-accent/50 p-4 md:p-6">
         <h2 className="flex items-center gap-2 font-sans text-lg font-extrabold">
@@ -69,11 +70,14 @@ export default async function LandlordSettingsPage() {
           </Link>
         ) : null}
       </section>
+      <section className="mb-10 bg-card p-4 ring-1 ring-foreground/10 md:p-6" data-testid="settings-market-payments">
+        <MarketPaymentsSettings />
+      </section>
       <section className="mb-10 bg-card p-4 ring-1 ring-foreground/10 md:p-6">
         <DomainSettings packageTier={packageTier} domains={domains} />
       </section>
       <section className="mb-10 bg-card p-4 ring-1 ring-foreground/10 md:p-6">
-        <RazorpaySettings settings={shopSettings} />
+        <IndiaShopPayments settings={shopSettings} />
       </section>
       <section className="mb-10 bg-card p-4 ring-1 ring-foreground/10 md:p-6">
         <h2 className="font-sans text-lg font-extrabold">Display currency</h2>

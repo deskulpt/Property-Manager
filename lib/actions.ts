@@ -746,8 +746,8 @@ export async function submitMethod(_prev: ApplyState, formData: FormData): Promi
   const parsed = z
     .object({
       tenantId: z.string().min(1, "Choose the landlord"),
-      kind: z.enum(["upi", "enach"]),
-      last4: z.string().regex(/^\d{4}$/, "Enter the last 4 digits of the VPA or mandate."),
+      kind: z.enum(["upi", "enach", "interac", "stripe_card", "card_demo"]),
+      last4: z.string().regex(/^\d{4}$/, "Enter the last 4 digits of the method reference."),
       autopay: z.string().optional(),
     })
     .safeParse({
@@ -758,7 +758,10 @@ export async function submitMethod(_prev: ApplyState, formData: FormData): Promi
     })
   if (!parsed.success) return { error: "Check the payment method.", fieldErrors: issues(parsed.error) }
   const kind = parsed.data.kind as PaymentMethodKind
-  const attached = demoPayments.attachMethod({
+  const { getPreferredMarketId } = await import("@/lib/market-preference")
+  const { createDemoPayments } = await import("@/lib/payments")
+  const payments = createDemoPayments(await getPreferredMarketId())
+  const attached = payments.attachMethod({
     userId: user.id,
     tenantId: parsed.data.tenantId,
     kind,
@@ -774,7 +777,7 @@ export async function submitMethod(_prev: ApplyState, formData: FormData): Promi
     providerRef: attached.providerRef,
   })
   if (!saved.ok) return { error: saved.error, fieldErrors: {} }
-  demoPayments.setAutopay({ providerRef: attached.providerRef, enabled: parsed.data.autopay === "on" })
+  payments.setAutopay({ providerRef: attached.providerRef, enabled: parsed.data.autopay === "on" })
   notify({
     userId: user.id,
     title: "Demo payment method saved",
@@ -810,7 +813,11 @@ export async function submitPayment(formData: FormData) {
   const tenantId = String(formData.get("tenantId") ?? "")
   const preview = payDue(user.id, tenantId)
   if (!preview.ok) return
-  const charge = demoPayments.collect({
+  const { getPreferredMarketId } = await import("@/lib/market-preference")
+  const { createDemoPayments } = await import("@/lib/payments")
+  const marketId = await getPreferredMarketId()
+  const payments = createDemoPayments(marketId)
+  const charge = payments.collect({
     providerRef: preview.providerRef,
     amountCents: preview.amountCents,
     description: "Open rent and late fees",
@@ -818,7 +825,10 @@ export async function submitPayment(formData: FormData) {
   notify({
     userId: user.id,
     title: "Demo payment recorded",
-    body: `Reference ${charge.reference}. Demo UPI / eNACH only — no bank debit.`,
+    body:
+      marketId === "CA"
+        ? `Reference ${charge.reference}. Demo Interac / Stripe only — no bank debit.`
+        : `Reference ${charge.reference}. Demo UPI / eNACH only — no bank debit.`,
     href: "/account/payments",
   })
   notifyMany(
@@ -1214,7 +1224,8 @@ export async function checkoutShopCart(
   }
   const tenantId = String(formData.get("tenantId") ?? "")
   const note = String(formData.get("note") ?? "")
-  const result = checkoutCart({ userId: user.id, tenantId, note })
+  const marketId = await (await import("@/lib/market-preference")).getPreferredMarketId()
+  const result = checkoutCart({ userId: user.id, tenantId, note, marketId })
   if (!result.ok) return { error: result.error }
   notifyMany(
     landlordIds(tenantId).map((id) => ({
