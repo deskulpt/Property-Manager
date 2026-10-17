@@ -11,6 +11,10 @@ import {
   stubAutofillListing,
 } from "@/lib/agentic/queue"
 import {
+  runPublicCrawler,
+  setMetaProposalStatus,
+} from "@/lib/crawler"
+import {
   assessLateFees,
   assignJob,
   addCustomDomain,
@@ -1268,4 +1272,32 @@ export async function getShopSettingsPublicAction(tenantId: string) {
     return null
   }
   return getShopSettingsPublic(tenantId)
+}
+
+/* ── Agentic SEO crawler (Ask Easy–adjacent meta fixes) ───────── */
+
+export async function runSeoCrawlerAction(): Promise<
+  { ok: true } | { ok: false; error: string }
+> {
+  const user = await getSessionUser()
+  if (!user || (user.role !== "super_admin" && user.role !== "landlord_admin")) {
+    return { ok: false, error: "Sign in as super admin or landlord to run the crawler." }
+  }
+  runPublicCrawler()
+  refresh(["/console/crawler", "/tools/crawler", "/landlord/ask"])
+  return { ok: true }
+}
+
+export async function decideCrawlerMetaFixAction(
+  proposalId: string,
+  decision: "approved" | "rejected" | "published",
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await getSessionUser()
+  if (!user || (user.role !== "super_admin" && user.role !== "landlord_admin")) {
+    return { ok: false, error: "Sign in as super admin or landlord to gate meta fixes." }
+  }
+  const result = setMetaProposalStatus(proposalId, decision)
+  if (!result.ok) return result
+  refresh(["/console/crawler", "/tools/crawler"])
+  return { ok: true }
 }

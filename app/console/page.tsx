@@ -17,7 +17,8 @@ export default async function ConsoleHomePage() {
     { href: "/console/providers", title: "Service providers", body: "Verify, approve, reject, and match to properties." },
     { href: "/console/partners", title: "Partner affiliates", body: "Vetting queue and partner referral ledger." },
     { href: "/console/referrals", title: "Referrals CMS", body: "Refer & Earn indications and reward status." },
-    { href: "/console/pricing", title: "Pricing entitlements", body: "Starter / Pro package assignment across landlord orgs." },
+{ href: "/console/pricing", title: "Pricing entitlements", body: "Starter / Pro package assignment across landlord orgs." },
+    { href: "/console/crawler", title: "SEO crawler", body: "Crawl public routes, score SEO/a11y hints, approve meta fixes." },
   ]
   return (
     <div>

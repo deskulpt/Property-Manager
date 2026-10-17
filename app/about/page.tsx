@@ -1,10 +1,18 @@
 import Link from "next/link"
+import { JsonLd } from "@/components/seo/json-ld"
+import { buildMetadata, organizationJsonLd } from "@/lib/seo"
 
-export const metadata = { title: "About" }
+export const metadata = buildMetadata({
+  title: "About",
+  description:
+    "Easy Rental by DeSkulpt Inc. — India C&I leasing desk with direct apply, maps, and landlord ops.",
+  path: "/about",
+})
 
 export default function AboutPage() {
   return (
     <div className="mx-auto max-w-[800px] px-4 py-14 md:px-8">
+      <JsonLd data={organizationJsonLd()} />
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/logo.svg" alt="Easy Rental" className="h-12 w-auto" width={220} height={50} />
       <h1 className="mt-8 font-serif text-3xl font-semibold">About Easy Rental</h1>

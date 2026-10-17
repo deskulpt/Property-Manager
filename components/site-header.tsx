@@ -27,6 +27,8 @@ function publicLinks(): NavLink[] {
     { href: "/listings", label: t("nav.listings") },
     { href: "/#map", label: t("nav.map") },
     { href: "/properties", label: t("nav.portfolio") },
+    { href: "/tools/rent-estimate", label: "Rent estimate" },
+    { href: "/pricing", label: "Pricing" },
   ]
 }
 
@@ -35,13 +37,16 @@ function deskLinks(role: Role | null | undefined, unread: number): NavLink[] {
   const links: NavLink[] = []
   if (role === "landlord_admin") {
     links.push({ href: "/landlord", label: t("nav.desk.landlord") })
+    links.push({ href: "/tools/crawler", label: "SEO crawler" })
   } else if (role === "applicant") {
     links.push({ href: "/account", label: t("nav.desk.applicant") })
+    links.push({ href: "/tools/rent-estimate", label: "Rent estimate" })
     links.push({ href: "/shop", label: "Shop" })
   } else if (role === "service_provider") {
     links.push({ href: "/provider", label: t("nav.desk.provider") })
   } else if (role === "super_admin") {
     links.push({ href: "/console", label: "Console" })
+    links.push({ href: "/console/crawler", label: "SEO crawler" })
   } else if (role && isStaffRole(role)) {
     links.push({ href: "/cms", label: t("nav.desk.cms") })
   }

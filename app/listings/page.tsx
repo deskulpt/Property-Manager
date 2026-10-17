@@ -1,11 +1,19 @@
+import Link from "next/link"
 import { EmptyState, PageHeader } from "@/components/product"
 import { ListingBoard } from "@/components/listings/listing-board"
 import { ListingsMap } from "@/components/map/listings-map"
 import { ListingsFilterForm } from "@/components/listings/filter-form"
+import { JsonLd } from "@/components/seo/json-ld"
 import { listingFacets, searchListings, type ListingFilters } from "@/lib/db"
 import type { UnitStatus } from "@/lib/format"
+import { buildMetadata, organizationJsonLd } from "@/lib/seo"
 
-export const metadata = { title: "Listings" }
+export const metadata = buildMetadata({
+  title: "Listings",
+  description:
+    "Browse available industrial bays across India — filter by SF, rate, docks, and corridor. Apply direct with No Broker.",
+  path: "/listings",
+})
 
 function numParam(value: string | string[] | undefined) {
   if (typeof value !== "string" || value.trim() === "") return undefined
@@ -100,7 +108,20 @@ export default async function ListingsPage({
               action={{ href: "/listings", label: "Clear filters" }}
             />
           ) : (
-            <ListingBoard results={results} />
+            <>
+              <JsonLd data={organizationJsonLd()} />
+              <p className="mb-4 text-sm text-ink-soft">
+                Need a ballpark before touring?{" "}
+                <Link
+                  href="/tools/rent-estimate"
+                  className="font-semibold text-terra underline-offset-4 hover:underline"
+                >
+                  Rent estimate calculator
+                </Link>
+                .
+              </p>
+              <ListingBoard results={results} />
+            </>
           )}
         </div>
       </div>

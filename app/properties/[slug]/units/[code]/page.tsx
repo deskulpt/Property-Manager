@@ -3,9 +3,34 @@ import { notFound } from "next/navigation"
 import { UnitGallery } from "@/components/gallery/unit-gallery"
 import { PropertyMap } from "@/components/map/property-map"
 import { SpecList, StatusBadge } from "@/components/product"
+import { JsonLd } from "@/components/seo/json-ld"
 import { BookVisitForm } from "@/components/visits/book-visit-form"
 import { getUnitPage } from "@/lib/db"
 import { money, monthlyRentCents, rateLabel, sqft } from "@/lib/format"
+import {
+  SITE_URL,
+  absoluteUrl,
+  buildMetadata,
+  realEstateListingJsonLd,
+} from "@/lib/seo"
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string; code: string }>
+}) {
+  const { slug, code } = await params
+  const page = getUnitPage(slug, code)
+  if (!page) return { title: "Unit" }
+  const { property, unit } = page
+  return buildMetadata({
+    title: `Unit ${unit.code} · ${property.name}`,
+    description:
+      unit.description?.slice(0, 155) ||
+      `${unit.sqft} SF industrial bay at ${property.name}, ${property.cityLine}.`,
+    path: `/properties/${property.slug}/units/${unit.code}`,
+  })
+}
 
 export default async function UnitPage({
   params,
@@ -17,9 +42,27 @@ export default async function UnitPage({
   if (!page) notFound()
   const { property, unit, media } = page
   const monthly = monthlyRentCents(unit.ratePsf, unit.sqft)
+  const listingUrl = absoluteUrl(
+    `/properties/${property.slug}/units/${unit.code}`,
+    SITE_URL,
+  )
+  const jsonLd = realEstateListingJsonLd({
+    name: `${property.name} · Unit ${unit.code}`,
+    description: unit.description || `${unit.sqft} SF bay`,
+    url: listingUrl,
+    address: property.address,
+    locality: property.area,
+    postalCode: property.pinCode,
+    latitude: property.latitude,
+    longitude: property.longitude,
+    floorSizeSqft: unit.sqft,
+    priceInrPerMonth: monthly / 100,
+    availability: unit.status,
+  })
 
   return (
     <div className="mx-auto grid max-w-[1200px] gap-8 px-4 py-10 md:px-8 lg:grid-cols-[1.3fr_0.7fr]">
+      <JsonLd data={jsonLd} />
       <div>
         <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-terra">
           <Link href={`/properties/${property.slug}`} className="hover:underline">
@@ -88,6 +131,12 @@ export default async function UnitPage({
             className="border border-white/30 px-4 py-3 font-serif text-sm font-bold transition-colors hover:border-white"
           >
             Back to the plan
+          </Link>
+          <Link
+            href={`/tools/rent-estimate?sqft=${unit.sqft}&pin=${property.pinCode ?? ""}`}
+            className="border border-white/30 px-4 py-3 font-serif text-sm font-bold transition-colors hover:border-white"
+          >
+            Rent estimate
           </Link>
         </div>
         <div className="mt-6">

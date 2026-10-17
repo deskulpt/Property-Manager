@@ -29,6 +29,7 @@ export default async function AccountPage({
       <div className="mb-6 flex flex-wrap gap-3 text-sm font-bold">
         <Link href="/account/verify" className="text-brand">Verification</Link>
         <Link href="/account/payments" className="text-brand">Payments</Link>
+        <Link href="/tools/rent-estimate" className="text-brand">Rent estimate</Link>
         <Link href="/shop" className="text-brand">Shop</Link>
         <Link href="/inbox" className="text-brand">Inbox</Link>
       </div>

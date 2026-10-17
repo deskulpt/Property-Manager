@@ -3,7 +3,14 @@ import { PageHeader, StatusBadge } from "@/components/product"
 import { listPortfolio } from "@/lib/db"
 import { sqft } from "@/lib/format"
 
-export const metadata = { title: "Portfolio" }
+import { buildMetadata } from "@/lib/seo"
+
+export const metadata = buildMetadata({
+  title: "Portfolio",
+  description:
+    "Industrial buildings on Easy Rental — open floor plans, unit pins, and Matterport tours where published.",
+  path: "/properties",
+})
 
 /** Seed cover images by property slug for the portfolio mosaic. */
 const COVERS: Record<string, string> = {

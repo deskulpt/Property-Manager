@@ -4,8 +4,21 @@ import { FloorPlanView } from "@/components/floor/floor-plan"
 import { FloorStackViewer } from "@/components/floor/floor-stack-viewer"
 import { PropertyMap } from "@/components/map/property-map"
 import { PageHeader, StatusBadge } from "@/components/product"
+import { JsonLd } from "@/components/seo/json-ld"
 import { getPropertyBySlug } from "@/lib/db"
 import { money, monthlyRentCents, rateLabel, sqft } from "@/lib/format"
+import { buildMetadata, organizationJsonLd } from "@/lib/seo"
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params
+  const property = getPropertyBySlug(slug)
+  if (!property) return { title: "Property" }
+  return buildMetadata({
+    title: property.name,
+    description: `${property.address}. ${property.totalSqft.toLocaleString("en-IN")} SF industrial portfolio building on Easy Rental.`,
+    path: `/properties/${property.slug}`,
+  })
+}
 
 export default async function PropertyPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
@@ -25,6 +38,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
 
   return (
     <div className="mx-auto max-w-[1200px] px-4 py-10 md:px-8">
+      <JsonLd data={organizationJsonLd()} />
       <PageHeader
         kicker={property.tenantName}
         title={property.name}

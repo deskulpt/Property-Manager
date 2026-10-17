@@ -45,6 +45,23 @@ export const metadata: Metadata = {
     apple: "/apple-touch-icon.png",
   },
   metadataBase: new URL("https://easyrental.space"),
+  openGraph: {
+    title: "Easy Rental",
+    description:
+      "Industrial leasing desk for India C&I — list once, lease direct, no brokerage.",
+    url: "https://easyrental.space",
+    siteName: "Easy Rental",
+    locale: "en_IN",
+    type: "website",
+    images: [{ url: "/logo.png", alt: "Easy Rental" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Easy Rental",
+    description:
+      "Industrial leasing desk for India C&I — list once, lease direct, no brokerage.",
+    images: ["/logo.png"],
+  },
 }
 
 export const viewport: Viewport = {
