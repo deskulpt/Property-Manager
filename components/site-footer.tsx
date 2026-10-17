@@ -8,7 +8,7 @@ const COLUMNS: { title: string; links: { href: string; label: string }[] }[] = [
       { href: "/listings", label: "Listings" },
       { href: "/#map", label: "Map" },
       { href: "/properties", label: "Portfolio" },
-      { href: "/shop", label: "Shop (demo)" },
+      { href: "/shop", label: "Shop" },
       { href: "/landlord/ask", label: "Ask Easy" },
     ],
   },
@@ -77,7 +77,7 @@ export function SiteFooter() {
               DeSkulpt Inc.
             </p>
             <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.14em] text-paper/45">
-              Demo · INR · +91
+              INR · +91 · India
             </p>
           </div>
           <nav

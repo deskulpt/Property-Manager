@@ -6,15 +6,14 @@ export default function PricingPage() {
   return (
     <div className="mx-auto max-w-[900px] px-4 py-14 md:px-8">
       <p className="font-mono text-xs uppercase tracking-[0.18em] text-terra">Landlords</p>
-      <h1 className="mt-2 font-serif text-3xl font-semibold">Pricing (demo)</h1>
+      <h1 className="mt-2 font-serif text-3xl font-semibold">Pricing</h1>
       <p className="mt-3 max-w-[50ch] text-ink-soft">
-        Thin demo packaging — Starter vs Pro. Live billing and affiliate 20% commissions (§19B) are
-        scheduled later.
+        Starter and Pro packages for landlord organisations. Billing and affiliate commissions ship next.
       </p>
       <div className="mt-10 grid gap-4 md:grid-cols-2">
         <article className="border border-ink/15 bg-paper-2 p-6">
           <h2 className="font-serif text-2xl font-semibold">Starter</h2>
-          <p className="mt-2 font-mono text-sm text-terra">Demo · INR</p>
+          <p className="mt-2 font-mono text-sm text-terra">INR / year</p>
           <ul className="mt-4 grid gap-2 text-sm text-ink-soft">
             <li>Listings + applications</li>
             <li>Concierge jobs</li>
@@ -23,7 +22,7 @@ export default function PricingPage() {
         </article>
         <article className="border border-ink/15 bg-card p-6 ring-1 ring-terra/30">
           <h2 className="font-serif text-2xl font-semibold">Pro</h2>
-          <p className="mt-2 font-mono text-sm text-terra">Demo · INR</p>
+          <p className="mt-2 font-mono text-sm text-terra">INR / year</p>
           <ul className="mt-4 grid gap-2 text-sm text-ink-soft">
             <li>Everything in Starter</li>
             <li>Custom domain</li>

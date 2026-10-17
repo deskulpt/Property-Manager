@@ -24,7 +24,7 @@ import {
 import { decryptSecret, encryptSecret, secretLast4 } from "@/lib/shop-crypto"
 import { resolveShopPaymentProvider } from "@/lib/shop-payments"
 
-const SEED_VERSION = "10"
+const SEED_VERSION = "12"
 
 function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
@@ -217,7 +217,8 @@ function createSchema(db: Sql) {
       city TEXT NOT NULL,
       kind TEXT NOT NULL DEFAULT 'landlord',
       display_currency TEXT NOT NULL DEFAULT 'INR',
-      package TEXT NOT NULL DEFAULT 'starter'
+      package TEXT NOT NULL DEFAULT 'starter',
+      status TEXT NOT NULL DEFAULT 'active'
     );
     CREATE TABLE users (
       id TEXT PRIMARY KEY,
@@ -621,26 +622,42 @@ function seed(db: Sql) {
   tenant.run("t_harbour", "Harbourline Yards India", "harbourline-india", "Chennai", "landlord", "INR", "starter")
   tenant.run("t_nri", "Sahni Global Realty (NRI)", "sahni-global", "Dubai / Mumbai", "landlord", "USD", "starter")
 
+  // Platform super admin — password is bcrypt-hashed (see .env.example ADMIN_EMAIL).
+  const SEED_ADMIN_PASSWORD_HASH =
+    "$2b$10$6uxalMGo.bKi2QFZn7dJ.eCPwMTyOQkOKEEdZqFZSiFjp5Ll1cnoO"
   const user = db.prepare(
     `INSERT INTO users (id, name, email, role, tenant_id, company, trade, service_area, provider_verified, phone, password_hash)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
-  user.run("u_avery", "Avery Quinn", "avery@deskulpt.example", "super_admin", "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+918012345678")
-  user.run("u_sam", "Sam Rivera", "sam@deskulpt.example", "account_manager", "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+918012345679")
-  user.run("u_priya", "Priya Nair", "priya@deskulpt.example", "service_manager", "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+919845551122")
-  user.run("u_chris", "Chris Vogel", "chris@deskulpt.example", "property_manager", "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+918022334455")
-  user.run("u_jordan", "Jordan Blake", "jordan@deskulpt.example", "merchandiser", "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+919900112233")
-  user.run("u_maya", "Maya Chen", "maya@apexlogistics.example", "applicant", null, "Apex Logistics India", null, null, 0, "+919876543210")
-  user.run("u_devon", "Devon Hale", "devon@northline.example", "applicant", null, "Northline Distribution India", null, null, 0, "+919811223344")
-  user.run("u_nadia", "Nadia Okonkwo", "nadia@bbmparks.example", "landlord_admin", "t_bbm", null, null, null, 0, "+912240012345")
-  user.run("u_jonah", "Jonah Ellis", "jonah@harbourline.example", "landlord_admin", "t_harbour", null, null, null, 0, "+914440056789")
-  user.run("u_meera", "Meera Sahni", "meera@sahniglobal.example", "landlord_admin", "t_nri", null, null, null, 0, "+14155550198")
-  user.run("u_luis", "Luis Ortega", "luis@ortegaelectric.example", "service_provider", null, null, "electrician", "Bhiwandi", 1, "+919820011122")
-  user.run("u_rosa", "Rosa Delgado", "rosa@clearbay.example", "service_provider", null, null, "cleaning", "Bhiwandi", 1, "+919820011133")
-  user.run("u_kei", "Kei Watanabe", "kei@lanterncourier.example", "service_provider", null, null, "courier", "Bhiwandi", 1, "+919820011144")
-  user.run("u_hana", "Hana Berger", "hana@bergerpower.example", "service_provider", null, null, "electrician", "Whitefield", 1, "+919845667788")
-  user.run("u_amrita", "Amrita Singh", "amrita@southplumbers.example", "service_provider", null, null, "plumber", "Sriperumbudur", 1, "+919444556677")
-  user.run("u_idris", "Idris Cole", "idris@coleelectric.example", "service_provider", null, null, "electrician", "Sriperumbudur", 1, "+919444556688")
+  user.run(
+    "u_platform_admin",
+    "Platform Admin",
+    "anand2064@gmail.com",
+    "super_admin",
+    "t_deskulpt",
+    "DeSkulpt India Pvt Ltd",
+    null,
+    null,
+    0,
+    "+918012345670",
+    SEED_ADMIN_PASSWORD_HASH,
+  )
+  user.run("u_avery", "Avery Quinn", "avery@deskulpt.example", "super_admin", "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+918012345678", null)
+  user.run("u_sam", "Sam Rivera", "sam@deskulpt.example", "account_manager", "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+918012345679", null)
+  user.run("u_priya", "Priya Nair", "priya@deskulpt.example", "service_manager", "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+919845551122", null)
+  user.run("u_chris", "Chris Vogel", "chris@deskulpt.example", "property_manager", "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+918022334455", null)
+  user.run("u_jordan", "Jordan Blake", "jordan@deskulpt.example", "merchandiser", "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+919900112233", null)
+  user.run("u_maya", "Maya Chen", "maya@apexlogistics.example", "applicant", null, "Apex Logistics India", null, null, 0, "+919876543210", null)
+  user.run("u_devon", "Devon Hale", "devon@northline.example", "applicant", null, "Northline Distribution India", null, null, 0, "+919811223344", null)
+  user.run("u_nadia", "Nadia Okonkwo", "nadia@bbmparks.example", "landlord_admin", "t_bbm", null, null, null, 0, "+912240012345", null)
+  user.run("u_jonah", "Jonah Ellis", "jonah@harbourline.example", "landlord_admin", "t_harbour", null, null, null, 0, "+914440056789", null)
+  user.run("u_meera", "Meera Sahni", "meera@sahniglobal.example", "landlord_admin", "t_nri", null, null, null, 0, "+14155550198", null)
+  user.run("u_luis", "Luis Ortega", "luis@ortegaelectric.example", "service_provider", null, null, "electrician", "Bhiwandi", 1, "+919820011122", null)
+  user.run("u_rosa", "Rosa Delgado", "rosa@clearbay.example", "service_provider", null, null, "cleaning", "Bhiwandi", 1, "+919820011133", null)
+  user.run("u_kei", "Kei Watanabe", "kei@lanterncourier.example", "service_provider", null, null, "courier", "Bhiwandi", 1, "+919820011144", null)
+  user.run("u_hana", "Hana Berger", "hana@bergerpower.example", "service_provider", null, null, "electrician", "Whitefield", 1, "+919845667788", null)
+  user.run("u_amrita", "Amrita Singh", "amrita@southplumbers.example", "service_provider", null, null, "plumber", "Sriperumbudur", 1, "+919444556677", null)
+  user.run("u_idris", "Idris Cole", "idris@coleelectric.example", "service_provider", null, null, "electrician", "Sriperumbudur", 1, "+919444556688", null)
 
   const approval = db.prepare(
     "INSERT INTO provider_approvals (tenant_id, user_id, status) VALUES (?, ?, ?)",
@@ -1054,6 +1071,7 @@ function seed(db: Sql) {
     "Hinjewadi",
     1,
     "+919822334455",
+   null,
   )
   db.prepare("INSERT INTO provider_approvals (tenant_id, user_id, status) VALUES (?, ?, ?)").run(
     "t_bbm",
@@ -3738,3 +3756,127 @@ export function forceBookRentalSlot(input: {
     )
 }
 
+
+/** Platform console — super_admin analytics across all landlord tenants. */
+export function platformAnalytics() {
+  const db = getDb()
+  const num = (sql: string) => Number(asRow(db.prepare(sql).get())?.c ?? 0)
+  const listings = num("SELECT COUNT(*) AS c FROM units")
+  const available = num("SELECT COUNT(*) AS c FROM units WHERE status = 'available'")
+  const applications = num("SELECT COUNT(*) AS c FROM applications")
+  const visits = num("SELECT COUNT(*) AS c FROM visit_requests")
+  const landlords = num("SELECT COUNT(*) AS c FROM tenants WHERE kind = 'landlord'")
+  const providers = num("SELECT COUNT(*) AS c FROM users WHERE role = 'service_provider'")
+  const gmvRow = asRow(
+    db
+      .prepare(
+        `SELECT COALESCE(SUM(amount_cents), 0) AS c FROM ledger_entries WHERE kind = 'payment' AND status = 'paid'`,
+      )
+      .get(),
+  )
+  const shopGmvRow = asRow(
+    db
+      .prepare(
+        `SELECT COALESCE(SUM(amount_cents), 0) AS c FROM shop_orders WHERE status IN ('paid', 'fulfilled')`,
+      )
+      .get(),
+  )
+  return {
+    landlords,
+    listings,
+    available,
+    applications,
+    visits,
+    providers,
+    ledgerGmvCents: Number(gmvRow?.c ?? 0),
+    shopGmvCents: Number(shopGmvRow?.c ?? 0),
+  }
+}
+
+export type PlatformTenantRow = {
+  id: string
+  name: string
+  slug: string
+  city: string
+  package: PackageTier
+  status: "active" | "suspended"
+  propertyCount: number
+  adminId: string | null
+  adminName: string | null
+}
+
+export function platformLandlordDirectory(): PlatformTenantRow[] {
+  return asRows(
+    getDb()
+      .prepare(
+        `SELECT t.id, t.name, t.slug, t.city, t.package,
+                COALESCE(t.status, 'active') AS status,
+                (SELECT COUNT(*) FROM properties p WHERE p.tenant_id = t.id) AS property_count,
+                (SELECT u.id FROM users u WHERE u.tenant_id = t.id AND u.role = 'landlord_admin' LIMIT 1) AS admin_id,
+                (SELECT u.name FROM users u WHERE u.tenant_id = t.id AND u.role = 'landlord_admin' LIMIT 1) AS admin_name
+         FROM tenants t
+         WHERE t.kind = 'landlord'
+         ORDER BY t.name`,
+      )
+      .all(),
+  ).map((row) => ({
+    id: String(row.id),
+    name: String(row.name),
+    slug: String(row.slug),
+    city: String(row.city),
+    package: str(row, "package") === "pro" ? ("pro" as const) : ("starter" as const),
+    status: str(row, "status") === "suspended" ? ("suspended" as const) : ("active" as const),
+    propertyCount: Number(row.property_count ?? 0),
+    adminId: row.admin_id ? String(row.admin_id) : null,
+    adminName: row.admin_name ? String(row.admin_name) : null,
+  }))
+}
+
+export function setTenantStatus(tenantId: string, status: "active" | "suspended") {
+  const row = asRow(
+    getDb().prepare("SELECT id FROM tenants WHERE id = ? AND kind = 'landlord'").get(tenantId),
+  )
+  if (!row) return { ok: false as const, error: "Landlord tenant not found." }
+  getDb().prepare("UPDATE tenants SET status = ? WHERE id = ?").run(status, tenantId)
+  return { ok: true as const }
+}
+
+export function setTenantPackage(tenantId: string, pkg: PackageTier) {
+  const row = asRow(
+    getDb().prepare("SELECT id FROM tenants WHERE id = ? AND kind = 'landlord'").get(tenantId),
+  )
+  if (!row) return { ok: false as const, error: "Landlord tenant not found." }
+  getDb().prepare("UPDATE tenants SET package = ? WHERE id = ?").run(pkg, tenantId)
+  return { ok: true as const }
+}
+
+export type PlatformShopSkuRow = {
+  id: string
+  tenantId: string
+  tenantName: string
+  name: string
+  kind: string
+  priceCents: number
+  enabled: boolean
+}
+
+export function platformShopCatalog(): PlatformShopSkuRow[] {
+  return asRows(
+    getDb()
+      .prepare(
+        `SELECT s.id, s.tenant_id, t.name AS tenant_name, s.name, s.kind, s.price_cents, s.enabled
+         FROM shop_skus s
+         JOIN tenants t ON t.id = s.tenant_id
+         ORDER BY t.name, s.name`,
+      )
+      .all(),
+  ).map((row) => ({
+    id: String(row.id),
+    tenantId: String(row.tenant_id),
+    tenantName: String(row.tenant_name),
+    name: String(row.name),
+    kind: String(row.kind),
+    priceCents: Number(row.price_cents ?? 0),
+    enabled: Boolean(row.enabled),
+  }))
+}

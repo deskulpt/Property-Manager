@@ -23,7 +23,7 @@ export default async function CmsLayout({ children }: { children: React.ReactNod
     return (
       <RoleGate
         title="Platform CMS"
-        body="Switch to an Easy Rental staff identity — Avery (Super Admin), Sam (Account Manager), Priya (Service Manager), Chris (Property Manager), or Jordan (Merchandiser)."
+        body="Sign in as platform staff to open the CMS. Super admins can also use /console."
       />
     )
   }

@@ -22,19 +22,19 @@ export type SwitchUser = {
 export function SessionSwitcher({
   users,
   currentId,
+  variant = "header",
 }: {
   users: SwitchUser[]
   currentId: string
+  variant?: "header" | "bar"
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const value = currentId || "visitor"
+  const bar = variant === "bar"
 
   return (
     <div className="flex items-center gap-1.5">
-      <span className="hidden text-[10px] font-medium uppercase tracking-[0.12em] text-ink-faint sm:inline">
-        Demo
-      </span>
       <form
         data-testid="demo-identity-form"
         action={async (formData) => {
@@ -52,22 +52,26 @@ export function SessionSwitcher({
         }}
       >
         <label className="sr-only" htmlFor="demo-identity">
-          Demo identity
+          Role and tenant switcher
         </label>
         <select
           id="demo-identity"
           name="userId"
-          aria-label="Demo identity switcher"
+          aria-label="Role and tenant switcher"
           data-testid="demo-identity"
           disabled={pending}
           defaultValue={value}
           key={value}
-          className="h-8 max-w-[200px] rounded-sm border border-ink/15 bg-paper px-1.5 text-[11px] text-ink-soft outline-none focus-visible:ring-2 focus-visible:ring-terra/40 disabled:opacity-50"
+          className={
+            bar
+              ? "h-9 max-w-[min(100vw-2rem,280px)] rounded-sm border border-[#9ed0e0]/40 bg-brand-deep px-2 text-[12px] text-paper outline-none focus-visible:ring-2 focus-visible:ring-[#9ed0e0]/50 disabled:opacity-50"
+              : "h-8 max-w-[200px] rounded-sm border border-ink/15 bg-paper px-1.5 text-[11px] text-ink-soft outline-none focus-visible:ring-2 focus-visible:ring-terra/40 disabled:opacity-50"
+          }
           onChange={(event) => {
             event.currentTarget.form?.requestSubmit()
           }}
         >
-          <option value="visitor">Visitor · browse only</option>
+          <option value="visitor">Return to admin</option>
           {users.map((user) => (
             <option key={user.id} value={user.id}>
               {identityLabel(user)}

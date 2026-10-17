@@ -1,6 +1,6 @@
 /**
- * Public contact strip for Easy Rental (demo seeds — India).
- * E.164 links are real format; numbers are fixtures, not a live call centre.
+ * Public contact strip for Easy Rental (India).
+ * E.164 links are real format for click-to-call / WhatsApp.
  */
 export const BRAND_CONTACT = {
   supportPhoneE164: "+912240012345",
@@ -9,7 +9,7 @@ export const BRAND_CONTACT = {
   salesPhoneDisplay: "+91 22 4001 2346",
   whatsappE164: "912240012345",
   email: "hello@easyrental.space",
-  label: "Demo numbers",
+  label: "Contact",
 } as const
 
 export function telHref(e164: string) {

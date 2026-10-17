@@ -50,9 +50,6 @@ export function LoginForm() {
           Create an account
         </Link>
       </p>
-      <p className="font-mono text-[10px] uppercase tracking-wider text-ink-faint">
-        Demo fixture users still use the Demo identity switcher (no password).
-      </p>
     </form>
   )
 }

@@ -2,13 +2,14 @@ import type { Metadata, Viewport } from "next"
 import { IBM_Plex_Mono, Source_Sans_3, Source_Serif_4 } from "next/font/google"
 import Link from "next/link"
 import "./globals.css"
+import { AdminSessionBar } from "@/components/admin/admin-session-bar"
 import { SiteHeader } from "@/components/site-header"
 import { SiteFooter } from "@/components/site-footer"
 import { PwaRegister } from "@/components/pwa-register"
 import { Toaster } from "@/components/ui/sonner"
 import { listSessionUsers, unreadCount } from "@/lib/db"
 import { t } from "@/lib/i18n"
-import { getSessionUser } from "@/lib/session"
+import { getAdminSessionUser, getSessionUser } from "@/lib/session"
 
 /** Helvetica-adjacent UI sans — professional, not display/stretched. */
 const sans = Source_Sans_3({
@@ -36,7 +37,7 @@ export const metadata: Metadata = {
     template: "%s · Easy Rental",
   },
   description:
-    "Multi-tenant industrial leasing desk. Browse bays, apply, and run a landlord portfolio with demo verification and demo payments.",
+    "Multi-tenant industrial leasing desk. Browse bays, apply, and run a landlord portfolio with verification and payments.",
   applicationName: "Easy Rental",
   icons: {
     icon: [
@@ -53,24 +54,32 @@ export const viewport: Viewport = {
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const [users, session] = await Promise.all([listSessionUsers(), getSessionUser()])
+  const [users, session, adminSession] = await Promise.all([
+    listSessionUsers(),
+    getSessionUser(),
+    getAdminSessionUser(),
+  ])
   const unread = session ? unreadCount(session.id) : 0
+  const switchUsers = users.map((user) => ({
+    id: user.id,
+    name: user.name,
+    role: user.role,
+    tenantName: user.tenantName,
+    trade: user.trade,
+    serviceArea: user.serviceArea,
+  }))
+  const showAdminBar = Boolean(adminSession)
 
   return (
     <html
       lang="en"
       className={`${sans.variable} ${serif.variable} ${mono.variable} h-full antialiased`}
     >
-      <body className="flex min-h-full flex-col bg-paper font-sans text-ink">
+      <body
+        className={`flex min-h-full flex-col bg-paper font-sans text-ink ${showAdminBar ? "pb-20" : ""}`}
+      >
         <SiteHeader
-          users={users.map((user) => ({
-            id: user.id,
-            name: user.name,
-            role: user.role,
-            tenantName: user.tenantName,
-            trade: user.trade,
-            serviceArea: user.serviceArea,
-          }))}
+          users={switchUsers}
           currentId={session?.id ?? ""}
           unread={unread}
           role={session?.role ?? null}
@@ -78,6 +87,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         />
         <div className="flex-1">{children}</div>
         <SiteFooter />
+        {showAdminBar ? (
+          <AdminSessionBar
+            users={switchUsers}
+            currentId={session?.id ?? adminSession!.id}
+            tenantName={session?.tenantName ?? adminSession!.tenantName}
+            role={session?.role ?? adminSession!.role}
+          />
+        ) : null}
         <PwaRegister />
         <Toaster />
       </body>

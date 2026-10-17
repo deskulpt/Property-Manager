@@ -8,7 +8,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
-import { SessionSwitcher, type SwitchUser } from "@/components/session-switcher"
+import type { SwitchUser } from "@/components/session-switcher"
 import { logoutSession } from "@/lib/actions"
 import {
   BRAND_CONTACT,
@@ -39,6 +39,8 @@ function deskLinks(role: Role | null | undefined, unread: number): NavLink[] {
     links.push({ href: "/shop", label: "Shop" })
   } else if (role === "service_provider") {
     links.push({ href: "/provider", label: t("nav.desk.provider") })
+  } else if (role === "super_admin") {
+    links.push({ href: "/console", label: "Console" })
   } else if (role && isStaffRole(role)) {
     links.push({ href: "/cms", label: t("nav.desk.cms") })
   }
@@ -153,8 +155,8 @@ function UtilityStrip() {
 }
 
 export function SiteHeader({
-  users,
-  currentId,
+  users: _users,
+  currentId: _currentId,
   unread,
   role,
   signedIn,
@@ -165,6 +167,8 @@ export function SiteHeader({
   role?: Role | null
   signedIn?: boolean
 }) {
+  void _users
+  void _currentId
   const browse = publicLinks()
   const desk = deskLinks(role, unread)
   const roleHint = role ? roleLabel(role) : "Visitor"
@@ -229,9 +233,6 @@ export function SiteHeader({
                 </button>
               </form>
             )}
-            <div className="hidden border-l border-ink/10 pl-2 md:block">
-              <SessionSwitcher users={users} currentId={currentId} />
-            </div>
             <Sheet>
               <SheetTrigger
                 render={
@@ -321,9 +322,6 @@ export function SiteHeader({
                         </button>
                       </form>
                     )}
-                    <div className="pt-2 md:hidden">
-                      <SessionSwitcher users={users} currentId={currentId} />
-                    </div>
                     <Link href="/legal/terms" className="text-sm text-ink-soft">
                       {t("nav.legal.terms")}
                     </Link>

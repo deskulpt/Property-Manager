@@ -1,6 +1,6 @@
 {
   "app.name": "Easy Rental",
-  "app.tagline": "easyrental.space \u00b7 a product of DeSkulpt Inc. \u00b7 demo data only",
+  "app.tagline": "easyrental.space \u00b7 a product of DeSkulpt Inc.",
   "nav.context": "Context",
   "nav.map": "Map",
   "nav.listings": "Listings",
@@ -37,7 +37,7 @@
   "cms.languages.english": "English (source)",
   "cms.languages.no_key_hint": "Set GOOGLE_CLOUD_TRANSLATION_API_KEY to translate. The app runs without it.",
   "verify.country": "Country",
-  "verify.kicker": "Identity \u00b7 demo",
+  "verify.kicker": "Identity",
   "verify.title": "Verify the applicant.",
   "verify.lede": "Only India and checklist-ready draft markets appear here. Incomplete drafts stay off public forms.",
   "app.legal": "Easy Rental is a product of DeSkulpt Inc.",

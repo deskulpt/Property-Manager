@@ -8,6 +8,7 @@ export const metadata = { title: "Log in" }
 
 export default async function LoginPage() {
   const session = await getSessionUser()
+  if (session?.role === "super_admin") redirect("/console")
   if (session?.role === "landlord_admin" && session.hasPassword) redirect("/landlord")
   if (session?.role === "landlord_admin") redirect("/landlord")
 
@@ -16,7 +17,7 @@ export default async function LoginPage() {
       <PageHeader
         kicker="Account"
         title="Log in"
-        lede="Sign in with the email and password from signup. Fixture demo users keep using the Demo identity switcher."
+        lede="Sign in with your email and password. Platform admins land in the console."
       />
       <div className="mt-8 border border-ink/10 bg-card p-5 md:p-6">
         <LoginForm />

@@ -97,20 +97,20 @@ test.describe("Easy Rental critical paths (India demo)", () => {
     }
   })
 
-  test("demo role switcher smoke", async ({ page }) => {
+  test("admin sticky role switcher requires platform admin session", async ({ page }) => {
     await page.goto("/", { waitUntil: "domcontentloaded" })
     await expectPageOk(page)
+    // Visitors must not see the sticky switcher.
+    await expect(page.getByTestId("admin-session-bar")).toHaveCount(0)
 
+    await page.goto("/login", { waitUntil: "domcontentloaded" })
+    await page.locator('input[name="email"]').fill("anand2064@gmail.com")
+    await page.locator('input[name="password"]').fill(process.env.E2E_ADMIN_PASSWORD || "")
+    test.skip(!process.env.E2E_ADMIN_PASSWORD, "E2E_ADMIN_PASSWORD not set")
+    await page.getByRole("button", { name: "Log in" }).click()
+    await page.waitForURL(/\/console/)
+    await expect(page.getByTestId("admin-session-bar")).toBeVisible()
     const switcher = page.getByTestId("demo-identity")
-    test.skip((await switcher.count()) === 0, "demo identity switcher not present")
-
     await expect(switcher).toBeVisible()
-    // Smoke only: options exist; do not assert brittle option labels.
-    const options = switcher.locator("option")
-    expect(await options.count()).toBeGreaterThan(1)
-
-    await setDemoIdentity(page, "u_nadia")
-    await page.goto("/", { waitUntil: "domcontentloaded" })
-    await expect(page.getByTestId("demo-identity")).toHaveValue("u_nadia")
   })
 })

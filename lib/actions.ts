@@ -49,6 +49,8 @@ import {
   saveShopRazorpaySettings,
   setShopSkuEnabled,
   getShopSettingsPublic,
+  setTenantStatus,
+  setTenantPackage,
 } from "@/lib/db"
 import { TRADES } from "@/lib/format"
 import { t } from "@/lib/i18n"
@@ -59,7 +61,15 @@ import { hashPassword, passwordPolicyError, verifyPassword } from "@/lib/passwor
 import { demoOtpCode, requestDemoOtp, verifyDemoOtp } from "@/lib/otp"
 import { demoPayments } from "@/lib/payments"
 import { staffCapabilities } from "@/lib/permissions"
-import { getSessionUser, SESSION_COOKIE } from "@/lib/session"
+import {
+  ADMIN_SESSION_COOKIE,
+  clearSessionCookies,
+  getAdminSessionUser,
+  getSessionUser,
+  SESSION_COOKIE,
+  setAdminSessionCookie,
+  setSessionCookie,
+} from "@/lib/session"
 import { translateEnglishCatalog, writeLocaleFile } from "@/lib/translate"
 import { simulateMatch } from "@/lib/verification"
 
@@ -113,13 +123,7 @@ export async function signupLandlord(
     packageTier: "starter",
   })
   if (!result.ok) return { error: result.error, fieldErrors: {} }
-  const jar = await cookies()
-  jar.set(SESSION_COOKIE, result.userId, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
-  })
+  await setSessionCookie(result.userId)
   notify({
     userId: result.userId,
     title: "Welcome to Easy Rental",
@@ -149,7 +153,7 @@ export async function loginWithPassword(
   const hash = getPasswordHashForEmail(parsed.data.email)
   if (!hash) {
     return {
-      error: "No password login for that email. Use Sign up, or the Demo identity switcher for fixtures.",
+      error: "No password login for that email. Use Sign up to create an account.",
       fieldErrors: {},
     }
   }
@@ -157,21 +161,21 @@ export async function loginWithPassword(
   if (!ok) return { error: "Email or password is incorrect.", fieldErrors: {} }
   const account = getUserByEmail(parsed.data.email)
   if (!account) return { error: "Email or password is incorrect.", fieldErrors: {} }
-  const jar = await cookies()
-  jar.set(SESSION_COOKIE, account.id, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
-  })
-  refresh(["/", "/landlord", "/inbox"])
+  await setSessionCookie(account.id)
+  if (account.role === "super_admin") {
+    await setAdminSessionCookie(account.id)
+  } else {
+    const jar = await cookies()
+    jar.delete(ADMIN_SESSION_COOKIE)
+  }
+  refresh(["/", "/landlord", "/inbox", "/cms", "/console"])
   if (account.role === "landlord_admin") redirect("/landlord")
+  if (account.role === "super_admin") redirect("/console")
   redirect("/")
 }
 
 export async function logoutSession() {
-  const jar = await cookies()
-  jar.delete(SESSION_COOKIE)
+  await clearSessionCookies()
   revalidatePath("/", "layout")
   redirect("/")
 }
@@ -219,9 +223,17 @@ export async function removeLandlordDomain(formData: FormData) {
 }
 
 export async function switchSession(userId: string) {
+  const admin = await getAdminSessionUser()
+  if (!admin) return
   const jar = await cookies()
   if (!userId || userId === "visitor") {
-    jar.delete(SESSION_COOKIE)
+    // Return to the admin identity (keep switcher unlocked).
+    jar.set(SESSION_COOKIE, admin.id, {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30,
+    })
   } else {
     const user = getUser(userId)
     if (!user) return
@@ -233,6 +245,53 @@ export async function switchSession(userId: string) {
     })
   }
   revalidatePath("/", "layout")
+}
+
+async function requireConsoleAdmin() {
+  const session = await getSessionUser()
+  if (!session || session.role !== "super_admin") {
+    return null
+  }
+  return session
+}
+
+export async function consoleSetTenantStatus(formData: FormData) {
+  if (!(await requireConsoleAdmin())) return
+  const tenantId = String(formData.get("tenantId") ?? "")
+  const status = String(formData.get("status") ?? "")
+  if (status !== "active" && status !== "suspended") return
+  setTenantStatus(tenantId, status)
+  refresh(["/console", "/console/tenants", "/console/pricing"])
+}
+
+export async function consoleSetTenantPackage(formData: FormData) {
+  if (!(await requireConsoleAdmin())) return
+  const tenantId = String(formData.get("tenantId") ?? "")
+  const pkg = String(formData.get("package") ?? "")
+  if (pkg !== "starter" && pkg !== "pro") return
+  setTenantPackage(tenantId, pkg)
+  refresh(["/console", "/console/tenants", "/console/pricing"])
+}
+
+export async function consoleImpersonateTenant(formData: FormData) {
+  const admin = await getAdminSessionUser()
+  const session = await getSessionUser()
+  if (!admin && session?.role !== "super_admin") return
+  if (session?.role === "super_admin") {
+    await setAdminSessionCookie(session.id)
+  }
+  const userId = String(formData.get("userId") ?? "")
+  await switchSession(userId)
+  redirect("/landlord")
+}
+
+export async function consoleToggleShopSku(formData: FormData) {
+  if (!(await requireConsoleAdmin())) return
+  const tenantId = String(formData.get("tenantId") ?? "")
+  const skuId = String(formData.get("skuId") ?? "")
+  const enabled = String(formData.get("enabled") ?? "") === "1"
+  setShopSkuEnabled(tenantId, skuId, enabled)
+  refresh(["/console/shops"])
 }
 
 const applicationSchema = z.object({
