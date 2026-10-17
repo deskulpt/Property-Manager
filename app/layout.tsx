@@ -86,7 +86,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <div className="mx-auto flex max-w-[1200px] flex-col gap-8 md:flex-row md:items-end md:justify-between">
             <div>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo.png" alt="Easy Rental" className="h-10 w-auto object-contain brightness-110" />
+              <img src="/logo.svg" alt="Easy Rental" className="h-10 w-auto object-contain brightness-110" />
               <p className="mt-3 max-w-sm font-mono text-xs leading-relaxed">{t("app.tagline")}</p>
               <p className="mt-2 max-w-sm text-sm text-paper/80">{t("app.legal")}</p>
             </div>
@@ -99,6 +99,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               </Link>
               <Link href="/ask" className="text-[#9ed0e0] transition-colors hover:text-paper">
                 Ask
+              </Link>
+              <Link href="/pricing" className="text-[#9ed0e0] transition-colors hover:text-paper">
+                {t("nav.pricing")}
               </Link>
               <Link href="/help/faq" className="text-[#9ed0e0] transition-colors hover:text-paper">
                 FAQ
