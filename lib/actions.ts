@@ -68,10 +68,25 @@ import {
   getSessionUser,
   SESSION_COOKIE,
   setAdminSessionCookie,
+  setAgentTenantCookie,
   setSessionCookie,
 } from "@/lib/session"
 import { translateEnglishCatalog, writeLocaleFile } from "@/lib/translate"
 import { simulateMatch } from "@/lib/verification"
+import {
+  agentCanAccessTenant,
+  createAgreement,
+  createTicket,
+  createUnitForProperty,
+  demoSignAgreement,
+  getNotifPrefs,
+  saveNotifPrefs,
+  setTicketStatus,
+  updateUnitListing,
+  type NotifPrefs,
+  type TicketStatus,
+} from "@/lib/role-cms-store"
+import { resolveAgentTenantId } from "@/lib/agent-context"
 
 function refresh(paths: string[]) {
   for (const item of paths) revalidatePath(item)
@@ -1269,3 +1284,231 @@ export async function getShopSettingsPublicAction(tenantId: string) {
   }
   return getShopSettingsPublic(tenantId)
 }
+
+/* ——— Role CMS consoles (managing agent, listings, tickets, agreements, profile) ——— */
+
+async function resolveLandlordTenantId() {
+  const user = await getSessionUser()
+  if (!user) return null
+  if (user.role === "landlord_admin" && user.tenantId) return { user, tenantId: user.tenantId }
+  if (user.role === "managing_agent") {
+    const tenantId = await resolveAgentTenantId(user.id)
+    if (!tenantId) return null
+    return { user, tenantId }
+  }
+  return null
+}
+
+export async function switchAgentLandlord(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user || user.role !== "managing_agent") return
+  const tenantId = String(formData.get("tenantId") ?? "")
+  if (!agentCanAccessTenant(user.id, tenantId)) return
+  await setAgentTenantCookie(tenantId)
+  refresh(["/agent", "/agent/applications", "/agent/listings", "/agent/pricing"])
+}
+
+export async function reviewApplicationAsDesk(formData: FormData) {
+  const ctx = await resolveLandlordTenantId()
+  if (!ctx) return
+  const decision = formData.get("decision") === "approved" ? "approved" : "denied"
+  const applicationId = String(formData.get("applicationId") ?? "")
+  const result = decideApplication(ctx.tenantId, applicationId, decision)
+  if (!result.ok) return
+  const verb = decision === "approved" ? "approved" : "declined"
+  notify({
+    userId: result.application.applicantId,
+    title: `Application ${verb}`,
+    body: `Unit ${result.application.unitCode} was ${verb}.`,
+    href: decision === "approved" ? "/portal/payments" : "/applicant",
+  })
+  for (const applicantId of result.deniedIds) {
+    notify({
+      userId: applicantId,
+      title: "Application declined",
+      body: `Unit ${result.application.unitCode} was leased to another applicant.`,
+      href: "/applicant",
+    })
+  }
+  refresh([
+    "/landlord",
+    "/landlord/applications",
+    "/agent",
+    "/agent/applications",
+    "/applicant",
+    "/portal",
+    "/inbox",
+  ])
+}
+
+export async function saveListingPricing(formData: FormData) {
+  const ctx = await resolveLandlordTenantId()
+  if (!ctx) return { error: "Not allowed for this desk." }
+  const unitId = String(formData.get("unitId") ?? "")
+  const ratePsf = Number(formData.get("ratePsf"))
+  const description = String(formData.get("description") ?? "").trim()
+  const listed = formData.get("listed") === "1"
+  const matterportUrl = String(formData.get("matterportUrl") ?? "").trim() || null
+  if (!Number.isFinite(ratePsf) || ratePsf <= 0) return { error: "Enter a positive ₹/SF/month rate." }
+  const result = updateUnitListing(ctx.tenantId, unitId, {
+    ratePsf,
+    description: description || undefined,
+    listed,
+    matterportUrl,
+  })
+  if (!result.ok) return { error: result.error }
+  refresh(["/landlord/listings", "/agent/listings", "/agent/pricing", "/listings", "/properties"])
+  return { error: null, message: "Listing saved." }
+}
+
+export async function createListingUnit(formData: FormData) {
+  const ctx = await resolveLandlordTenantId()
+  if (!ctx) return { error: "Not allowed for this desk." }
+  const propertyId = String(formData.get("propertyId") ?? "")
+  const code = String(formData.get("code") ?? "").trim().toUpperCase()
+  const sqft = Number(formData.get("sqft"))
+  const ratePsf = Number(formData.get("ratePsf"))
+  const clearHeight = String(formData.get("clearHeight") ?? "7.5 m").trim()
+  const docks = Number(formData.get("docks") ?? 0)
+  const driveIns = Number(formData.get("driveIns") ?? 0)
+  const power = String(formData.get("power") ?? "3-phase").trim()
+  const description = String(formData.get("description") ?? "").trim() || "New bay listing."
+  if (!code || !Number.isFinite(sqft) || sqft <= 0 || !Number.isFinite(ratePsf) || ratePsf <= 0) {
+    return { error: "Code, area (SF), and rate are required." }
+  }
+  const result = createUnitForProperty({
+    tenantId: ctx.tenantId,
+    propertyId,
+    code,
+    sqft,
+    clearHeight,
+    docks: Number.isFinite(docks) ? docks : 0,
+    driveIns: Number.isFinite(driveIns) ? driveIns : 0,
+    power,
+    ratePsf,
+    description,
+  })
+  if (!result.ok) return { error: result.error }
+  refresh(["/landlord/listings", "/landlord/properties", "/agent/listings", "/listings"])
+  return { error: null, message: `Unit ${code} created.`, unitId: result.unitId }
+}
+
+export async function submitTicket(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user) return { error: "Sign in to open a ticket." }
+  const leases = (await import("@/lib/role-cms-store")).activeLeasesForUser(user.id)
+  if (leases.length === 0) return { error: "Tickets are for current occupants with an active lease." }
+  const lease = leases[0]
+  const subject = String(formData.get("subject") ?? "").trim()
+  const body = String(formData.get("body") ?? "").trim()
+  if (subject.length < 3 || body.length < 3) return { error: "Add a short subject and details." }
+  createTicket({
+    tenantId: lease.tenantId,
+    propertyId: lease.propertyId,
+    unitId: lease.unitId,
+    userId: user.id,
+    subject,
+    body,
+  })
+  refresh(["/portal", "/portal/tickets", "/inbox"])
+  return { error: null, message: "Ticket opened." }
+}
+
+export async function cancelTicket(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user) return
+  const ticketId = String(formData.get("ticketId") ?? "")
+  setTicketStatus(user.id, ticketId, "cancelled" as TicketStatus)
+  refresh(["/portal/tickets"])
+}
+
+export async function saveProfileNotifPrefs(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user) return
+  const prefs: NotifPrefs = {
+    applications: formData.get("applications") === "on",
+    visits: formData.get("visits") === "on",
+    tickets: formData.get("tickets") === "on",
+    ledger: formData.get("ledger") === "on",
+    shop: formData.get("shop") === "on",
+    marketing: formData.get("marketing") === "on",
+  }
+  saveNotifPrefs(user.id, prefs)
+  refresh(["/profile"])
+}
+
+export async function generateRentalAgreement(formData: FormData) {
+  const ctx = await resolveLandlordTenantId()
+  if (!ctx) return { error: "Sign in as landlord admin or managing agent." }
+  const unitId = String(formData.get("unitId") ?? "")
+  const landlordName = String(formData.get("landlordName") ?? "").trim()
+  const tenantPartyName = String(formData.get("tenantPartyName") ?? "").trim()
+  const propertyLabel = String(formData.get("propertyLabel") ?? "").trim()
+  const unitCode = String(formData.get("unitCode") ?? "").trim()
+  const rentInr = Number(formData.get("rentInr"))
+  const depositInr = Number(formData.get("depositInr"))
+  const startDate = String(formData.get("startDate") ?? "")
+  const endDate = String(formData.get("endDate") ?? "")
+  const lockInMonths = Number(formData.get("lockInMonths") ?? 11)
+  const noticeDays = Number(formData.get("noticeDays") ?? 30)
+  const extras = String(formData.get("extras") ?? "")
+  if (!unitId || !landlordName || !tenantPartyName || !propertyLabel || !unitCode) {
+    return { error: "Complete parties, property, and unit." }
+  }
+  if (!Number.isFinite(rentInr) || rentInr <= 0 || !Number.isFinite(depositInr) || depositInr < 0) {
+    return { error: "Rent and deposit must be valid INR amounts." }
+  }
+  if (!startDate || !endDate) return { error: "Set the lease term dates." }
+  const agreement = createAgreement({
+    tenantId: ctx.tenantId,
+    unitId,
+    landlordName,
+    tenantPartyName,
+    propertyLabel,
+    unitCode,
+    rentInrCents: Math.round(rentInr * 100),
+    depositInrCents: Math.round(depositInr * 100),
+    startDate,
+    endDate,
+    lockInMonths: Number.isFinite(lockInMonths) ? lockInMonths : 11,
+    noticeDays: Number.isFinite(noticeDays) ? noticeDays : 30,
+    extras,
+  })
+  refresh(["/agreements", `/agreements/${agreement.id}`, "/landlord"])
+  return { error: null, agreementId: agreement.id }
+}
+
+export async function demoEsignAgreement(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user) return { error: "Sign in to e-sign." }
+  const id = String(formData.get("agreementId") ?? "")
+  const mode =
+    formData.get("mode") === "aadhaar_esign_demo" ? "aadhaar_esign_demo" : "signed_demo"
+  const result = demoSignAgreement(id, mode)
+  if (!result.ok) return { error: result.error }
+  refresh([`/agreements/${id}`, "/applicant/esign", "/portal/documents"])
+  return { error: null, message: mode === "aadhaar_esign_demo" ? "Aadhaar eSign stub complete." : "Demo e-sign complete." }
+}
+
+export async function getNotifPrefsAction() {
+  const user = await getSessionUser()
+  if (!user) return null
+  return getNotifPrefs(user.id)
+}
+
+export async function saveListingPricingForm(formData: FormData) {
+  await saveListingPricing(formData)
+}
+
+export async function createListingUnitForm(formData: FormData) {
+  await createListingUnit(formData)
+}
+
+export async function submitTicketForm(formData: FormData) {
+  await submitTicket(formData)
+}
+
+export async function demoEsignAgreementForm(formData: FormData) {
+  await demoEsignAgreement(formData)
+}
+

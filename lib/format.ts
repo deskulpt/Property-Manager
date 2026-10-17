@@ -1,6 +1,6 @@
 import { activeMarket, type MarketId } from "@/lib/market"
 
-export type MarketRole = "applicant" | "landlord_admin" | "service_provider"
+export type MarketRole = "applicant" | "landlord_admin" | "service_provider" | "managing_agent"
 export type StaffRole =
   | "super_admin"
   | "account_manager"
@@ -24,7 +24,7 @@ export const STAFF_ROLES: StaffRole[] = [
   "merchandiser",
 ]
 
-export const MARKET_ROLES: MarketRole[] = ["applicant", "landlord_admin", "service_provider"]
+export const MARKET_ROLES: MarketRole[] = ["applicant", "landlord_admin", "service_provider", "managing_agent"]
 
 export function isStaffRole(role: string): role is StaffRole {
   return (STAFF_ROLES as string[]).includes(role)
@@ -109,10 +109,11 @@ export function formatDay(iso: string | null) {
 export function roleLabel(role: Role) {
   if (role === "landlord_admin") return "Landlord admin"
   if (role === "service_provider") return "Service provider"
+  if (role === "managing_agent") return "Managing agent"
   if (role === "super_admin") return "Super Admin"
   if (role === "account_manager") return "Account Manager"
   if (role === "service_manager") return "Service Manager"
-  if (role === "property_manager") return "Property Manager"
+  if (role === "property_manager") return "Property Manager (platform)"
   if (role === "merchandiser") return "Merchandiser"
   return "Applicant"
 }
@@ -132,6 +133,9 @@ export function identityLabel(user: {
   }
   if (user.role === "service_provider") {
     return `${user.name} · ${user.trade ?? "Trade"} · ${user.serviceArea ?? ""}`
+  }
+  if (user.role === "managing_agent") {
+    return `${user.name} · Managing agent`
   }
   return `${user.name} · Applicant`
 }

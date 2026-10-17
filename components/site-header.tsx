@@ -34,8 +34,11 @@ function deskLinks(role: Role | null | undefined, unread: number): NavLink[] {
   const links: NavLink[] = []
   if (role === "landlord_admin") {
     links.push({ href: "/landlord", label: t("nav.desk.landlord") })
+  } else if (role === "managing_agent") {
+    links.push({ href: "/agent", label: "Managing agent" })
   } else if (role === "applicant") {
-    links.push({ href: "/account", label: t("nav.desk.applicant") })
+    links.push({ href: "/applicant", label: t("nav.desk.applicant") })
+    links.push({ href: "/portal", label: "Occupant portal" })
     links.push({ href: "/shop", label: "Shop" })
   } else if (role === "service_provider") {
     links.push({ href: "/provider", label: t("nav.desk.provider") })
@@ -44,6 +47,7 @@ function deskLinks(role: Role | null | undefined, unread: number): NavLink[] {
   } else if (role && isStaffRole(role)) {
     links.push({ href: "/cms", label: t("nav.desk.cms") })
   }
+  links.push({ href: "/profile", label: "Profile" })
   links.push({
     href: "/inbox",
     label: t("nav.inbox"),

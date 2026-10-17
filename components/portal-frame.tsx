@@ -8,7 +8,7 @@ export function PortalFrame({
 }: {
   kicker: string
   title: string
-  links: { href: string; label: string }[]
+  links: { href: string; label: string; badge?: number }[]
   children: React.ReactNode
 }) {
   return (
@@ -25,9 +25,17 @@ export function PortalFrame({
               <Link
                 key={link.href}
                 href={link.href}
-                className="shrink-0 border-l-2 border-transparent px-2.5 py-2 font-mono text-[11px] uppercase tracking-wider text-ink-soft transition-colors hover:border-terra hover:bg-paper-2 hover:text-ink"
+                className="flex shrink-0 items-center justify-between gap-2 border-l-2 border-transparent px-2.5 py-2 font-mono text-[11px] uppercase tracking-wider text-ink-soft transition-colors hover:border-terra hover:bg-paper-2 hover:text-ink"
               >
-                {link.label}
+                <span>{link.label}</span>
+                {link.badge != null && link.badge > 0 ? (
+                  <span
+                    className="rounded-sm bg-terra/15 px-1.5 py-0.5 font-mono text-[10px] font-bold text-terra"
+                    data-testid={`nav-badge-${link.href.replace(/\W+/g, "-")}`}
+                  >
+                    {link.badge}
+                  </span>
+                ) : null}
               </Link>
             ))}
           </nav>

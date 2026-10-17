@@ -24,7 +24,7 @@ import {
 import { decryptSecret, encryptSecret, secretLast4 } from "@/lib/shop-crypto"
 import { resolveShopPaymentProvider } from "@/lib/shop-payments"
 
-const SEED_VERSION = "12"
+const SEED_VERSION = "13"
 
 function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
@@ -104,6 +104,7 @@ export type UnitRecord = {
   hotspotY: number | null
   matterportUrl: string | null
   description: string
+  listed: boolean
 }
 
 export type MediaRecord = {
@@ -195,6 +196,7 @@ function mapUnit(row: Record<string, unknown>): UnitRecord {
     hotspotY: num(row, "hotspot_y"),
     matterportUrl: str(row, "matterport_url"),
     description: String(row.description),
+    listed: Number(row.listed ?? 1) === 1,
   }
 }
 
@@ -362,6 +364,7 @@ function createSchema(db: Sql) {
       hotspot_y REAL,
       matterport_url TEXT,
       description TEXT NOT NULL,
+      listed INTEGER NOT NULL DEFAULT 1,
       UNIQUE (property_id, code)
     );
     CREATE TABLE unit_media (
@@ -536,6 +539,58 @@ function createSchema(db: Sql) {
       status TEXT NOT NULL,
       UNIQUE (sku_id, slot_start)
     );
+
+    CREATE TABLE agent_landlord_access (
+      agent_user_id TEXT NOT NULL,
+      tenant_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (agent_user_id, tenant_id)
+    );
+    CREATE TABLE tickets (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      property_id TEXT NOT NULL,
+      unit_id TEXT,
+      user_id TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      body TEXT NOT NULL,
+      status TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE rental_agreements (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      unit_id TEXT NOT NULL,
+      application_id TEXT,
+      landlord_name TEXT NOT NULL,
+      tenant_party_name TEXT NOT NULL,
+      property_label TEXT NOT NULL,
+      unit_code TEXT NOT NULL,
+      rent_inr_cents INTEGER NOT NULL,
+      deposit_inr_cents INTEGER NOT NULL,
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      lock_in_months INTEGER NOT NULL,
+      notice_days INTEGER NOT NULL,
+      extras TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL,
+      body_text TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      signed_at TEXT,
+      esign_request_id TEXT
+    );
+    CREATE TABLE user_notification_prefs (
+      user_id TEXT PRIMARY KEY,
+      applications INTEGER NOT NULL DEFAULT 1,
+      visits INTEGER NOT NULL DEFAULT 1,
+      tickets INTEGER NOT NULL DEFAULT 1,
+      ledger INTEGER NOT NULL DEFAULT 1,
+      shop INTEGER NOT NULL DEFAULT 1,
+      marketing INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL
+    );
+
     CREATE INDEX idx_units_tenant ON units(tenant_id);
     CREATE INDEX idx_units_property ON units(property_id);
     CREATE INDEX idx_floors_property ON floors(property_id);
@@ -559,6 +614,10 @@ function createSchema(db: Sql) {
 function reset(db: Sql) {
   db.exec("PRAGMA foreign_keys = OFF")
   for (const table of [
+    "user_notification_prefs",
+    "rental_agreements",
+    "tickets",
+    "agent_landlord_access",
     "notifications",
     "otp_challenges",
     "ledger_entries",
@@ -652,6 +711,7 @@ function seed(db: Sql) {
   user.run("u_nadia", "Nadia Okonkwo", "nadia@bbmparks.example", "landlord_admin", "t_bbm", null, null, null, 0, "+912240012345", null)
   user.run("u_jonah", "Jonah Ellis", "jonah@harbourline.example", "landlord_admin", "t_harbour", null, null, null, 0, "+914440056789", null)
   user.run("u_meera", "Meera Sahni", "meera@sahniglobal.example", "landlord_admin", "t_nri", null, null, null, 0, "+14155550198", null)
+  user.run("u_riya", "Riya Kapoor", "riya@deskulpt-agents.example", "managing_agent", null, "Kapoor Portfolio Desk", null, null, 0, "+919820099001", null)
   user.run("u_luis", "Luis Ortega", "luis@ortegaelectric.example", "service_provider", null, null, "electrician", "Bhiwandi", 1, "+919820011122", null)
   user.run("u_rosa", "Rosa Delgado", "rosa@clearbay.example", "service_provider", null, null, "cleaning", "Bhiwandi", 1, "+919820011133", null)
   user.run("u_kei", "Kei Watanabe", "kei@lanterncourier.example", "service_provider", null, null, "courier", "Bhiwandi", 1, "+919820011144", null)
@@ -668,6 +728,38 @@ function seed(db: Sql) {
   approval.run("t_bbm", "u_hana", "pending")
   approval.run("t_harbour", "u_amrita", "approved")
   approval.run("t_harbour", "u_idris", "pending")
+  const agentAccess = db.prepare(
+    "INSERT INTO agent_landlord_access (agent_user_id, tenant_id, created_at) VALUES (?, ?, ?)",
+  )
+  agentAccess.run("u_riya", "t_bbm", "2026-09-01T10:00:00.000Z")
+  agentAccess.run("u_riya", "t_harbour", "2026-09-01T10:00:00.000Z")
+
+  const ticketIns = db.prepare(
+    `INSERT INTO tickets (id, tenant_id, property_id, unit_id, user_id, subject, body, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+  ticketIns.run(
+    "tk_devon_1",
+    "t_bbm",
+    "p_waterman",
+    "u_waterman_a1",
+    "u_devon",
+    "Dock seal dripping after monsoon",
+    "Water seeps at the north dock when it rains. Please send cleaning or weather-seal trade.",
+    "open",
+    "2026-09-20T09:00:00.000Z",
+    "2026-09-20T09:00:00.000Z",
+  )
+
+  const prefsIns = db.prepare(
+    `INSERT INTO user_notification_prefs
+       (user_id, applications, visits, tickets, ledger, shop, marketing, updated_at)
+     VALUES (?, 1, 1, 1, 1, 1, 0, ?)`,
+  )
+  for (const uid of ["u_nadia", "u_maya", "u_devon", "u_riya", "u_luis", "u_avery"] as const) {
+    prefsIns.run(uid, "2026-09-01T10:00:00.000Z")
+  }
+
 
   const property = db.prepare(
     `INSERT INTO properties (
@@ -1223,7 +1315,8 @@ export function listSessionUsers() {
            WHEN u.role IN ('super_admin','account_manager','service_manager','property_manager','merchandiser') THEN 0
            WHEN u.role = 'applicant' THEN 1
            WHEN u.role = 'landlord_admin' THEN 2
-           ELSE 3
+           WHEN u.role = 'managing_agent' THEN 3
+           ELSE 4
          END, u.name`,
       )
       .all(),

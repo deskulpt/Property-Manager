@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { DoNextFaq } from "@/components/cms/do-next-faq"
 import { MoneyPair } from "@/components/money-pair"
 import { PageHeader } from "@/components/product"
 import { landlordOverview } from "@/lib/db"
@@ -50,16 +51,60 @@ export default async function LandlordHome() {
         <Link href="/landlord/applications" className="text-terra hover:underline">
           Review applications
         </Link>
+        <Link href="/landlord/listings" className="text-terra hover:underline">
+          Listings
+        </Link>
+        <Link href="/landlord/visits" className="text-terra hover:underline">
+          Visits
+        </Link>
+        <Link href="/landlord/shop" className="text-terra hover:underline">
+          Shop settings
+        </Link>
+        <Link href="/agreements/new" className="text-terra hover:underline">
+          Agreement studio
+        </Link>
         <Link href="/landlord/jobs" className="text-terra hover:underline">
           Concierge jobs
         </Link>
         <Link href="/landlord/ledger" className="text-terra hover:underline">
           Ledger and late fees
         </Link>
-        <Link href="/landlord/settings" className="text-terra hover:underline">
-          Display currency &amp; OTP
+        <Link href="/profile" className="text-terra hover:underline">
+          Profile
         </Link>
       </div>
+      <DoNextFaq
+        steps={[
+          {
+            title: overview.openApplications
+              ? `Review ${overview.openApplications} pending applications`
+              : "Share listings to attract applicants",
+            body: "Pending count also shows on the Applications nav badge.",
+          },
+          {
+            title: "Confirm visits and pricing",
+            body: "Keep visit calendar and ₹/SF/month rates current.",
+          },
+          {
+            title: "Assign providers for open work",
+            body: "Approve trades, then assign concierge jobs — never auto-assign.",
+          },
+        ]}
+        faqs={[
+          {
+            q: "Where do I edit listings?",
+            a: "Open Listings for create/edit/publish, or Properties for floor-plan pins and QR posters.",
+          },
+          {
+            q: "Can a managing agent help?",
+            a: "Yes — invited agents can approve applications and adjust pricing without billing access.",
+          },
+          {
+            q: "Agreement PDFs?",
+            a: "Agreement studio generates a downloadable English India C&I template with demo e-sign.",
+          },
+        ]}
+      />
     </div>
   )
 }
