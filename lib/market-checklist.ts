@@ -26,10 +26,19 @@ export const MARKET_CHECKLIST_LABELS: Record<MarketChecklistKey, string> = {
   payment_methods: "Payment methods the landlord may offer",
 }
 
-/** ISO codes that must never be seeded as live or demo markets. */
-export const PARKED_MARKET_ISOS = ["US", "CA", "BR", "GB"] as const
+/**
+ * ISO codes that must never be seeded as live or demo markets.
+ * Canada is active dual-market (template switch) — not parked.
+ */
+export const PARKED_MARKET_ISOS = ["US", "BR", "GB"] as const
 
 export const LIVE_MARKET = {
   iso: "IN",
   name: "India",
 } as const
+
+/** Dual-market live set. India remains default; Canada is template switch. */
+export const LIVE_MARKETS = [
+  { iso: "IN", name: "India", default: true },
+  { iso: "CA", name: "Canada", default: false },
+] as const

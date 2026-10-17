@@ -6,7 +6,7 @@ import { buildMetadata, organizationJsonLd } from "@/lib/seo"
 export const metadata = buildMetadata({
   title: "Rent estimate calculator",
   description:
-    "Rough INR monthly rent range for industrial bays from SF, area PIN, and amenities. Estimate only — not an offer.",
+    "Rough monthly rent range for industrial bays from SF, area PIN or postal code, and amenities. India INR / Canada CAD. Estimate only — not an offer.",
   path: "/tools/rent-estimate",
 })
 
@@ -16,7 +16,7 @@ export default async function RentEstimatePage({ searchParams }: Props) {
   const params = await searchParams
   const sqft = Number(params.sqft)
   const initialSqft = Number.isFinite(sqft) && sqft >= 500 ? sqft : 10000
-  const initialPin = (params.pin || "421302").replace(/\D/g, "").slice(0, 6) || "421302"
+  const initialPin = params.pin?.trim() ? params.pin.trim().slice(0, 7) : undefined
 
   return (
     <div className="mx-auto max-w-[1100px] px-4 py-12 md:px-8">
@@ -28,8 +28,9 @@ export default async function RentEstimatePage({ searchParams }: Props) {
         Rent estimate
       </h1>
       <p className="mt-3 max-w-[52ch] text-lg text-ink-soft">
-        Enter square footage, an India PIN, and amenities for a corridor-based INR range. This is a
-        planning aid — landlords set the asking rate on each listing.
+        Enter square footage, an area PIN (India) or postal code (Canada), and amenities for a
+        corridor-based range. Switch market in the header. Planning aid only — landlords set asking
+        rates on each listing.
       </p>
       <p
         className="mt-4 max-w-[60ch] border border-terra/30 bg-terra/10 px-3 py-2 text-sm text-ink"

@@ -17,6 +17,7 @@ import {
 import { gstCents, type DisplayCurrency } from "@/lib/market"
 import {
   LIVE_MARKET,
+  LIVE_MARKETS,
   MARKET_CHECKLIST_KEYS,
   MARKET_CHECKLIST_LABELS,
   type MarketChecklistKey,
@@ -3083,8 +3084,8 @@ export function createMarketDraft(input: { isoCode: string; name: string }) {
   if (!/^[A-Z]{2}$/.test(iso)) {
     return { ok: false as const, error: "Use a two-letter ISO 3166 country code." }
   }
-  if (iso === LIVE_MARKET.iso) {
-    return { ok: false as const, error: "India is already the live market." }
+  if (LIVE_MARKETS.some((m) => m.iso === iso)) {
+    return { ok: false as const, error: `${iso} is already a live market.` }
   }
   if (name.length < 2) {
     return { ok: false as const, error: "Enter a display name." }
@@ -3126,14 +3127,16 @@ export function setChecklistItem(
 }
 
 /**
- * Countries offered on public forms: live India plus drafts with every checklist row done.
- * Incomplete drafts never appear here.
+ * Countries offered on public forms: live dual markets (India default + Canada)
+ * plus drafts with every checklist row done. Incomplete drafts never appear here.
  */
 export function publicFormCountries(): { iso: string; name: string; live: boolean }[] {
   const ready = listMarketDrafts()
     .filter((draft) => draft.complete)
     .map((draft) => ({ iso: draft.isoCode, name: draft.name, live: false }))
-  return [{ iso: LIVE_MARKET.iso, name: LIVE_MARKET.name, live: true }, ...ready]
+  const live = LIVE_MARKETS.map((m) => ({ iso: m.iso, name: m.name, live: true }))
+  const liveIsos = new Set(live.map((m) => m.iso))
+  return [...live, ...ready.filter((d) => !liveIsos.has(d.iso))]
 }
 
 export function isPublicFormCountry(nameOrIso: string) {

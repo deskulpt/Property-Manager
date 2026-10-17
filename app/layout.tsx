@@ -6,7 +6,9 @@ import { SiteHeader } from "@/components/site-header"
 import { SiteFooter } from "@/components/site-footer"
 import { PwaRegister } from "@/components/pwa-register"
 import { Toaster } from "@/components/ui/sonner"
+import { MarketProvider } from "@/components/market/market-provider"
 import { listSessionUsers, unreadCount } from "@/lib/db"
+import { getPreferredMarketId } from "@/lib/market-preference"
 import { getAdminSessionUser, getSessionUser } from "@/lib/session"
 
 /** Helvetica-adjacent UI sans — professional, not display/stretched. */
@@ -69,10 +71,11 @@ export const viewport: Viewport = {
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const [users, session, adminSession] = await Promise.all([
+  const [users, session, adminSession, marketId] = await Promise.all([
     listSessionUsers(),
     getSessionUser(),
     getAdminSessionUser(),
+    getPreferredMarketId(),
   ])
   const unread = session ? unreadCount(session.id) : 0
   const switchUsers = users.map((user) => ({
@@ -93,30 +96,32 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body
         className={`flex min-h-full flex-col bg-paper font-sans text-ink ${showAdminBar ? "pb-20" : ""}`}
       >
-        <a href="#main-content" className="skip-link">
-          Skip to main content
-        </a>
-        <SiteHeader
-          users={switchUsers}
-          currentId={session?.id ?? ""}
-          unread={unread}
-          role={session?.role ?? null}
-          signedIn={Boolean(session)}
-        />
-        <main id="main-content" className="flex-1" tabIndex={-1}>
-          {children}
-        </main>
-        <SiteFooter />
-        {showAdminBar ? (
-          <AdminSessionBar
+        <MarketProvider initialMarketId={marketId}>
+          <a href="#main-content" className="skip-link">
+            Skip to main content
+          </a>
+          <SiteHeader
             users={switchUsers}
-            currentId={session?.id ?? adminSession!.id}
-            tenantName={session?.tenantName ?? adminSession!.tenantName}
-            role={session?.role ?? adminSession!.role}
+            currentId={session?.id ?? ""}
+            unread={unread}
+            role={session?.role ?? null}
+            signedIn={Boolean(session)}
           />
-        ) : null}
-        <PwaRegister />
-        <Toaster />
+          <main id="main-content" className="flex-1" tabIndex={-1}>
+            {children}
+          </main>
+          <SiteFooter />
+          {showAdminBar ? (
+            <AdminSessionBar
+              users={switchUsers}
+              currentId={session?.id ?? adminSession!.id}
+              tenantName={session?.tenantName ?? adminSession!.tenantName}
+              role={session?.role ?? adminSession!.role}
+            />
+          ) : null}
+          <PwaRegister />
+          <Toaster />
+        </MarketProvider>
       </body>
     </html>
   )

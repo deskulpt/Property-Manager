@@ -835,9 +835,10 @@ export async function submitPayment(formData: FormData) {
 const verificationSchema = z.object({
   country: z.string().trim().min(2),
   region: z.string().trim().min(2, "Enter a province, state, or region"),
-  docType: z.enum(["aadhaar", "driving_licence"]),
+  docType: z.enum(["aadhaar", "driving_licence", "sin"]),
   fileName: z.string().trim().max(180),
   faceName: z.string().trim().max(180),
+  sinLast3: z.string().trim().regex(/^\d{0,3}$/).optional(),
 })
 
 export type VerifyState = {
@@ -851,6 +852,7 @@ export async function completeVerification(_prev: VerifyState, payload: {
   docType: string
   fileName: string
   faceName: string
+  sinLast3?: string
 }): Promise<VerifyState> {
   const user = await getSessionUser()
   if (!user || user.role !== "applicant") {
@@ -867,10 +869,17 @@ export async function completeVerification(_prev: VerifyState, payload: {
     }
   }
   const isIndia = parsed.data.country === "India" || parsed.data.country === "IN"
+  const isCanada = parsed.data.country === "Canada" || parsed.data.country === "CA"
   if (isIndia && parsed.data.docType !== "aadhaar") {
     return { error: "India uses Aadhaar in this demo.", result: null }
   }
-  if (!isIndia && parsed.data.docType !== "driving_licence") {
+  if (isCanada && parsed.data.docType !== "driving_licence" && parsed.data.docType !== "sin") {
+    return {
+      error: "Canada uses a provincial driver’s licence (SIN stub optional) in this demo.",
+      result: null,
+    }
+  }
+  if (!isIndia && !isCanada && parsed.data.docType !== "driving_licence") {
     return { error: "Non-India markets use a driving licence in this demo.", result: null }
   }
   const simulated = simulateMatch(parsed.data)

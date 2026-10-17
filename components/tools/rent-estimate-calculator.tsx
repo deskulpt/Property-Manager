@@ -1,23 +1,30 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { useMarket } from "@/components/market/market-provider"
 import {
   AMENITY_OPTIONS,
   estimateRent,
-  formatInr,
+  formatEstimateMoney,
   type AmenityKey,
 } from "@/lib/rent-estimate"
 
 export function RentEstimateCalculator({
   initialSqft = 10000,
-  initialPin = "421302",
+  initialPin,
 }: {
   initialSqft?: number
   initialPin?: string
 }) {
+  const { market, marketId } = useMarket()
+  const defaultPin = marketId === "CA" ? "M5V 2T6" : "421302"
   const [sqft, setSqft] = useState(String(initialSqft))
-  const [pin, setPin] = useState(initialPin)
+  const [pin, setPin] = useState(initialPin || defaultPin)
   const [amenities, setAmenities] = useState<AmenityKey[]>(["dock", "power_3ph"])
+
+  useEffect(() => {
+    if (!initialPin) setPin(marketId === "CA" ? "M5V 2T6" : "421302")
+  }, [marketId, initialPin])
 
   const result = useMemo(
     () =>
@@ -25,8 +32,9 @@ export function RentEstimateCalculator({
         sqft: Number(sqft),
         pin,
         amenities,
+        marketId,
       }),
-    [sqft, pin, amenities],
+    [sqft, pin, amenities, marketId],
   )
 
   function toggleAmenity(key: AmenityKey) {
@@ -35,6 +43,19 @@ export function RentEstimateCalculator({
     )
   }
 
+  function onPinChange(raw: string) {
+    if (marketId === "CA") {
+      const compact = raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6)
+      const formatted =
+        compact.length > 3 ? `${compact.slice(0, 3)} ${compact.slice(3)}` : compact
+      setPin(formatted)
+      return
+    }
+    setPin(raw.replace(/\D/g, "").slice(0, 6))
+  }
+
+  const currencyLabel = market.currency
+
   return (
     <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
       <form
@@ -42,6 +63,11 @@ export function RentEstimateCalculator({
         onSubmit={(e) => e.preventDefault()}
       >
         <h2 className="font-serif text-xl font-semibold">Inputs</h2>
+        {marketId === "CA" ? (
+          <p className="border border-brand/25 bg-accent/40 px-3 py-2 text-xs leading-relaxed text-ink-soft">
+            {market.commercialCallout}
+          </p>
+        ) : null}
         <label className="grid gap-1 text-sm">
           <span className="font-medium">Area (SF)</span>
           <input
@@ -54,19 +80,18 @@ export function RentEstimateCalculator({
           />
         </label>
         <label className="grid gap-1 text-sm">
-          <span className="font-medium">Area PIN code</span>
+          <span className="font-medium">{market.pinLabel}</span>
           <input
             type="text"
-            inputMode="numeric"
-            maxLength={6}
+            inputMode={marketId === "CA" ? "text" : "numeric"}
+            maxLength={marketId === "CA" ? 7 : 6}
             value={pin}
-            onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
-            placeholder="421302"
+            onChange={(e) => onPinChange(e.target.value)}
+            placeholder={market.pinPlaceholder}
             className="h-10 border border-ink/20 bg-card px-3 font-mono"
+            data-testid="rent-estimate-pin"
           />
-          <span className="text-xs text-ink-soft">
-            First 3 digits map to a demo corridor rate (INR / SF / month).
-          </span>
+          <span className="text-xs text-ink-soft">{market.pinHint}</span>
         </label>
         <fieldset>
           <legend className="text-sm font-medium">Amenities</legend>
@@ -96,8 +121,9 @@ export function RentEstimateCalculator({
 
       <div className="border border-ink/15 bg-brand p-5 text-paper md:p-6">
         <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-[#9ed0e0]">
-          Rough monthly range · INR
+          Rough monthly range · {currencyLabel}
         </p>
+        <p className="mt-1 text-[11px] text-paper/60">{market.currencyLedgerNote}</p>
         {"error" in result ? (
           <p className="mt-4 text-sm text-[#f0c9b8]" role="alert">
             {result.error}
@@ -105,10 +131,12 @@ export function RentEstimateCalculator({
         ) : (
           <>
             <p className="mt-3 font-serif text-3xl font-semibold tracking-tight md:text-4xl">
-              {formatInr(result.monthlyLowInr)} – {formatInr(result.monthlyHighInr)}
+              {formatEstimateMoney(result.monthlyLow, marketId)} –{" "}
+              {formatEstimateMoney(result.monthlyHigh, marketId)}
             </p>
             <p className="mt-2 text-sm text-paper/75">
-              Mid {formatInr(result.monthlyMidInr)} / mo · ~{formatInr(result.annualMidInr)} / yr
+              Mid {formatEstimateMoney(result.monthlyMid, marketId)} / mo · ~
+              {formatEstimateMoney(result.annualMid, marketId)} / yr
             </p>
             <dl className="mt-6 grid gap-2 font-mono text-[11px] uppercase tracking-wider text-paper/65">
               <div className="flex justify-between gap-3">
@@ -117,12 +145,16 @@ export function RentEstimateCalculator({
               </div>
               <div className="flex justify-between gap-3">
                 <dt>Base rate</dt>
-                <dd className="text-paper">₹{result.baseRatePsf} / SF</dd>
+                <dd className="text-paper">
+                  {marketId === "CA" ? "CA$" : "₹"}
+                  {result.baseRatePsf} / SF
+                </dd>
               </div>
               <div className="flex justify-between gap-3">
                 <dt>Adjusted</dt>
                 <dd className="text-paper">
-                  ₹{result.adjustedRatePsf} / SF (+{result.upliftPct}%)
+                  {marketId === "CA" ? "CA$" : "₹"}
+                  {result.adjustedRatePsf} / SF (+{result.upliftPct}%)
                 </dd>
               </div>
             </dl>

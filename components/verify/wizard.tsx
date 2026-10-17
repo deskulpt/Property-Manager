@@ -1,9 +1,10 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { useMarket } from "@/components/market/market-provider"
 import { completeVerification } from "@/lib/actions"
 
 export function VerificationWizard({
@@ -20,20 +21,27 @@ export function VerificationWizard({
   } | null
   countries: { iso: string; name: string; live: boolean }[]
 }) {
+  const { market, marketId } = useMarket()
+
   const countryOptions = countries.map((country) => ({
     value: country.name,
     label: country.live ? `${country.name} (live)` : country.name,
   }))
+
+  const marketDefaultCountry = market.defaultCountry
   const defaultCountry =
     existing && countries.some((c) => c.name === existing.country)
       ? existing.country
-      : countries[0]?.name ?? "India"
+      : countries.some((c) => c.name === marketDefaultCountry)
+        ? marketDefaultCountry
+        : countries[0]?.name ?? "India"
 
   const [step, setStep] = useState(0)
   const [country, setCountry] = useState<string>(defaultCountry)
   const [region, setRegion] = useState(existing?.region ?? "")
   const [fileName, setFileName] = useState("")
   const [faceName, setFaceName] = useState("")
+  const [sinLast3, setSinLast3] = useState("")
   const [preview, setPreview] = useState<string | null>(null)
   const [scanning, setScanning] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -41,9 +49,27 @@ export function VerificationWizard({
     existing ? { score: existing.score, result: existing.result } : null,
   )
 
+  useEffect(() => {
+    if (!existing) {
+      setCountry(marketDefaultCountry)
+      setRegion("")
+      setStep(0)
+    }
+  }, [marketId, marketDefaultCountry, existing])
+
   const isIndia = country === "India" || country === "IN"
+  const isCanada = country === "Canada" || country === "CA"
   const docType = isIndia ? "aadhaar" : "driving_licence"
-  const docLabel = docType === "aadhaar" ? "Aadhaar" : "Driving licence"
+  const docLabel = isIndia
+    ? "Aadhaar"
+    : isCanada
+      ? "Provincial driver’s licence"
+      : "Driving licence"
+  const regionPlaceholder = isCanada
+    ? "Ontario"
+    : isIndia
+      ? "Maharashtra"
+      : "Province / state"
   const steps = ["Country", "Document", "Upload", "Face match"]
 
   function rememberFile(file: File | undefined, kind: "doc" | "face") {
@@ -69,7 +95,14 @@ export function VerificationWizard({
     }
     const result = await completeVerification(
       { error: null, result: null },
-      { country, region, docType, fileName, faceName: nextFace },
+      {
+        country,
+        region,
+        docType,
+        fileName,
+        faceName: nextFace,
+        sinLast3: isCanada ? sinLast3 : undefined,
+      },
     )
     if (result.error) setError(result.error)
     setOutcome(result.result)
@@ -79,16 +112,28 @@ export function VerificationWizard({
   const offered = useMemo(() => countryOptions, [countryOptions])
 
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-6" data-testid="verify-wizard" data-market={marketId}>
       <div className="border border-terra/40 bg-terra/10 px-4 py-3 text-sm">
         <p className="font-sans font-bold">Demo verification</p>
         <p className="mt-1 text-ink-soft">
-          Nothing is sent to UIDAI or any government API. Only India and checklist-ready draft markets are offered. Incomplete drafts stay off this form.
+          {market.verifyDocHint} Nothing is sent to UIDAI, a provincial ministry, or CRA.
         </p>
       </div>
+      {isCanada || marketId === "CA" ? (
+        <div
+          className="border border-brand/30 bg-accent/50 px-4 py-3 text-sm text-ink-soft"
+          data-testid="ca-commercial-callout"
+        >
+          <p className="font-sans font-bold text-ink">Canada commercial leasing</p>
+          <p className="mt-1">{market.commercialCallout}</p>
+        </div>
+      ) : null}
       <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {steps.map((label, index) => (
-          <li key={label} className={`border px-3 py-2 font-mono text-[11px] uppercase tracking-wider ${index === step ? "border-brand bg-accent text-brand" : "border-border text-ink-faint"}`}>
+          <li
+            key={label}
+            className={`border px-3 py-2 font-mono text-[11px] uppercase tracking-wider ${index === step ? "border-brand bg-accent text-brand" : "border-border text-ink-faint"}`}
+          >
             0{index + 1} {label}
           </li>
         ))}
@@ -113,9 +158,18 @@ export function VerificationWizard({
             </select>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="region">State / province / region</Label>
-            <Input id="region" value={region} onChange={(event) => setRegion(event.target.value)} placeholder="Maharashtra" />
+            <Label htmlFor="region">{market.statesLabel}</Label>
+            <Input
+              id="region"
+              value={region}
+              onChange={(event) => setRegion(event.target.value)}
+              placeholder={regionPlaceholder}
+            />
           </div>
+          <p className="text-xs text-ink-soft">
+            Phone hint for this market:{" "}
+            <span className="font-mono">{market.phonePlaceholder}</span>
+          </p>
           <Button type="button" onClick={() => setStep(1)} disabled={!region.trim()}>
             Continue
           </Button>
@@ -127,9 +181,31 @@ export function VerificationWizard({
           <p className="text-sm text-ink-soft">
             Document for {country}: <span className="font-bold text-ink">{docLabel}</span>
           </p>
+          {isCanada ? (
+            <div className="grid gap-2" data-testid="ca-sin-stub">
+              <Label htmlFor="sin-last3">SIN last 3 (optional demo stub)</Label>
+              <Input
+                id="sin-last3"
+                inputMode="numeric"
+                maxLength={3}
+                value={sinLast3}
+                onChange={(e) => setSinLast3(e.target.value.replace(/\D/g, "").slice(0, 3))}
+                placeholder="•••"
+                className="font-mono"
+              />
+              <p className="text-xs text-ink-soft">
+                Do not enter a real SIN. Stub is local demo metadata only — not stored as a full
+                identifier and not sent to CRA.
+              </p>
+            </div>
+          ) : null}
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={() => setStep(0)}>Back</Button>
-            <Button type="button" onClick={() => setStep(2)}>Continue</Button>
+            <Button type="button" variant="outline" onClick={() => setStep(0)}>
+              Back
+            </Button>
+            <Button type="button" onClick={() => setStep(2)}>
+              Continue
+            </Button>
           </div>
         </div>
       ) : null}
@@ -138,12 +214,20 @@ export function VerificationWizard({
         <div className="grid gap-4 bg-card p-5 ring-1 ring-foreground/10">
           <label className="grid gap-1 text-sm">
             Document file (filename only)
-            <input type="file" accept="image/*,.pdf" onChange={(event) => rememberFile(event.target.files?.[0], "doc")} />
+            <input
+              type="file"
+              accept="image/*,.pdf"
+              onChange={(event) => rememberFile(event.target.files?.[0], "doc")}
+            />
             {fileName ? <span className="text-xs text-ink-soft">{fileName}</span> : null}
           </label>
           <label className="grid gap-1 text-sm">
             Face photo (filename only)
-            <input type="file" accept="image/*" onChange={(event) => rememberFile(event.target.files?.[0], "face")} />
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(event) => rememberFile(event.target.files?.[0], "face")}
+            />
             {faceName ? <span className="text-xs text-ink-soft">{faceName}</span> : null}
           </label>
           {preview ? (
@@ -151,7 +235,9 @@ export function VerificationWizard({
             <img src={preview} alt="" className="max-h-40 w-auto object-contain" />
           ) : null}
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={() => setStep(1)}>Back</Button>
+            <Button type="button" variant="outline" onClick={() => setStep(1)}>
+              Back
+            </Button>
             <Button type="button" onClick={() => void finish()} disabled={scanning}>
               {scanning ? "Matching…" : "Run demo match"}
             </Button>
@@ -165,8 +251,13 @@ export function VerificationWizard({
           <p className="font-sans text-2xl font-black text-brand">
             {outcome.result} · {outcome.score.toFixed(2)}
           </p>
-          <p className="text-sm text-ink-soft">Simulated only. No government API was called.</p>
-          <Button type="button" variant="outline" onClick={() => setStep(0)}>Run again</Button>
+          <p className="text-sm text-ink-soft">
+            Simulated only. No government API was called
+            {isCanada && sinLast3 ? ` · SIN stub …${sinLast3}` : ""}.
+          </p>
+          <Button type="button" variant="outline" onClick={() => setStep(0)}>
+            Run again
+          </Button>
         </div>
       ) : null}
     </div>

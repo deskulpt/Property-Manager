@@ -9,6 +9,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
+import { FlagSwitcher } from "@/components/market/flag-switcher"
 import type { SwitchUser } from "@/components/session-switcher"
 import { logoutSession } from "@/lib/actions"
 import {
@@ -216,6 +217,7 @@ export function SiteHeader({
           </nav>
 
           <div className="flex items-center gap-2">
+            <FlagSwitcher />
             {visitor ? (
               <div className="hidden items-center gap-2 sm:flex">
                 <Link
