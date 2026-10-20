@@ -16,6 +16,7 @@ import {
   addCustomDomain,
   createApplication,
   createLandlordAccount,
+  createPropertyForLandlord,
   createVisitRequest,
   getPasswordHashForEmail,
   getUserByEmail,
@@ -52,6 +53,13 @@ import {
 } from "@/lib/db"
 import { TRADES } from "@/lib/format"
 import { t } from "@/lib/i18n"
+import {
+  isPropertySegment,
+  leaseProfile,
+  PROPERTY_SUBTYPES,
+  type PropertySegment,
+  warehouseAttributesFromColumns,
+} from "@/lib/listing-schemas"
 import { toE164, type DisplayCurrency, type PaymentMethodKind } from "@/lib/market"
 import { MARKET_CHECKLIST_KEYS, type MarketChecklistKey } from "@/lib/market-checklist"
 import { notify, notifyMany } from "@/lib/notifications"
@@ -237,10 +245,10 @@ export async function switchSession(userId: string) {
 
 const applicationSchema = z.object({
   unitId: z.string().min(1),
-  company: z.string().trim().min(2, "Enter the company name"),
+  company: z.string().trim().min(2, "Enter a name or company"),
   contactName: z.string().trim().min(2, "Enter a contact name"),
-  email: z.string().trim().regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Enter a work email"),
-  intendedUse: z.string().trim().min(3, "Say how the bay will be used"),
+  email: z.string().trim().regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Enter an email"),
+  intendedUse: z.string().trim().min(3, "Add a short note on intended use"),
   notes: z.string().trim().max(1000).optional(),
 })
 
@@ -290,6 +298,136 @@ export async function submitApplication(_prev: ApplyState, formData: FormData): 
   )
   refresh(["/", "/properties", `/properties/${result.slug}`, `/properties/${result.slug}/units/${result.code}`, "/account", "/landlord", "/landlord/applications", "/inbox"])
   redirect("/account?notice=Application+submitted.+The+landlord+can+review+it+from+their+inbox.")
+}
+
+export type CreateListingState = {
+  error: string | null
+  fieldErrors?: Record<string, string>
+}
+
+export async function createListingProperty(
+  _prev: CreateListingState,
+  formData: FormData,
+): Promise<CreateListingState> {
+  const user = await getSessionUser()
+  if (!user?.tenantId || user.role !== "landlord_admin") {
+    return { error: "Switch to a landlord admin to create listings.", fieldErrors: {} }
+  }
+  const segmentRaw = String(formData.get("segment") ?? "")
+  if (!isPropertySegment(segmentRaw)) {
+    return { error: "Pick a valid segment.", fieldErrors: { segment: "Invalid segment" } }
+  }
+  const segment = segmentRaw as PropertySegment
+  const subtype = String(formData.get("subtype") ?? "")
+  if (!(PROPERTY_SUBTYPES[segment] as readonly string[]).includes(subtype)) {
+    return { error: "Pick a subtype for that segment.", fieldErrors: { subtype: "Invalid subtype" } }
+  }
+  const name = String(formData.get("name") ?? "").trim()
+  const address = String(formData.get("address") ?? "").trim()
+  const area = String(formData.get("area") ?? "").trim()
+  const cityLine = String(formData.get("cityLine") ?? "").trim()
+  const unitCode = String(formData.get("unitCode") ?? "").trim()
+  const description = String(formData.get("description") ?? "").trim()
+  const sqft = Number(formData.get("sqft"))
+  if (!name || !address || !area || !cityLine || !unitCode || !description || !Number.isFinite(sqft) || sqft <= 0) {
+    return { error: "Fill property name, address, area, city line, unit code, area SF, and description." }
+  }
+  const profile = leaseProfile(segment)
+  let rateBasis: "per_sqft_month" | "flat_month" = profile.rateBasisDefault
+  let ratePsf = 0
+  let rentAmountMinor: number | null = null
+  let attributes: Record<string, unknown> = {}
+  let clearHeight = ""
+  let docks = 0
+  let driveIns = 0
+  let power = ""
+  let bhk: number | null = null
+  let carpetSqft: number | null = null
+  let securityDepositMonths: number | null = profile.defaultDepositMonths
+  let maintenanceMinor: number | null = null
+
+  if (segment === "warehouse") {
+    ratePsf = Number(formData.get("ratePsf"))
+    if (!Number.isFinite(ratePsf) || ratePsf <= 0) {
+      return { error: "Enter a positive ₹/SF rate.", fieldErrors: { ratePsf: "Required" } }
+    }
+    clearHeight = String(formData.get("clearHeight") ?? "").trim() || "—"
+    docks = Number(formData.get("docks") ?? 0) || 0
+    driveIns = Number(formData.get("driveIns") ?? 0) || 0
+    power = String(formData.get("power") ?? "").trim() || "—"
+    attributes = warehouseAttributesFromColumns({
+      clearHeight,
+      docks,
+      driveIns,
+      power,
+    })
+  } else {
+    const monthly = Number(formData.get("monthlyRent"))
+    if (!Number.isFinite(monthly) || monthly <= 0) {
+      return { error: "Enter monthly rent in ₹.", fieldErrors: { monthlyRent: "Required" } }
+    }
+    rentAmountMinor = Math.round(monthly * 100)
+    rateBasis = "flat_month"
+    carpetSqft = Number(formData.get("carpetSqft"))
+    if (!Number.isFinite(carpetSqft) || carpetSqft <= 0) carpetSqft = sqft
+    if (segment === "residential") {
+      bhk = Number(formData.get("bhk")) || 1
+      const furnishing = String(formData.get("furnishing") ?? "semi")
+      securityDepositMonths = Number(formData.get("depositMonths")) || profile.defaultDepositMonths
+      const maintenance = Number(formData.get("maintenance") ?? 0)
+      maintenanceMinor = Number.isFinite(maintenance) && maintenance > 0 ? Math.round(maintenance * 100) : null
+      attributes = {
+        bhk,
+        furnishing: furnishing === "fully" || furnishing === "unfurnished" ? furnishing : "semi",
+        societyAmenities: [],
+      }
+    } else {
+      attributes = {
+        carpetSqft,
+        superBuiltUpSqft: sqft,
+        frontageFt: Number(formData.get("frontageFt")) || undefined,
+        floor: String(formData.get("floor") ?? "").trim() || undefined,
+        mallName: String(formData.get("mallName") ?? "").trim() || undefined,
+        fitOut: (() => {
+          const raw = String(formData.get("fitOut") ?? "")
+          if (raw === "fitted" || raw === "warm_shell" || raw === "bare_shell") return raw
+          return "bare_shell" as const
+        })(),
+      }
+    }
+  }
+
+  const result = createPropertyForLandlord({
+    tenantId: user.tenantId,
+    name,
+    address,
+    area,
+    cityLine,
+    segment,
+    subtype,
+    totalSqft: sqft,
+    unit: {
+      code: unitCode,
+      description,
+      sqft,
+      ratePsf,
+      rateBasis,
+      rentAmountMinor,
+      clearHeight,
+      docks,
+      driveIns,
+      power,
+      attributes: attributes as import("@/lib/listing-schemas").UnitAttributes,
+      bhk,
+      carpetSqft,
+      securityDepositMonths,
+      maintenanceMinor,
+      gstApplicable: profile.gstOnRent,
+    },
+  })
+  if (!result.ok) return { error: result.error }
+  refresh(["/landlord/properties", `/landlord/properties/${result.propertyId}`, "/listings", "/properties"])
+  redirect(`/landlord/properties/${result.propertyId}`)
 }
 
 

@@ -8,12 +8,24 @@ import {
   lateFeeCents,
   monthlyRentCents,
   todayISO,
+  unitMonthlyRentCents,
   type ApplicationStatus,
   type JobStatus,
   type Role,
   type Trade,
   type UnitStatus,
 } from "@/lib/format"
+import {
+  gstAppliesForUnit,
+  isPropertySegment,
+  leaseProfile,
+  parseUnitAttributes,
+  stringifyAttributes,
+  warehouseAttributesFromColumns,
+  type PropertySegment,
+  type RateBasis,
+  type UnitAttributes,
+} from "@/lib/listing-schemas"
 import { gstCents, type DisplayCurrency } from "@/lib/market"
 import {
   LIVE_MARKET,
@@ -24,7 +36,7 @@ import {
 import { decryptSecret, encryptSecret, secretLast4 } from "@/lib/shop-crypto"
 import { resolveShopPaymentProvider } from "@/lib/shop-payments"
 
-const SEED_VERSION = "9"
+const SEED_VERSION = "10"
 
 function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
@@ -99,6 +111,15 @@ export type UnitRecord = {
   driveIns: number
   power: string
   ratePsf: number
+  rateBasis: RateBasis
+  rentAmountMinor: number | null
+  attributes: UnitAttributes
+  attributesJson: string
+  bhk: number | null
+  carpetSqft: number | null
+  securityDepositMonths: number | null
+  maintenanceMinor: number | null
+  gstApplicable: boolean | null
   status: UnitStatus
   hotspotX: number | null
   hotspotY: number | null
@@ -124,6 +145,8 @@ export type PropertyRecord = {
   area: string
   cityLine: string
   totalSqft: number
+  segment: PropertySegment
+  subtype: string
   floorPlanPath: string | null
   modelPath: string | null
   latitude: number | null
@@ -176,7 +199,16 @@ function mapUser(row: Record<string, unknown>): SessionUser {
   }
 }
 
-function mapUnit(row: Record<string, unknown>): UnitRecord {
+function mapUnit(row: Record<string, unknown>, segmentHint?: PropertySegment): UnitRecord {
+  const segment =
+    segmentHint ??
+    (isPropertySegment(String(row.segment ?? "warehouse"))
+      ? (String(row.segment) as PropertySegment)
+      : "warehouse")
+  const rateBasisRaw = str(row, "rate_basis") ?? "per_sqft_month"
+  const rateBasis: RateBasis = rateBasisRaw === "flat_month" ? "flat_month" : "per_sqft_month"
+  const attributesJson = str(row, "attributes") ?? "{}"
+  const gstRaw = num(row, "gst_applicable")
   return {
     id: String(row.id),
     tenantId: String(row.tenant_id),
@@ -189,6 +221,15 @@ function mapUnit(row: Record<string, unknown>): UnitRecord {
     driveIns: Number(row.drive_ins),
     power: String(row.power),
     ratePsf: Number(row.rate_psf),
+    rateBasis,
+    rentAmountMinor: num(row, "rent_amount_minor"),
+    attributes: parseUnitAttributes(segment, attributesJson),
+    attributesJson,
+    bhk: num(row, "bhk"),
+    carpetSqft: num(row, "carpet_sqft"),
+    securityDepositMonths: num(row, "security_deposit_months"),
+    maintenanceMinor: num(row, "maintenance_minor"),
+    gstApplicable: gstRaw == null ? null : gstRaw === 1,
     status: String(row.status) as UnitStatus,
     hotspotX: num(row, "hotspot_x"),
     hotspotY: num(row, "hotspot_y"),
@@ -264,6 +305,8 @@ function createSchema(db: Sql) {
       area TEXT NOT NULL,
       city_line TEXT NOT NULL,
       total_sqft INTEGER NOT NULL,
+      segment TEXT NOT NULL DEFAULT 'warehouse',
+      subtype TEXT NOT NULL DEFAULT 'logistics_park',
       floor_plan_path TEXT,
       model_path TEXT,
       latitude REAL,
@@ -304,6 +347,14 @@ function createSchema(db: Sql) {
       drive_ins INTEGER NOT NULL,
       power TEXT NOT NULL,
       rate_psf REAL NOT NULL,
+      rate_basis TEXT NOT NULL DEFAULT 'per_sqft_month',
+      rent_amount_minor INTEGER,
+      attributes TEXT NOT NULL DEFAULT '{}',
+      bhk INTEGER,
+      carpet_sqft INTEGER,
+      security_deposit_months REAL,
+      maintenance_minor INTEGER,
+      gst_applicable INTEGER,
       status TEXT NOT NULL,
       hotspot_x REAL,
       hotspot_y REAL,
@@ -565,6 +616,7 @@ function seed(db: Sql) {
   tenant.run("t_bbm", "BBM Logistics Parks", "bbm-parks", "Mumbai", "landlord", "INR", "pro")
   tenant.run("t_harbour", "Harbourline Yards India", "harbourline-india", "Chennai", "landlord", "INR", "starter")
   tenant.run("t_nri", "Sahni Global Realty (NRI)", "sahni-global", "Dubai / Mumbai", "landlord", "USD", "starter")
+  tenant.run("t_deccan", "Deccan Spaces Hyderabad", "deccan-spaces", "Hyderabad", "landlord", "INR", "pro")
 
   const user = db.prepare(
     `INSERT INTO users (id, name, email, role, tenant_id, company, trade, service_area, provider_verified, phone, password_hash)
@@ -580,6 +632,8 @@ function seed(db: Sql) {
   user.run("u_nadia", "Nadia Okonkwo", "nadia@bbmparks.example", "landlord_admin", "t_bbm", null, null, null, 0, "+912240012345")
   user.run("u_jonah", "Jonah Ellis", "jonah@harbourline.example", "landlord_admin", "t_harbour", null, null, null, 0, "+914440056789")
   user.run("u_meera", "Meera Sahni", "meera@sahniglobal.example", "landlord_admin", "t_nri", null, null, null, 0, "+14155550198")
+  user.run("u_ananya", "Ananya Reddy", "ananya@deccanspaces.example", "landlord_admin", "t_deccan", null, null, null, 0, "+914040012345")
+  user.run("u_ravi", "Ravi Menon", "ravi@menon.example", "applicant", null, null, null, null, 0, "+919900778899")
   user.run("u_luis", "Luis Ortega", "luis@ortegaelectric.example", "service_provider", null, null, "electrician", "Bhiwandi", 1, "+919820011122")
   user.run("u_rosa", "Rosa Delgado", "rosa@clearbay.example", "service_provider", null, null, "cleaning", "Bhiwandi", 1, "+919820011133")
   user.run("u_kei", "Kei Watanabe", "kei@lanterncourier.example", "service_provider", null, null, "courier", "Bhiwandi", 1, "+919820011144")
@@ -599,17 +653,20 @@ function seed(db: Sql) {
 
   const property = db.prepare(
     `INSERT INTO properties (
-      id, tenant_id, name, slug, address, area, city_line, total_sqft, floor_plan_path, model_path, latitude, longitude
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id, tenant_id, name, slug, address, area, city_line, total_sqft, segment, subtype,
+      floor_plan_path, model_path, latitude, longitude
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
   // Gate pins are approximate public coords for demo Leaflet embeds (no Mapbox key).
-  property.run("p_waterman", "t_bbm", "BBM Bhiwandi Hub", "waterman", "Plot 19, Kalyan-Bhiwandi Road, Bhiwandi, Maharashtra 421302", "Bhiwandi", "BHIWANDI · PIN 421302 · 214,000 SF", 214000, "/floorplans/waterman.svg", null, 19.2813, 73.0483)
-  property.run("p_bartley", "t_bbm", "BBM Whitefield Sheds", "bartley", "161 ITPL Main Road, Whitefield, Bengaluru, Karnataka 560066", "Whitefield", "WHITEFIELD · PIN 560066 · 96,000 SF", 96000, "/floorplans/bartley.svg", null, 12.9698, 77.75)
-  property.run("p_cranfield", "t_bbm", "BBM Andheri East", "cranfield", "12 MIDC Central Road, Andheri East, Mumbai, Maharashtra 400093", "Andheri East", "ANDHERI EAST · PIN 400093 · 74,500 SF", 74500, "/floorplans/cranfield.svg", null, 19.1136, 72.8697)
-  property.run("p_commissioners", "t_harbour", "Harbourline Sriperumbudur", "commissioners", "88 SIPCOT Industrial Park, Sriperumbudur, Tamil Nadu 602105", "Sriperumbudur", "SRIPERUMBUDUR · PIN 602105 · 86,000 SF", 86000, "/floorplans/commissioners.svg", null, 12.9675, 79.9473)
-  property.run("p_nri_thane", "t_nri", "Sahni Thane Warehouse", "thane", "45 Wagle Estate, Thane West, Maharashtra 400604", "Thane", "THANE · PIN 400604 · 42,000 SF", 42000, "/floorplans/cranfield.svg", null, 19.2183, 72.9781)
+  property.run("p_waterman", "t_bbm", "BBM Bhiwandi Hub", "waterman", "Plot 19, Kalyan-Bhiwandi Road, Bhiwandi, Maharashtra 421302", "Bhiwandi", "BHIWANDI · PIN 421302 · 214,000 SF", 214000, "warehouse", "logistics_park", "/floorplans/waterman.svg", null, 19.2813, 73.0483)
+  property.run("p_bartley", "t_bbm", "BBM Whitefield Sheds", "bartley", "161 ITPL Main Road, Whitefield, Bengaluru, Karnataka 560066", "Whitefield", "WHITEFIELD · PIN 560066 · 96,000 SF", 96000, "warehouse", "shed", "/floorplans/bartley.svg", null, 12.9698, 77.75)
+  property.run("p_cranfield", "t_bbm", "BBM Andheri East", "cranfield", "12 MIDC Central Road, Andheri East, Mumbai, Maharashtra 400093", "Andheri East", "ANDHERI EAST · PIN 400093 · 74,500 SF", 74500, "warehouse", "shed", "/floorplans/cranfield.svg", null, 19.1136, 72.8697)
+  property.run("p_commissioners", "t_harbour", "Harbourline Sriperumbudur", "commissioners", "88 SIPCOT Industrial Park, Sriperumbudur, Tamil Nadu 602105", "Sriperumbudur", "SRIPERUMBUDUR · PIN 602105 · 86,000 SF", 86000, "warehouse", "logistics_park", "/floorplans/commissioners.svg", null, 12.9675, 79.9473)
+  property.run("p_nri_thane", "t_nri", "Sahni Thane Warehouse", "thane", "45 Wagle Estate, Thane West, Maharashtra 400604", "Thane", "THANE · PIN 400604 · 42,000 SF", 42000, "warehouse", "logistics_park", "/floorplans/cranfield.svg", null, 19.2183, 72.9781)
   // Multi-floor stack/peel demo (PRD §4.4) — 8 levels so the selector scrolls (>5).
-  property.run("p_powai", "t_bbm", "BBM Powai Tower", "powai", "12 Hiranandani Gardens, Powai, Mumbai, Maharashtra 400076", "Powai", "POWAI · PIN 400076 · 96,000 SF · 8 FLOORS", 96000, "/floorplans/powai-plate.svg", null, 19.1197, 72.9051)
+  property.run("p_powai", "t_bbm", "BBM Powai Tower", "powai", "12 Hiranandani Gardens, Powai, Mumbai, Maharashtra 400076", "Powai", "POWAI · PIN 400076 · 96,000 SF · 8 FLOORS", 96000, "warehouse", "shed", "/floorplans/powai-plate.svg", null, 19.1197, 72.9051)
+  property.run("p_forum", "t_deccan", "Forum Mall Storefronts", "forum-hyd", "Forum Sujana Mall, Kukatpally, Hyderabad, Telangana 500072", "Kukatpally", "HYDERABAD · KUKATPALLY · PIN 500072", 18000, "commercial", "mall_store", null, null, 17.4942, 78.3996)
+  property.run("p_jubilee", "t_deccan", "Jubilee Hills Residences", "jubilee-hyd", "Road No. 36, Jubilee Hills, Hyderabad, Telangana 500033", "Jubilee Hills", "HYDERABAD · JUBILEE HILLS · PIN 500033", 4200, "residential", "apartment", null, null, 17.4326, 78.4071)
 
   const floorStmt = db.prepare(
     `INSERT INTO floors (id, tenant_id, property_id, label, level_index, plan_path)
@@ -632,8 +689,10 @@ function seed(db: Sql) {
   const unitStmt = db.prepare(
     `INSERT INTO units (
       id, tenant_id, property_id, floor_id, code, sqft, clear_height, docks, drive_ins, power,
-      rate_psf, status, hotspot_x, hotspot_y, matterport_url, description
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      rate_psf, rate_basis, rent_amount_minor, attributes, bhk, carpet_sqft,
+      security_deposit_months, maintenance_minor, gst_applicable,
+      status, hotspot_x, hotspot_y, matterport_url, description
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
 
   /**
@@ -662,6 +721,14 @@ function seed(db: Sql) {
       const walk = MATTERPORTS[key] ?? null
       const rich = key === "waterman:B1"
       const unitFloorId = unit.floorId ?? floorId
+      const attrs = stringifyAttributes(
+        warehouseAttributesFromColumns({
+          clearHeight: unit.h,
+          docks: unit.dock,
+          driveIns: unit.drive,
+          power: unit.pwr,
+        }),
+      )
       unitStmt.run(
         `u_${slug}_${unit.code.toLowerCase()}`,
         tenantId,
@@ -674,6 +741,14 @@ function seed(db: Sql) {
         unit.drive,
         unit.pwr,
         unit.rate,
+        "per_sqft_month",
+        null,
+        attrs,
+        null,
+        null,
+        null,
+        null,
+        1,
         unit.status,
         unit.x,
         unit.y,
@@ -742,6 +817,148 @@ function seed(db: Sql) {
     floorId: floor.id,
   }))
   addUnits("t_bbm", "p_powai", "BBM Powai Tower", "powai", powaiUnits)
+
+  // Hyderabad commercial + residential demo units (Deccan Spaces).
+  const commercialAttrs = stringifyAttributes({
+    carpetSqft: 1200,
+    superBuiltUpSqft: 1650,
+    frontageFt: 28,
+    floor: "L1",
+    mallName: "Forum Sujana Mall",
+    footfallBand: "High weekend",
+    camChargesMinor: 4500000,
+    fitOut: "warm_shell",
+  })
+  unitStmt.run(
+    "u_forum_s12",
+    "t_deccan",
+    "p_forum",
+    null,
+    "S12",
+    1650,
+    "",
+    0,
+    0,
+    "",
+    0,
+    "flat_month",
+    27500000,
+    commercialAttrs,
+    null,
+    1200,
+    6,
+    4500000,
+    1,
+    "available",
+    null,
+    null,
+    null,
+    "Ground-adjacent mall storefront on the food court corridor. Carpet 1,200 SF · SBU 1,650 SF. CAM billed separately.",
+  )
+  unitStmt.run(
+    "u_forum_s18",
+    "t_deccan",
+    "p_forum",
+    null,
+    "S18",
+    980,
+    "",
+    0,
+    0,
+    "",
+    0,
+    "flat_month",
+    18500000,
+    stringifyAttributes({
+      carpetSqft: 720,
+      superBuiltUpSqft: 980,
+      frontageFt: 18,
+      floor: "L2",
+      mallName: "Forum Sujana Mall",
+      footfallBand: "Medium",
+      camChargesMinor: 2800000,
+      fitOut: "bare_shell",
+    }),
+    null,
+    720,
+    6,
+    2800000,
+    1,
+    "available",
+    null,
+    null,
+    null,
+    "L2 fashion-strip shop. Bare shell with mall CAM and shared washrooms.",
+  )
+  const residentialAttrs = stringifyAttributes({
+    bhk: 3,
+    furnishing: "semi",
+    bathrooms: 3,
+    societyAmenities: ["Clubhouse", "24×7 security", "Covered parking"],
+    parking: "1 covered",
+    petPolicy: "Pets welcome with deposit",
+    preferredTenants: "Family / NRI owner-managed",
+  })
+  unitStmt.run(
+    "u_jubilee_3b",
+    "t_deccan",
+    "p_jubilee",
+    null,
+    "3B",
+    1850,
+    "",
+    0,
+    0,
+    "",
+    0,
+    "flat_month",
+    8500000,
+    residentialAttrs,
+    3,
+    1650,
+    3,
+    800000,
+    0,
+    "available",
+    null,
+    null,
+    null,
+    "3 BHK semi-furnished apartment in Jubilee Hills. 11-month agreement. Residential rent — GST not charged in this demo.",
+  )
+  unitStmt.run(
+    "u_jubilee_2a",
+    "t_deccan",
+    "p_jubilee",
+    null,
+    "2A",
+    1200,
+    "",
+    0,
+    0,
+    "",
+    0,
+    "flat_month",
+    5500000,
+    stringifyAttributes({
+      bhk: 2,
+      furnishing: "fully",
+      bathrooms: 2,
+      societyAmenities: ["Pool", "Gym", "Power backup"],
+      parking: "1 open",
+      petPolicy: "No pets",
+      preferredTenants: "Working professionals",
+    }),
+    2,
+    1050,
+    2,
+    500000,
+    0,
+    "available",
+    null,
+    null,
+    null,
+    "2 BHK fully furnished. Security deposit 2 months. Society maintenance billed monthly.",
+  )
 
   const media = db.prepare(
     `INSERT INTO unit_media (id, tenant_id, unit_id, kind, url, caption, sort_order)
@@ -838,6 +1055,9 @@ function seed(db: Sql) {
   db.prepare(
     "INSERT INTO late_fee_rules (tenant_id, grace_days, flat_cents, percent_bps) VALUES (?, ?, ?, ?)",
   ).run("t_nri", 5, 2000000, 150)
+  db.prepare(
+    "INSERT INTO late_fee_rules (tenant_id, grace_days, flat_cents, percent_bps) VALUES (?, ?, ?, ?)",
+  ).run("t_deccan", 5, 1500000, 150)
 
   db.prepare(
     `INSERT INTO payment_methods (id, user_id, tenant_id, brand, last4, autopay, provider_ref)
@@ -1047,12 +1267,12 @@ export function markAllRead(userId: string) {
     .run(new Date().toISOString(), userId)
 }
 
-function unitsFor(propertyId: string) {
+function unitsFor(propertyId: string, segment: PropertySegment = "warehouse") {
   return asRows(
     getDb()
       .prepare("SELECT * FROM units WHERE property_id = ? ORDER BY code")
       .all(propertyId),
-  ).map(mapUnit)
+  ).map((row) => mapUnit(row, segment))
 }
 
 function floorsFor(propertyId: string): FloorRecord[] {
@@ -1076,6 +1296,8 @@ function floorsFor(propertyId: string): FloorRecord[] {
 
 function mapProperty(row: Record<string, unknown>): PropertyRecord {
   const id = String(row.id)
+  const segmentRaw = String(row.segment ?? "warehouse")
+  const segment: PropertySegment = isPropertySegment(segmentRaw) ? segmentRaw : "warehouse"
   return {
     id,
     tenantId: String(row.tenant_id),
@@ -1086,12 +1308,14 @@ function mapProperty(row: Record<string, unknown>): PropertyRecord {
     area: String(row.area),
     cityLine: String(row.city_line),
     totalSqft: Number(row.total_sqft),
+    segment,
+    subtype: String(row.subtype ?? "logistics_park"),
     floorPlanPath: str(row, "floor_plan_path"),
     modelPath: str(row, "model_path"),
     latitude: num(row, "latitude"),
     longitude: num(row, "longitude"),
     floors: floorsFor(id),
-    units: unitsFor(id),
+    units: unitsFor(id, segment),
   }
 }
 
@@ -1139,13 +1363,42 @@ export function getUnitPage(slug: string, code: string) {
 
 export function landlordOverview(tenantId: string) {
   const db = getDb()
-  const units = asRows(db.prepare("SELECT status, sqft, rate_psf FROM units WHERE tenant_id = ?").all(tenantId))
+  const units = asRows(
+    db
+      .prepare(
+        `SELECT u.status, u.sqft, u.rate_psf, u.rate_basis, u.rent_amount_minor, p.segment
+         FROM units u JOIN properties p ON p.id = u.property_id
+         WHERE u.tenant_id = ?`,
+      )
+      .all(tenantId),
+  )
   const leased = units.filter((unit) => unit.status === "leased")
   const occupancy = units.length === 0 ? 0 : Math.round((leased.length / units.length) * 100)
-  const rentRoll = leased.reduce(
-    (sum, unit) => sum + monthlyRentCents(Number(unit.rate_psf), Number(unit.sqft)),
-    0,
-  )
+  const rentRoll = leased.reduce((sum, unit) => {
+    const segmentRaw = String(unit.segment ?? "warehouse")
+    const segment: PropertySegment = isPropertySegment(segmentRaw) ? segmentRaw : "warehouse"
+    return (
+      sum +
+      unitMonthlyRentCents(
+        mapUnit(
+          {
+            ...unit,
+            id: "x",
+            tenant_id: tenantId,
+            property_id: "x",
+            code: "x",
+            clear_height: "",
+            docks: 0,
+            drive_ins: 0,
+            power: "",
+            attributes: "{}",
+            description: "",
+          },
+          segment,
+        ),
+      )
+    )
+  }, 0)
   const apps = asRow(
     db.prepare(
       "SELECT COUNT(*) AS c FROM applications WHERE tenant_id = ? AND status = 'submitted'",
@@ -1374,7 +1627,7 @@ export type LedgerRecord = {
   propertyName: string
   userId: string
   payerName: string
-  kind: "rent" | "late_fee" | "payment" | "gst"
+  kind: "rent" | "late_fee" | "payment" | "gst" | "deposit" | "maintenance"
   description: string
   amountCents: number
   status: "due" | "paid" | "waived"
@@ -1796,10 +2049,15 @@ export function createApplication(input: {
 }) {
   const db = getDb()
   const unitRow = asRow(db.prepare("SELECT * FROM units WHERE id = ?").get(input.unitId))
-  if (!unitRow) return { ok: false as const, error: "That bay is not listed." }
-  const unit = mapUnit(unitRow)
+  if (!unitRow) return { ok: false as const, error: "That unit is not listed." }
+  const propSeg = asRow(
+    db.prepare("SELECT segment FROM properties WHERE id = ?").get(String(unitRow.property_id)),
+  )
+  const segmentRaw = String(propSeg?.segment ?? "warehouse")
+  const segment: PropertySegment = isPropertySegment(segmentRaw) ? segmentRaw : "warehouse"
+  const unit = mapUnit(unitRow, segment)
   if (unit.status === "leased") {
-    return { ok: false as const, error: "This bay is leased. Choose an available one." }
+    return { ok: false as const, error: "This unit is leased. Choose an available one." }
   }
   const existing = asRow(
     db.prepare(
@@ -1877,10 +2135,15 @@ export function decideApplication(
         deniedIds.push(String(other.applicant_id))
         tx.prepare("UPDATE applications SET status = 'denied' WHERE id = ?").run(String(other.id))
       }
-      const unit = asRow(tx.prepare("SELECT sqft, rate_psf, code FROM units WHERE id = ?").get(application.unitId))
+      const unitRow = asRow(tx.prepare("SELECT * FROM units WHERE id = ?").get(application.unitId))
+      const propRow = asRow(
+        tx.prepare("SELECT segment FROM properties WHERE id = ?").get(String(unitRow?.property_id)),
+      )
+      const segmentRaw = String(propRow?.segment ?? "warehouse")
+      const segment: PropertySegment = isPropertySegment(segmentRaw) ? segmentRaw : "warehouse"
+      const unit = mapUnit(unitRow ?? {}, segment)
       const dueOn = firstOfNextMonth()
-      const amount = monthlyRentCents(Number(unit?.rate_psf), Number(unit?.sqft))
-      const gst = gstCents(amount)
+      const amount = unitMonthlyRentCents(unit)
       const rentId = crypto.randomUUID()
       const now = new Date().toISOString()
       tx.prepare(
@@ -1897,21 +2160,66 @@ export function decideApplication(
         dueOn,
         now,
       )
-      tx.prepare(
-        `INSERT INTO ledger_entries (
-          id, tenant_id, unit_id, user_id, kind, description, amount_cents, status, due_on, created_at, source_id
-        ) VALUES (?, ?, ?, ?, 'gst', ?, ?, 'due', ?, ?, ?)`,
-      ).run(
-        crypto.randomUUID(),
-        tenantId,
-        application.unitId,
-        application.applicantId,
-        `GST (18%) · Unit ${application.unitCode} · due ${dueOn}`,
-        gst,
-        dueOn,
-        now,
-        rentId,
-      )
+      if (
+        gstAppliesForUnit({
+          segment,
+          gstApplicable: unit.gstApplicable,
+        })
+      ) {
+        const gst = gstCents(amount)
+        tx.prepare(
+          `INSERT INTO ledger_entries (
+            id, tenant_id, unit_id, user_id, kind, description, amount_cents, status, due_on, created_at, source_id
+          ) VALUES (?, ?, ?, ?, 'gst', ?, ?, 'due', ?, ?, ?)`,
+        ).run(
+          crypto.randomUUID(),
+          tenantId,
+          application.unitId,
+          application.applicantId,
+          `GST (18%) · Unit ${application.unitCode} · due ${dueOn}`,
+          gst,
+          dueOn,
+          now,
+          rentId,
+        )
+      }
+      const depositMonths =
+        unit.securityDepositMonths ?? leaseProfile(segment).defaultDepositMonths
+      if (depositMonths != null && depositMonths > 0) {
+        const deposit = Math.round(amount * depositMonths)
+        tx.prepare(
+          `INSERT INTO ledger_entries (
+            id, tenant_id, unit_id, user_id, kind, description, amount_cents, status, due_on, created_at, source_id
+          ) VALUES (?, ?, ?, ?, 'deposit', ?, ?, 'due', ?, ?, ?)`,
+        ).run(
+          crypto.randomUUID(),
+          tenantId,
+          application.unitId,
+          application.applicantId,
+          `Security deposit · ${depositMonths} month${depositMonths === 1 ? "" : "s"} · Unit ${application.unitCode}`,
+          deposit,
+          dueOn,
+          now,
+          rentId,
+        )
+      }
+      if (unit.maintenanceMinor != null && unit.maintenanceMinor > 0) {
+        tx.prepare(
+          `INSERT INTO ledger_entries (
+            id, tenant_id, unit_id, user_id, kind, description, amount_cents, status, due_on, created_at, source_id
+          ) VALUES (?, ?, ?, ?, 'maintenance', ?, ?, 'due', ?, ?, ?)`,
+        ).run(
+          crypto.randomUUID(),
+          tenantId,
+          application.unitId,
+          application.applicantId,
+          `Maintenance · Unit ${application.unitCode} · due ${dueOn}`,
+          unit.maintenanceMinor,
+          dueOn,
+          now,
+          rentId,
+        )
+      }
     } else {
       const remaining = asRow(
         tx.prepare(
@@ -2061,6 +2369,112 @@ export function saveHotspots(
     }
   })
   return { ok: true as const, slug: property.slug }
+}
+
+export function createPropertyForLandlord(input: {
+  tenantId: string
+  name: string
+  address: string
+  area: string
+  cityLine: string
+  segment: PropertySegment
+  subtype: string
+  totalSqft?: number
+  latitude?: number | null
+  longitude?: number | null
+  unit?: {
+    code: string
+    description: string
+    status?: UnitStatus
+    sqft: number
+    ratePsf?: number
+    rateBasis: RateBasis
+    rentAmountMinor?: number | null
+    clearHeight?: string
+    docks?: number
+    driveIns?: number
+    power?: string
+    attributes: UnitAttributes
+    bhk?: number | null
+    carpetSqft?: number | null
+    securityDepositMonths?: number | null
+    maintenanceMinor?: number | null
+    gstApplicable?: boolean | null
+  }
+}) {
+  const db = getDb()
+  const tenant = asRow(
+    db.prepare("SELECT id FROM tenants WHERE id = ? AND kind = 'landlord'").get(input.tenantId),
+  )
+  if (!tenant) return { ok: false as const, error: "Landlord organisation not found." }
+  const slugBase = input.name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 48)
+  let slug = slugBase || `property-${crypto.randomUUID().slice(0, 8)}`
+  let n = 2
+  while (asRow(db.prepare("SELECT id FROM properties WHERE slug = ?").get(slug))) {
+    slug = `${slugBase}-${n}`
+    n += 1
+  }
+  const propertyId = crypto.randomUUID()
+  const profile = leaseProfile(input.segment)
+  transaction((tx) => {
+    tx.prepare(
+      `INSERT INTO properties (
+        id, tenant_id, name, slug, address, area, city_line, total_sqft, segment, subtype,
+        floor_plan_path, model_path, latitude, longitude
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)`,
+    ).run(
+      propertyId,
+      input.tenantId,
+      input.name.trim(),
+      slug,
+      input.address.trim(),
+      input.area.trim(),
+      input.cityLine.trim(),
+      input.totalSqft ?? input.unit?.sqft ?? 0,
+      input.segment,
+      input.subtype,
+      input.latitude ?? null,
+      input.longitude ?? null,
+    )
+    if (input.unit) {
+      const u = input.unit
+      const attrsJson = stringifyAttributes(u.attributes)
+      tx.prepare(
+        `INSERT INTO units (
+          id, tenant_id, property_id, floor_id, code, sqft, clear_height, docks, drive_ins, power,
+          rate_psf, rate_basis, rent_amount_minor, attributes, bhk, carpet_sqft,
+          security_deposit_months, maintenance_minor, gst_applicable,
+          status, hotspot_x, hotspot_y, matterport_url, description
+        ) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?)`,
+      ).run(
+        crypto.randomUUID(),
+        input.tenantId,
+        propertyId,
+        u.code.trim(),
+        u.sqft,
+        u.clearHeight ?? "",
+        u.docks ?? 0,
+        u.driveIns ?? 0,
+        u.power ?? "",
+        u.ratePsf ?? 0,
+        u.rateBasis,
+        u.rentAmountMinor ?? null,
+        attrsJson,
+        u.bhk ?? null,
+        u.carpetSqft ?? null,
+        u.securityDepositMonths ?? profile.defaultDepositMonths,
+        u.maintenanceMinor ?? null,
+        u.gstApplicable == null ? (profile.gstOnRent ? 1 : 0) : u.gstApplicable ? 1 : 0,
+        u.status ?? "available",
+        u.description.trim(),
+      )
+    }
+  })
+  return { ok: true as const, propertyId, slug }
 }
 
 export function saveFloorPlan(tenantId: string, propertyId: string, publicPath: string) {
@@ -2247,19 +2661,25 @@ export type ListingFilters = {
   q?: string
   tenantId?: string
   area?: string
+  segment?: PropertySegment
   statuses?: UnitStatus[]
   minSqft?: number
   maxSqft?: number
   minRate?: number
   maxRate?: number
+  minMonthly?: number
+  maxMonthly?: number
   minDocks?: number
   minDriveIns?: number
   minClearHeight?: number
   power?: string
+  bhk?: number
+  furnishing?: string
+  fitOut?: string
   hasFloorPlan?: boolean
   hasMatterport?: boolean
   hasPano?: boolean
-  sort?: "rate_asc" | "rate_desc" | "sqft_asc" | "sqft_desc" | "name"
+  sort?: "rate_asc" | "rate_desc" | "sqft_asc" | "sqft_desc" | "name" | "monthly_asc" | "monthly_desc"
 }
 
 export type ListingCard = {
@@ -2273,7 +2693,14 @@ export type ListingCard = {
   driveIns: number
   power: string
   ratePsf: number
+  rateBasis: RateBasis
   monthlyCents: number
+  bhk: number | null
+  carpetSqft: number | null
+  furnishing: string | null
+  fitOut: string | null
+  segment: PropertySegment
+  subtype: string
   description: string
   matterportUrl: string | null
   hasPano: boolean
@@ -2315,9 +2742,11 @@ export function searchListings(filters: ListingFilters = {}): ListingCard[] {
       .prepare(
         `SELECT
            u.id AS unit_id, u.code, u.status, u.sqft, u.clear_height, u.docks, u.drive_ins,
-           u.power, u.rate_psf, u.description, u.matterport_url,
+           u.power, u.rate_psf, u.rate_basis, u.rent_amount_minor, u.attributes, u.bhk, u.carpet_sqft,
+           u.description, u.matterport_url,
            p.id AS property_id, p.name AS property_name, p.slug AS property_slug,
            p.address, p.area, p.city_line, p.floor_plan_path, p.latitude, p.longitude,
+           p.segment, p.subtype,
            t.id AS tenant_id, t.name AS tenant_name,
            EXISTS(SELECT 1 FROM unit_media m WHERE m.unit_id = u.id AND m.kind = 'pano') AS has_pano,
            (
@@ -2336,24 +2765,58 @@ export function searchListings(filters: ListingFilters = {}): ListingCard[] {
   const statuses = filters.statuses?.length ? new Set(filters.statuses) : null
 
   let cards = rows.map((row): ListingCard => {
-    const clearHeight = String(row.clear_height)
+    const segmentRaw = String(row.segment ?? "warehouse")
+    const segment: PropertySegment = isPropertySegment(segmentRaw) ? segmentRaw : "warehouse"
+    const unit = mapUnit(
+      {
+        id: row.unit_id,
+        tenant_id: row.tenant_id,
+        property_id: row.property_id,
+        floor_id: null,
+        code: row.code,
+        sqft: row.sqft,
+        clear_height: row.clear_height,
+        docks: row.docks,
+        drive_ins: row.drive_ins,
+        power: row.power,
+        rate_psf: row.rate_psf,
+        rate_basis: row.rate_basis,
+        rent_amount_minor: row.rent_amount_minor,
+        attributes: row.attributes,
+        bhk: row.bhk,
+        carpet_sqft: row.carpet_sqft,
+        status: row.status,
+        hotspot_x: null,
+        hotspot_y: null,
+        matterport_url: row.matterport_url,
+        description: row.description,
+      },
+      segment,
+    )
+    const clearHeight = unit.clearHeight
     const feet = Number((clearHeight.match(/(\d+(?:\.\d+)?)/) ?? [0, "0"])[1])
-    const ratePsf = Number(row.rate_psf)
-    const sqftVal = Number(row.sqft)
+    const attrs = unit.attributes as Record<string, unknown>
     return {
-      unitId: String(row.unit_id),
-      code: String(row.code),
-      status: String(row.status) as UnitStatus,
-      sqft: sqftVal,
+      unitId: unit.id,
+      code: unit.code,
+      status: unit.status,
+      sqft: unit.sqft,
       clearHeight,
       clearHeightFeet: feet,
-      docks: Number(row.docks),
-      driveIns: Number(row.drive_ins),
-      power: String(row.power),
-      ratePsf,
-      monthlyCents: monthlyRentCents(ratePsf, sqftVal),
-      description: String(row.description),
-      matterportUrl: str(row, "matterport_url"),
+      docks: unit.docks,
+      driveIns: unit.driveIns,
+      power: unit.power,
+      ratePsf: unit.ratePsf,
+      rateBasis: unit.rateBasis,
+      monthlyCents: unitMonthlyRentCents(unit),
+      bhk: unit.bhk,
+      carpetSqft: unit.carpetSqft,
+      furnishing: typeof attrs.furnishing === "string" ? attrs.furnishing : null,
+      fitOut: typeof attrs.fitOut === "string" ? attrs.fitOut : null,
+      segment,
+      subtype: String(row.subtype ?? "logistics_park"),
+      description: unit.description,
+      matterportUrl: unit.matterportUrl,
       hasPano: Number(row.has_pano) === 1,
       coverUrl: str(row, "cover_url"),
       propertyId: String(row.property_id),
@@ -2372,12 +2835,17 @@ export function searchListings(filters: ListingFilters = {}): ListingCard[] {
 
   cards = cards.filter((card) => {
     if (statuses && !statuses.has(card.status)) return false
+    if (filters.segment && card.segment !== filters.segment) return false
     if (filters.tenantId && card.tenantId !== filters.tenantId) return false
     if (filters.area && card.area !== filters.area) return false
     if (filters.minSqft != null && card.sqft < filters.minSqft) return false
     if (filters.maxSqft != null && card.sqft > filters.maxSqft) return false
-    if (filters.minRate != null && card.ratePsf < filters.minRate) return false
-    if (filters.maxRate != null && card.ratePsf > filters.maxRate) return false
+    if (filters.minRate != null && card.rateBasis === "per_sqft_month" && card.ratePsf < filters.minRate)
+      return false
+    if (filters.maxRate != null && card.rateBasis === "per_sqft_month" && card.ratePsf > filters.maxRate)
+      return false
+    if (filters.minMonthly != null && card.monthlyCents < filters.minMonthly * 100) return false
+    if (filters.maxMonthly != null && card.monthlyCents > filters.maxMonthly * 100) return false
     if (filters.minDocks != null && card.docks < filters.minDocks) return false
     if (filters.minDriveIns != null && card.driveIns < filters.minDriveIns) return false
     if (filters.minClearHeight != null && card.clearHeightFeet < filters.minClearHeight) return false
@@ -2385,6 +2853,9 @@ export function searchListings(filters: ListingFilters = {}): ListingCard[] {
       const needle = filters.power.trim().toLowerCase()
       if (needle && !card.power.toLowerCase().includes(needle)) return false
     }
+    if (filters.bhk != null && card.bhk !== filters.bhk) return false
+    if (filters.furnishing && card.furnishing !== filters.furnishing) return false
+    if (filters.fitOut && card.fitOut !== filters.fitOut) return false
     if (filters.hasFloorPlan && !card.floorPlanPath) return false
     if (filters.hasMatterport && !card.matterportUrl) return false
     if (filters.hasPano && !card.hasPano) return false
@@ -2398,6 +2869,8 @@ export function searchListings(filters: ListingFilters = {}): ListingCard[] {
         card.description,
         card.tenantName,
         card.power,
+        card.segment,
+        card.subtype,
       ]
         .join(" ")
         .toLowerCase()
@@ -2410,6 +2883,8 @@ export function searchListings(filters: ListingFilters = {}): ListingCard[] {
   cards.sort((a, b) => {
     if (sort === "rate_asc") return a.ratePsf - b.ratePsf
     if (sort === "rate_desc") return b.ratePsf - a.ratePsf
+    if (sort === "monthly_asc") return a.monthlyCents - b.monthlyCents
+    if (sort === "monthly_desc") return b.monthlyCents - a.monthlyCents
     if (sort === "sqft_asc") return a.sqft - b.sqft
     if (sort === "sqft_desc") return b.sqft - a.sqft
     return `${a.propertyName} ${a.code}`.localeCompare(`${b.propertyName} ${b.code}`)

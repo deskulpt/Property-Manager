@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import type { ListingFilters } from "@/lib/db"
+import { PROPERTY_SEGMENTS, segmentLabel, type PropertySegment } from "@/lib/listing-schemas"
 import { useState } from "react"
 
 export function ListingsFilterForm({
@@ -26,6 +27,7 @@ export function ListingsFilterForm({
   const [statuses, setStatuses] = useState<string[]>(filters.statuses ?? [])
   const [tenantId, setTenantId] = useState(filters.tenantId ?? "")
   const [area, setArea] = useState(filters.area ?? "")
+  const [segment, setSegment] = useState(filters.segment ?? "")
   const [sort, setSort] = useState(filters.sort ?? "name")
   const [hasFloorPlan, setHasFloorPlan] = useState(Boolean(filters.hasFloorPlan))
   const [hasMatterport, setHasMatterport] = useState(Boolean(filters.hasMatterport))
@@ -39,13 +41,24 @@ export function ListingsFilterForm({
     { value: " ", label: "Any area" },
     ...facets.areas.map((item) => ({ value: item, label: item })),
   ]
+  const segmentItems = [
+    { value: " ", label: "All segments" },
+    ...PROPERTY_SEGMENTS.map((value) => ({ value, label: segmentLabel(value) })),
+  ]
   const sortItems = [
     { value: "name", label: "Building / unit" },
-    { value: "rate_asc", label: "Rate · low to high" },
-    { value: "rate_desc", label: "Rate · high to low" },
+    { value: "monthly_asc", label: "Monthly rent · low to high" },
+    { value: "monthly_desc", label: "Monthly rent · high to low" },
+    { value: "rate_asc", label: "₹/SF · low to high" },
+    { value: "rate_desc", label: "₹/SF · high to low" },
     { value: "sqft_asc", label: "Area · small to large" },
     { value: "sqft_desc", label: "Area · large to small" },
   ]
+
+  const activeSegment = (segment || "") as PropertySegment | ""
+  const showWarehouse = !activeSegment || activeSegment === "warehouse"
+  const showCommercial = !activeSegment || activeSegment === "commercial"
+  const showResidential = !activeSegment || activeSegment === "residential"
 
   function toggleStatus(status: string, on: boolean) {
     setStatuses((prev) => (on ? [...new Set([...prev, status])] : prev.filter((item) => item !== status)))
@@ -59,8 +72,23 @@ export function ListingsFilterForm({
     if (q) next.set("q", q)
     if (tenantId.trim()) next.set("tenantId", tenantId.trim())
     if (area.trim()) next.set("area", area.trim())
+    if (segment.trim()) next.set("segment", segment.trim())
     for (const status of statuses) next.append("status", status)
-    for (const key of ["minSqft", "maxSqft", "minRate", "maxRate", "minDocks", "minDriveIns", "minClearHeight", "power"] as const) {
+    for (const key of [
+      "minSqft",
+      "maxSqft",
+      "minRate",
+      "maxRate",
+      "minMonthly",
+      "maxMonthly",
+      "minDocks",
+      "minDriveIns",
+      "minClearHeight",
+      "power",
+      "bhk",
+      "furnishing",
+      "fitOut",
+    ] as const) {
       const value = String(form.get(key) ?? "").trim()
       if (value) next.set(key, value)
     }
@@ -84,9 +112,30 @@ export function ListingsFilterForm({
           id="q"
           name="q"
           defaultValue={filters.q ?? ""}
-          placeholder="Bhiwandi, docks, Apex…"
+          placeholder="Hyderabad, docks, Jubilee…"
           className="rounded-sm"
         />
+      </div>
+      <div className="grid gap-1.5">
+        <Label className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint">
+          Segment
+        </Label>
+        <Select
+          items={segmentItems}
+          value={segment || " "}
+          onValueChange={(value) => setSegment(value && value !== " " ? String(value) : "")}
+        >
+          <SelectTrigger className="w-full rounded-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {segmentItems.map((item) => (
+              <SelectItem key={item.value} value={item.value}>
+                {item.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <div className="grid gap-1.5">
         <Label className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint">
@@ -145,6 +194,38 @@ export function ListingsFilterForm({
       <div className="grid grid-cols-2 gap-3">
         <div className="grid gap-1.5">
           <Label
+            htmlFor="minMonthly"
+            className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint"
+          >
+            Min ₹/mo
+          </Label>
+          <Input
+            id="minMonthly"
+            name="minMonthly"
+            inputMode="numeric"
+            defaultValue={filters.minMonthly ?? ""}
+            className="rounded-sm"
+          />
+        </div>
+        <div className="grid gap-1.5">
+          <Label
+            htmlFor="maxMonthly"
+            className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint"
+          >
+            Max ₹/mo
+          </Label>
+          <Input
+            id="maxMonthly"
+            name="maxMonthly"
+            inputMode="numeric"
+            defaultValue={filters.maxMonthly ?? ""}
+            className="rounded-sm"
+          />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-1.5">
+          <Label
             htmlFor="minSqft"
             className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint"
           >
@@ -174,100 +255,155 @@ export function ListingsFilterForm({
           />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      {showWarehouse ? (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-1.5">
+              <Label
+                htmlFor="minRate"
+                className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint"
+              >
+                Min ₹/SF
+              </Label>
+              <Input
+                id="minRate"
+                name="minRate"
+                inputMode="decimal"
+                defaultValue={filters.minRate ?? ""}
+                className="rounded-sm"
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label
+                htmlFor="maxRate"
+                className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint"
+              >
+                Max ₹/SF
+              </Label>
+              <Input
+                id="maxRate"
+                name="maxRate"
+                inputMode="decimal"
+                defaultValue={filters.maxRate ?? ""}
+                className="rounded-sm"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-1.5">
+              <Label
+                htmlFor="minDocks"
+                className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint"
+              >
+                Min docks
+              </Label>
+              <Input
+                id="minDocks"
+                name="minDocks"
+                inputMode="numeric"
+                defaultValue={filters.minDocks ?? ""}
+                className="rounded-sm"
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label
+                htmlFor="minDriveIns"
+                className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint"
+              >
+                Min drive-ins
+              </Label>
+              <Input
+                id="minDriveIns"
+                name="minDriveIns"
+                inputMode="numeric"
+                defaultValue={filters.minDriveIns ?? ""}
+                className="rounded-sm"
+              />
+            </div>
+          </div>
+          <div className="grid gap-1.5">
+            <Label
+              htmlFor="minClearHeight"
+              className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint"
+            >
+              Min clear height (ft)
+            </Label>
+            <Input
+              id="minClearHeight"
+              name="minClearHeight"
+              inputMode="numeric"
+              defaultValue={filters.minClearHeight ?? ""}
+              className="rounded-sm"
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label
+              htmlFor="power"
+              className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint"
+            >
+              Power contains
+            </Label>
+            <Input
+              id="power"
+              name="power"
+              defaultValue={filters.power ?? ""}
+              placeholder="600A"
+              className="rounded-sm"
+            />
+          </div>
+        </>
+      ) : null}
+      {showResidential ? (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-1.5">
+            <Label
+              htmlFor="bhk"
+              className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint"
+            >
+              BHK
+            </Label>
+            <Input
+              id="bhk"
+              name="bhk"
+              inputMode="numeric"
+              defaultValue={filters.bhk ?? ""}
+              className="rounded-sm"
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label
+              htmlFor="furnishing"
+              className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint"
+            >
+              Furnishing
+            </Label>
+            <Input
+              id="furnishing"
+              name="furnishing"
+              defaultValue={filters.furnishing ?? ""}
+              placeholder="semi"
+              className="rounded-sm"
+            />
+          </div>
+        </div>
+      ) : null}
+      {showCommercial ? (
         <div className="grid gap-1.5">
           <Label
-            htmlFor="minRate"
+            htmlFor="fitOut"
             className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint"
           >
-            Min ₹/SF
+            Fit-out
           </Label>
           <Input
-            id="minRate"
-            name="minRate"
-            inputMode="decimal"
-            defaultValue={filters.minRate ?? ""}
+            id="fitOut"
+            name="fitOut"
+            defaultValue={filters.fitOut ?? ""}
+            placeholder="warm_shell"
             className="rounded-sm"
           />
         </div>
-        <div className="grid gap-1.5">
-          <Label
-            htmlFor="maxRate"
-            className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint"
-          >
-            Max ₹/SF
-          </Label>
-          <Input
-            id="maxRate"
-            name="maxRate"
-            inputMode="decimal"
-            defaultValue={filters.maxRate ?? ""}
-            className="rounded-sm"
-          />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="grid gap-1.5">
-          <Label
-            htmlFor="minDocks"
-            className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint"
-          >
-            Min docks
-          </Label>
-          <Input
-            id="minDocks"
-            name="minDocks"
-            inputMode="numeric"
-            defaultValue={filters.minDocks ?? ""}
-            className="rounded-sm"
-          />
-        </div>
-        <div className="grid gap-1.5">
-          <Label
-            htmlFor="minDriveIns"
-            className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint"
-          >
-            Min drive-ins
-          </Label>
-          <Input
-            id="minDriveIns"
-            name="minDriveIns"
-            inputMode="numeric"
-            defaultValue={filters.minDriveIns ?? ""}
-            className="rounded-sm"
-          />
-        </div>
-      </div>
-      <div className="grid gap-1.5">
-        <Label
-          htmlFor="minClearHeight"
-          className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint"
-        >
-          Min clear height (ft)
-        </Label>
-        <Input
-          id="minClearHeight"
-          name="minClearHeight"
-          inputMode="numeric"
-          defaultValue={filters.minClearHeight ?? ""}
-          className="rounded-sm"
-        />
-      </div>
-      <div className="grid gap-1.5">
-        <Label
-          htmlFor="power"
-          className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint"
-        >
-          Power contains
-        </Label>
-        <Input
-          id="power"
-          name="power"
-          defaultValue={filters.power ?? ""}
-          placeholder="600A"
-          className="rounded-sm"
-        />
-      </div>
+      ) : null}
       <fieldset className="grid gap-2.5">
         <legend className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint">
           Media

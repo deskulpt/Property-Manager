@@ -13,8 +13,8 @@
     "start": "next start -H :: -p 43123",
     "lint": "eslint",
     "reset": "vitest run test/reset-cli.test.ts",
-    "test": "vitest run test/isolation.test.ts test/shop.test.ts",
-    "test:watch": "vitest test/isolation.test.ts test/shop.test.ts",
+    "test": "vitest run test/isolation.test.ts test/shop.test.ts test/segment-expansion.test.ts",
+    "test:watch": "vitest test/isolation.test.ts test/shop.test.ts test/segment-expansion.test.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {

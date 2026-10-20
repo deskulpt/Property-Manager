@@ -77,6 +77,22 @@ export function monthlyRentCents(ratePsf: number, area: number) {
   return Math.round(monthlyMajor * market.currencyMinorPerMajor)
 }
 
+/** Monthly rent for a unit — supports warehouse ₹/SF and flat monthly asking rents. */
+export function unitMonthlyRentCents(input: {
+  rateBasis: "per_sqft_month" | "flat_month"
+  ratePsf: number
+  sqft: number
+  rentAmountMinor: number | null
+}) {
+  if (input.rateBasis === "flat_month") {
+    if (input.rentAmountMinor != null) return input.rentAmountMinor
+    // Flat asking stored in rate_psf as major ₹/month when rent_amount_minor is unset.
+    const market = activeMarket()
+    return Math.round(input.ratePsf * market.currencyMinorPerMajor)
+  }
+  return monthlyRentCents(input.ratePsf, input.sqft)
+}
+
 export function addDays(isoDate: string, days: number) {
   const [y, m, d] = isoDate.split("-").map(Number)
   const dt = new Date(Date.UTC(y, m - 1, d))

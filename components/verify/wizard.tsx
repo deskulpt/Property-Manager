@@ -6,6 +6,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { completeVerification } from "@/lib/actions"
 
+/**
+ * Demo KYC wizard. Does not accept Aadhaar/document image uploads.
+ * India uses a simulated licensed-provider reference id (no UIDAI call, no image bytes).
+ */
 export function VerificationWizard({
   existing,
   countries,
@@ -32,9 +36,8 @@ export function VerificationWizard({
   const [step, setStep] = useState(0)
   const [country, setCountry] = useState<string>(defaultCountry)
   const [region, setRegion] = useState(existing?.region ?? "")
-  const [fileName, setFileName] = useState("")
-  const [faceName, setFaceName] = useState("")
-  const [preview, setPreview] = useState<string | null>(null)
+  const [providerRef, setProviderRef] = useState("")
+  const [consent, setConsent] = useState(false)
   const [scanning, setScanning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [outcome, setOutcome] = useState<{ score: number; result: string } | null>(
@@ -43,24 +46,19 @@ export function VerificationWizard({
 
   const isIndia = country === "India" || country === "IN"
   const docType = isIndia ? "aadhaar" : "driving_licence"
-  const docLabel = docType === "aadhaar" ? "Aadhaar" : "Driving licence"
-  const steps = ["Country", "Document", "Upload", "Face match"]
+  const docLabel = docType === "aadhaar" ? "Aadhaar (via licensed KYC provider)" : "Driving licence (reference)"
+  const steps = ["Country", "Document", "Provider ref", "Result"]
 
-  function rememberFile(file: File | undefined, kind: "doc" | "face") {
-    if (!file) return
-    if (kind === "doc") setFileName(file.name)
-    else {
-      setFaceName(file.name)
-      const url = URL.createObjectURL(file)
-      setPreview((prev) => {
-        if (prev) URL.revokeObjectURL(prev)
-        return url
-      })
-    }
-  }
-
-  async function finish(nextFace = faceName) {
+  async function finish() {
     setError(null)
+    if (!consent) {
+      setError("Confirm you consent to a simulated KYC check.")
+      return
+    }
+    if (!providerRef.trim()) {
+      setError("Enter a demo provider reference (e.g. IDFY-DEMO-001).")
+      return
+    }
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches
     if (!reduce) {
       setScanning(true)
@@ -69,7 +67,13 @@ export function VerificationWizard({
     }
     const result = await completeVerification(
       { error: null, result: null },
-      { country, region, docType, fileName, faceName: nextFace },
+      {
+        country,
+        region,
+        docType,
+        fileName: providerRef.trim(),
+        faceName: "provider-hosted",
+      },
     )
     if (result.error) setError(result.error)
     setOutcome(result.result)
@@ -81,9 +85,10 @@ export function VerificationWizard({
   return (
     <div className="grid gap-6">
       <div className="border border-terra/40 bg-terra/10 px-4 py-3 text-sm">
-        <p className="font-sans font-bold">Demo verification</p>
+        <p className="font-sans font-bold">Demo verification · no document images</p>
         <p className="mt-1 text-ink-soft">
-          Nothing is sent to UIDAI or any government API. Only India and checklist-ready draft markets are offered. Incomplete drafts stay off this form.
+          Easy Rental does not collect or store Aadhaar photos. India uses a simulated licensed-provider
+          reference (IDfy / Signzy / HyperVerge style). Nothing is sent to UIDAI.
         </p>
       </div>
       <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -114,7 +119,7 @@ export function VerificationWizard({
           </div>
           <div className="grid gap-2">
             <Label htmlFor="region">State / province / region</Label>
-            <Input id="region" value={region} onChange={(event) => setRegion(event.target.value)} placeholder="Maharashtra" />
+            <Input id="region" value={region} onChange={(event) => setRegion(event.target.value)} placeholder="Telangana" />
           </div>
           <Button type="button" onClick={() => setStep(1)} disabled={!region.trim()}>
             Continue
@@ -127,6 +132,9 @@ export function VerificationWizard({
           <p className="text-sm text-ink-soft">
             Document for {country}: <span className="font-bold text-ink">{docLabel}</span>
           </p>
+          <p className="text-sm text-ink-soft">
+            Production will redirect to a licensed KYC vendor. This demo only records a provider reference id.
+          </p>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" onClick={() => setStep(0)}>Back</Button>
             <Button type="button" onClick={() => setStep(2)}>Continue</Button>
@@ -136,20 +144,25 @@ export function VerificationWizard({
 
       {step === 2 ? (
         <div className="grid gap-4 bg-card p-5 ring-1 ring-foreground/10">
-          <label className="grid gap-1 text-sm">
-            Document file (filename only)
-            <input type="file" accept="image/*,.pdf" onChange={(event) => rememberFile(event.target.files?.[0], "doc")} />
-            {fileName ? <span className="text-xs text-ink-soft">{fileName}</span> : null}
+          <div className="grid gap-2">
+            <Label htmlFor="provider-ref">Provider verification reference</Label>
+            <Input
+              id="provider-ref"
+              data-testid="verify-provider-ref"
+              value={providerRef}
+              onChange={(event) => setProviderRef(event.target.value)}
+              placeholder="IDFY-DEMO-001"
+            />
+          </div>
+          <label className="flex items-start gap-2 text-sm text-ink-soft">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={consent}
+              onChange={(event) => setConsent(event.target.checked)}
+            />
+            I consent to a simulated identity check. No Aadhaar image or biometric template will be stored.
           </label>
-          <label className="grid gap-1 text-sm">
-            Face photo (filename only)
-            <input type="file" accept="image/*" onChange={(event) => rememberFile(event.target.files?.[0], "face")} />
-            {faceName ? <span className="text-xs text-ink-soft">{faceName}</span> : null}
-          </label>
-          {preview ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={preview} alt="" className="max-h-40 w-auto object-contain" />
-          ) : null}
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" onClick={() => setStep(1)}>Back</Button>
             <Button type="button" onClick={() => void finish()} disabled={scanning}>
@@ -165,7 +178,7 @@ export function VerificationWizard({
           <p className="font-sans text-2xl font-black text-brand">
             {outcome.result} · {outcome.score.toFixed(2)}
           </p>
-          <p className="text-sm text-ink-soft">Simulated only. No government API was called.</p>
+          <p className="text-sm text-ink-soft">Simulated only. No government API was called and no ID image was stored.</p>
           <Button type="button" variant="outline" onClick={() => setStep(0)}>Run again</Button>
         </div>
       ) : null}

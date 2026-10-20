@@ -1,11 +1,13 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { UnitGallery } from "@/components/gallery/unit-gallery"
+import { UnitSpecRows } from "@/components/listings/unit-specs"
 import { PropertyMap } from "@/components/map/property-map"
-import { SpecList, StatusBadge } from "@/components/product"
+import { StatusBadge } from "@/components/product"
 import { BookVisitForm } from "@/components/visits/book-visit-form"
 import { getUnitPage } from "@/lib/db"
-import { money, monthlyRentCents, rateLabel, sqft } from "@/lib/format"
+import { money, rateLabel, unitMonthlyRentCents } from "@/lib/format"
+import { gstAppliesForUnit, leaseProfile, segmentLabel } from "@/lib/listing-schemas"
 
 export default async function UnitPage({
   params,
@@ -16,7 +18,12 @@ export default async function UnitPage({
   const page = getUnitPage(slug, code)
   if (!page) notFound()
   const { property, unit, media } = page
-  const monthly = monthlyRentCents(unit.ratePsf, unit.sqft)
+  const monthly = unitMonthlyRentCents(unit)
+  const profile = leaseProfile(property.segment)
+  const showGst = gstAppliesForUnit({
+    segment: property.segment,
+    gstApplicable: unit.gstApplicable,
+  })
 
   return (
     <div className="mx-auto grid max-w-[1200px] gap-8 px-4 py-10 md:px-8 lg:grid-cols-[1.3fr_0.7fr]">
@@ -27,6 +34,8 @@ export default async function UnitPage({
           </Link>
           {" · "}
           {property.tenantName}
+          {" · "}
+          {segmentLabel(property.segment)}
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <h1 className="font-serif text-3xl font-semibold tracking-tight md:text-4xl">
@@ -54,40 +63,60 @@ export default async function UnitPage({
         <p className="font-mono text-[11px] uppercase tracking-wider text-white/55">
           {property.address}
         </p>
-        <p className="mt-4 font-serif text-3xl font-semibold text-[#9ed0e0]">
-          ₹{rateLabel(unit.ratePsf)}{" "}
-          <small className="font-mono text-xs font-normal text-white/50">/ SF · month</small>
-        </p>
-        <p className="mt-1 text-sm text-white/70">{money(monthly)} per month, before GST.</p>
+        {unit.rateBasis === "flat_month" ? (
+          <>
+            <p className="mt-4 font-serif text-3xl font-semibold text-[#9ed0e0]">
+              {money(monthly)}{" "}
+              <small className="font-mono text-xs font-normal text-white/50">/ month</small>
+            </p>
+            <p className="mt-1 text-sm text-white/70">
+              {showGst ? "Asking rent before GST." : "Residential asking rent — GST not applied in this demo."}
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="mt-4 font-serif text-3xl font-semibold text-[#9ed0e0]">
+              ₹{rateLabel(unit.ratePsf)}{" "}
+              <small className="font-mono text-xs font-normal text-white/50">/ SF · month</small>
+            </p>
+            <p className="mt-1 text-sm text-white/70">
+              {money(monthly)} per month{showGst ? ", before GST." : "."}
+            </p>
+          </>
+        )}
         <div className="mt-4 text-paper [&_dt]:text-white/60">
-          <SpecList
-            rows={[
-              { label: "Area", value: sqft(unit.sqft) },
-              { label: "Clear height", value: unit.clearHeight },
-              { label: "Docks", value: String(unit.docks) },
-              { label: "Drive-in", value: String(unit.driveIns) },
-              { label: "Power", value: unit.power },
-            ]}
+          <UnitSpecRows
+            segment={property.segment}
+            attributes={unit.attributes}
+            sqftValue={unit.sqft}
+            clearHeight={unit.clearHeight}
+            docks={unit.docks}
+            driveIns={unit.driveIns}
+            power={unit.power}
+            carpetSqft={unit.carpetSqft}
+            bhk={unit.bhk}
+            securityDepositMonths={unit.securityDepositMonths}
+            maintenanceMinor={unit.maintenanceMinor}
           />
         </div>
         <div className="mt-6 flex flex-wrap gap-2">
           {unit.status === "leased" ? (
             <p className="text-sm text-white/70">
-              This bay is leased. Browse the floor plan for an open one.
+              This {profile.unitNoun} is leased. Browse the portfolio for an open one.
             </p>
           ) : (
             <Link
               href={`/apply/${unit.id}`}
               className="bg-terra px-4 py-3 font-serif text-sm font-bold text-white transition-colors hover:bg-terra-dark"
             >
-              Apply for this bay
+              Apply for this {profile.unitNoun}
             </Link>
           )}
           <Link
             href={`/properties/${property.slug}`}
             className="border border-white/30 px-4 py-3 font-serif text-sm font-bold transition-colors hover:border-white"
           >
-            Back to the plan
+            Back to property
           </Link>
         </div>
         <div className="mt-6">
