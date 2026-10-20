@@ -45,8 +45,10 @@ export function VerificationWizard({
   )
 
   const isIndia = country === "India" || country === "IN"
-  const docType = isIndia ? "aadhaar" : "driving_licence"
-  const docLabel = docType === "aadhaar" ? "Aadhaar (via licensed KYC provider)" : "Driving licence (reference)"
+  const docType = isIndia ? "kyc_provider" : "driving_licence"
+  const docLabel = isIndia
+    ? "Licensed KYC provider (no Aadhaar image)"
+    : "Driving licence (reference)"
   const steps = ["Country", "Document", "Provider ref", "Result"]
 
   async function finish() {

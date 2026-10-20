@@ -41,6 +41,8 @@ export default defineConfig({
       ...process.env,
       DESKULPT_DB_PATH: e2eDb,
       DESKULPT_DIST_DIR: distDir,
+      DESKULPT_SECRET_KEY: process.env.DESKULPT_SECRET_KEY || "deskulpt-e2e-secret-key-32b",
+      DESKULPT_DEMO_SWITCHER: "1",
     },
   },
 })

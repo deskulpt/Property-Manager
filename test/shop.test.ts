@@ -61,7 +61,7 @@ describe("occupant shop + Razorpay settings (Slice G)", () => {
 
     const bbm = ordersForTenant("t_bbm")
     expect(bbm.some((o) => o.id === paid.orderId)).toBe(true)
-    expect(ordersForTenant("t_harbour")).toHaveLength(0)
+    expect(ordersForTenant("t_other_landlord")).toHaveLength(0)
   })
 
   it("Maya without lease cannot add to cart", async () => {
@@ -163,9 +163,9 @@ describe("occupant shop + Razorpay settings (Slice G)", () => {
     expect(paid.paymentRef.startsWith("rzp_order_stub_")).toBe(true)
   })
 
-  it("Harbourline cannot list BBM SKUs via tenant-scoped query", async () => {
+  it("another tenant id cannot list demo SKUs via tenant-scoped query", async () => {
     const { listShopSkus } = await db()
-    expect(listShopSkus("t_harbour")).toHaveLength(0)
+    expect(listShopSkus("t_other_landlord")).toHaveLength(0)
     expect(listShopSkus("t_bbm").length).toBeGreaterThan(0)
   })
 })

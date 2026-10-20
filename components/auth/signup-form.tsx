@@ -70,9 +70,26 @@ export function SignupForm() {
           <span className="text-xs text-terra">{state.fieldErrors.company}</span>
         ) : null}
       </label>
+      <label className="flex items-start gap-2 text-sm text-ink-soft">
+        <input type="checkbox" name="consent" className="mt-1" required />
+        <span>
+          I agree to the{" "}
+          <Link href="/legal/privacy" className="font-semibold text-terra hover:underline">
+            Privacy Policy
+          </Link>{" "}
+          and{" "}
+          <Link href="/legal/terms" className="font-semibold text-terra hover:underline">
+            Terms
+          </Link>
+          . Easy Rental will process my account data to provide the landlord desk (DPDP notice).
+        </span>
+      </label>
+      {state.fieldErrors?.consent ? (
+        <span className="text-xs text-terra">{state.fieldErrors.consent}</span>
+      ) : null}
       <p className="text-sm text-ink-soft">
-        Creates a landlord organisation on the Starter package (India). Upgrade to PRO later for a
-        custom listings domain.
+        Creates a landlord organisation on the Starter package (India). See pricing for plan limits
+        (Free plan includes 1 unit; paid plans are per-unit in INR + 18% GST when billing ships).
       </p>
       <SubmitButton className="h-11 bg-terra font-serif text-sm font-bold text-white hover:bg-terra-dark">
         Create account

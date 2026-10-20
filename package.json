@@ -10,11 +10,11 @@
     "dev": "next dev -H :: -p 43123",
     "dev:3506": "next dev -H 127.0.0.1 -p 3506",
     "build": "next build",
-    "start": "next start -H :: -p 43123",
+    "start": "next start -H :: -p ${PORT:-43123}",
     "lint": "eslint",
     "reset": "vitest run test/reset-cli.test.ts",
-    "test": "vitest run test/isolation.test.ts test/shop.test.ts test/segment-expansion.test.ts",
-    "test:watch": "vitest test/isolation.test.ts test/shop.test.ts test/segment-expansion.test.ts",
+    "test": "vitest run test/isolation.test.ts test/shop.test.ts test/segment-expansion.test.ts test/security-session.test.ts",
+    "test:watch": "vitest test/isolation.test.ts test/shop.test.ts test/segment-expansion.test.ts test/security-session.test.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {
@@ -25,7 +25,7 @@
     "gsap": "^3.15.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.48.0",
-    "next": "16.3.6",
+    "next": "16.3.8",
     "next-themes": "^0.4.6",
     "pannellum": "^2.5.7",
     "qrcode": "^1.5.4",
@@ -47,11 +47,11 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.3.6",
+    "eslint-config-next": "16.3.8",
     "tailwindcss": "^4",
     "tsx": "^4.20.5",
     "typescript": "^5",
     "vitest": "^3.2.4"
   },
-  "description": "Easy Rental (easyrental.space) \u2014 industrial leasing desk. A product of DeSkulpt Inc."
+  "description": "Easy Rental (easyrental.space) — industrial leasing desk. A product of DeSkulpt Inc."
 }

@@ -18,6 +18,10 @@ import {
   createLandlordAccount,
   createPropertyForLandlord,
   createVisitRequest,
+  exportUserData,
+  propertyForLandlord,
+  recordConsentEvent,
+  redactUserPersonalData,
   getPasswordHashForEmail,
   getUserByEmail,
   getTenantPackage,
@@ -67,7 +71,8 @@ import { hashPassword, passwordPolicyError, verifyPassword } from "@/lib/passwor
 import { demoOtpCode, requestDemoOtp, verifyDemoOtp } from "@/lib/otp"
 import { demoPayments } from "@/lib/payments"
 import { staffCapabilities } from "@/lib/permissions"
-import { getSessionUser, SESSION_COOKIE } from "@/lib/session"
+import { isDemoSwitcherEnabled, sessionCookieOptions } from "@/lib/env"
+import { getSessionUser, mintSessionValue, SESSION_COOKIE } from "@/lib/session"
 import { translateEnglishCatalog, writeLocaleFile } from "@/lib/translate"
 import { simulateMatch } from "@/lib/verification"
 
@@ -101,6 +106,12 @@ export async function signupLandlord(
   _prev: AuthFormState,
   formData: FormData,
 ): Promise<AuthFormState> {
+  if (formData.get("consent") !== "on") {
+    return {
+      error: "Accept the privacy notice to continue.",
+      fieldErrors: { consent: "Required" },
+    }
+  }
   const parsed = signupSchema.safeParse({
     name: formData.get("name"),
     email: formData.get("email"),
@@ -121,13 +132,14 @@ export async function signupLandlord(
     packageTier: "starter",
   })
   if (!result.ok) return { error: result.error, fieldErrors: {} }
-  const jar = await cookies()
-  jar.set(SESSION_COOKIE, result.userId, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
+  recordConsentEvent({
+    userId: result.userId,
+    email: parsed.data.email,
+    purpose: "signup_privacy_terms",
+    version: "dpdp-2023-v1",
   })
+  const jar = await cookies()
+  jar.set(SESSION_COOKIE, mintSessionValue(result.userId), sessionCookieOptions())
   notify({
     userId: result.userId,
     title: "Welcome to Easy Rental",
@@ -155,23 +167,18 @@ export async function loginWithPassword(
     return { error: "Check the highlighted fields.", fieldErrors: issues(parsed.error) }
   }
   const hash = getPasswordHashForEmail(parsed.data.email)
+  const generic = { error: "Email or password is incorrect.", fieldErrors: {} }
   if (!hash) {
-    return {
-      error: "No password login for that email. Use Sign up, or the Demo identity switcher for fixtures.",
-      fieldErrors: {},
-    }
+    // Constant-time-ish: still hash a dummy so timing is closer; never reveal fixture emails.
+    await verifyPassword(parsed.data.password, "$2a$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUV")
+    return generic
   }
   const ok = await verifyPassword(parsed.data.password, hash)
-  if (!ok) return { error: "Email or password is incorrect.", fieldErrors: {} }
+  if (!ok) return generic
   const account = getUserByEmail(parsed.data.email)
-  if (!account) return { error: "Email or password is incorrect.", fieldErrors: {} }
+  if (!account) return generic
   const jar = await cookies()
-  jar.set(SESSION_COOKIE, account.id, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
-  })
+  jar.set(SESSION_COOKIE, mintSessionValue(account.id), sessionCookieOptions())
   refresh(["/", "/landlord", "/inbox"])
   if (account.role === "landlord_admin") redirect("/landlord")
   redirect("/")
@@ -230,16 +237,15 @@ export async function switchSession(userId: string) {
   const jar = await cookies()
   if (!userId || userId === "visitor") {
     jar.delete(SESSION_COOKIE)
-  } else {
-    const user = getUser(userId)
-    if (!user) return
-    jar.set(SESSION_COOKIE, user.id, {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 30,
-    })
+    revalidatePath("/", "layout")
+    return
   }
+  if (!isDemoSwitcherEnabled()) {
+    return
+  }
+  const user = getUser(userId)
+  if (!user || !user.isDemo) return
+  jar.set(SESSION_COOKIE, mintSessionValue(user.id), sessionCookieOptions())
   revalidatePath("/", "layout")
 }
 
@@ -657,13 +663,15 @@ const TYPES = new Map([
   ["image/jpeg", "jpg"],
   ["image/webp", "webp"],
   ["image/gif", "gif"],
-  ["image/svg+xml", "svg"],
 ])
 
 export async function submitFloorPlan(formData: FormData) {
   const user = await getSessionUser()
   if (!user || user.role !== "landlord_admin" || !user.tenantId) return
   const propertyId = String(formData.get("propertyId") ?? "")
+  if (!/^[a-zA-Z0-9_-]+$/.test(propertyId)) return
+  const owned = propertyForLandlord(user.tenantId, propertyId)
+  if (!owned) return
   const file = formData.get("floorPlan")
   if (!(file instanceof File) || file.size === 0) return
   if (file.size > 5_000_000) return
@@ -672,7 +680,10 @@ export async function submitFloorPlan(formData: FormData) {
   const name = `${propertyId}-${Date.now()}.${ext}`
   const dir = path.join(process.cwd(), "data", "uploads")
   await fs.mkdir(dir, { recursive: true })
-  await fs.writeFile(path.join(dir, name), Buffer.from(await file.arrayBuffer()))
+  const target = path.join(dir, name)
+  const resolved = path.resolve(target)
+  if (!resolved.startsWith(path.resolve(dir) + path.sep)) return
+  await fs.writeFile(resolved, Buffer.from(await file.arrayBuffer()))
   const result = saveFloorPlan(user.tenantId, propertyId, `/files/${name}`)
   if (!result.ok) return
   refresh([`/properties/${result.slug}`, `/landlord/properties/${propertyId}`])
@@ -910,8 +921,12 @@ export async function submitPayment(formData: FormData) {
 const verificationSchema = z.object({
   country: z.string().trim().min(2),
   region: z.string().trim().min(2, "Enter a province, state, or region"),
-  docType: z.enum(["aadhaar", "driving_licence"]),
-  fileName: z.string().trim().max(180),
+  docType: z.enum(["kyc_provider", "driving_licence"]),
+  fileName: z
+    .string()
+    .trim()
+    .max(64)
+    .regex(/^[A-Za-z0-9._:-]+$/, "Use a provider reference id (letters, numbers, . _ : -)"),
   faceName: z.string().trim().max(180),
 })
 
@@ -942,11 +957,15 @@ export async function completeVerification(_prev: VerifyState, payload: {
     }
   }
   const isIndia = parsed.data.country === "India" || parsed.data.country === "IN"
-  if (isIndia && parsed.data.docType !== "aadhaar") {
-    return { error: "India uses Aadhaar in this demo.", result: null }
+  if (isIndia && parsed.data.docType !== "kyc_provider") {
+    return { error: "India uses a licensed KYC provider reference in this demo (no Aadhaar images).", result: null }
   }
   if (!isIndia && parsed.data.docType !== "driving_licence") {
-    return { error: "Non-India markets use a driving licence in this demo.", result: null }
+    return { error: "Non-India markets use a driving licence reference in this demo.", result: null }
+  }
+  // Refuse obvious Aadhaar number patterns in free-text refs.
+  if (/\b\d{4}\s?\d{4}\s?\d{4}\b/.test(parsed.data.fileName)) {
+    return { error: "Do not enter an Aadhaar number. Use a provider reference only.", result: null }
   }
   const simulated = simulateMatch(parsed.data)
   saveVerification({
@@ -1347,4 +1366,24 @@ export async function getShopSettingsPublicAction(tenantId: string) {
     return null
   }
   return getShopSettingsPublic(tenantId)
+}
+
+export async function downloadMyData() {
+  const user = await getSessionUser()
+  if (!user) return { ok: false as const, error: "Sign in first." }
+  const payload = exportUserData(user.id)
+  if (!payload) return { ok: false as const, error: "No data." }
+  recordConsentEvent({
+    userId: user.id,
+    email: user.email,
+    purpose: "data_export",
+    version: "dpdp-2023-v1",
+  })
+  return { ok: true as const, payload }
+}
+
+export async function requestAccountErasure() {
+  const user = await getSessionUser()
+  if (!user) return { ok: false as const, error: "Sign in first." }
+  return redactUserPersonalData(user.id)
 }

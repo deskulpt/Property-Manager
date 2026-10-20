@@ -33,7 +33,7 @@ export default async function ApplyPage({ params }: { params: Promise<{ unitId: 
     return (
       <RoleGate
         title="Switch to an applicant"
-        body="Use the demo header and pick Maya Chen, Devon Hale, or Ravi Menon. Visitors can browse. Only an applicant identity can submit."
+        body="Sign in as an applicant, or use the Demo switcher (Maya Chen, Devon Hale, or Ravi Menon) when enabled. Visitors can browse only."
       />
     )
   }

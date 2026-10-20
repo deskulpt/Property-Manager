@@ -1,13 +1,13 @@
 import "server-only"
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto"
+import { requireSecretKey } from "@/lib/env"
 
 /**
- * Per-tenant Razorpay secrets stay server-side. Hosted would use KMS;
- * local demo derives an AES key from DESKULPT_SECRET_KEY (or a fixed demo salt).
+ * Per-tenant Razorpay secrets stay server-side.
+ * Key material comes from DESKULPT_SECRET_KEY (required in production).
  */
 function keyBytes() {
-  const material = process.env.DESKULPT_SECRET_KEY || "deskulpt-local-demo-secret-v1"
-  return createHash("sha256").update(material).digest()
+  return createHash("sha256").update(requireSecretKey()).digest()
 }
 
 export function encryptSecret(plain: string): string {

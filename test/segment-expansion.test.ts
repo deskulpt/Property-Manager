@@ -48,7 +48,7 @@ describe("multi-segment expansion", () => {
     expect(created.ok).toBe(true)
     if (!created.ok) return
 
-    const decision = decideApplication("t_deccan", created.id, "approved")
+    const decision = decideApplication("t_bbm", created.id, "approved")
     expect(decision.ok).toBe(true)
 
     const ledger = ledgerForUser("u_ravi")
@@ -76,7 +76,7 @@ describe("multi-segment expansion", () => {
   it("landlord can create a residential property with flat rent", async () => {
     const { createPropertyForLandlord, getPropertyBySlug } = await db()
     const created = createPropertyForLandlord({
-      tenantId: "t_deccan",
+      tenantId: "t_bbm",
       name: "Gachibowli Test Flat",
       address: "Financial District, Hyderabad 500032",
       area: "Gachibowli",
@@ -103,5 +103,35 @@ describe("multi-segment expansion", () => {
     expect(property?.segment).toBe("residential")
     expect(property?.units[0]?.rateBasis).toBe("flat_month")
     expect(property?.units[0]?.gstApplicable).toBe(false)
+  })
+})
+
+describe("security launch fixes", () => {
+  beforeEach(async () => {
+    const { closeDatabase, getDb } = await db()
+    closeDatabase()
+    getDb()
+  })
+
+  it("session tokens are signed and reject tampering", async () => {
+    const { mintSessionValue, parseSessionValue } = await import("@/lib/session")
+    const token = mintSessionValue("u_nadia")
+    expect(parseSessionValue(token)).toBe("u_nadia")
+    expect(parseSessionValue(token.replace(/.$/, "x"))).toBeNull()
+    expect(parseSessionValue("u_avery")).toBe("u_avery") // legacy allowed only outside production
+  })
+
+  it("OTP verify is rate limited", async () => {
+    const { clearRateLimits } = await import("@/lib/rate-limit")
+    const { requestDemoOtp, verifyDemoOtp } = await import("@/lib/otp")
+    clearRateLimits()
+    const req = requestDemoOtp("u_maya", "+919876543210")
+    expect(req.ok).toBe(true)
+    for (let i = 0; i < 10; i++) {
+      verifyDemoOtp("u_maya", "000000")
+    }
+    const blocked = verifyDemoOtp("u_maya", "000000")
+    expect(blocked.ok).toBe(false)
+    if (!blocked.ok) expect(blocked.error).toMatch(/Too many/)
   })
 })
