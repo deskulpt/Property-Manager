@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/session"
 const links = [
   { href: "/landlord", label: "Overview" },
   { href: "/landlord/properties", label: "Properties" },
+  { href: "/landlord/import", label: "Import listing" },
   { href: "/landlord/applications", label: "Applications" },
   { href: "/landlord/jobs", label: "Concierge" },
   { href: "/landlord/providers", label: "Providers" },

@@ -13,8 +13,9 @@
     "start": "next start -H :: -p ${PORT:-43123}",
     "lint": "eslint",
     "reset": "vitest run test/reset-cli.test.ts",
-    "test": "vitest run test/isolation.test.ts test/shop.test.ts test/segment-expansion.test.ts test/security-session.test.ts",
-    "test:watch": "vitest test/isolation.test.ts test/shop.test.ts test/segment-expansion.test.ts test/security-session.test.ts",
+    "test": "vitest run test/isolation.test.ts test/shop.test.ts test/segment-expansion.test.ts test/security-session.test.ts test/listing-import.test.ts",
+    "test:watch": "vitest test/isolation.test.ts test/shop.test.ts test/segment-expansion.test.ts test/security-session.test.ts test/listing-import.test.ts",
+    "dev:3528": "next dev -H 127.0.0.1 -p 3528",
     "test:e2e": "playwright test"
   },
   "dependencies": {

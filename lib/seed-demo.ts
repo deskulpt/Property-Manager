@@ -50,7 +50,25 @@ export function seedDemoDatabase(db: Sql) {
   user.run("u_devon", "Devon Hale", "devon@northline.example", "applicant", null, "Northline Distribution India", null, null, 0, "+919811223344")
   user.run("u_ravi", "Ravi Menon", "ravi@menon.example", "applicant", null, null, null, null, 0, "+919900778899")
   user.run("u_nadia", "Nadia Okonkwo", "nadia@demo.easyrent.example", "landlord_admin", "t_bbm", null, null, null, 0, "+914040012345")
+  // Managing agent — listing URL import desk; not platform staff Property Manager.
+  user.run(
+    "u_riya",
+    "Riya Kapoor",
+    "riya@deskulpt.example",
+    "managing_agent",
+    null,
+    "Kapoor Portfolio Desk",
+    null,
+    null,
+    0,
+    "+919820099001",
+  )
   user.run("u_luis", "Luis Ortega", "luis@ortegaelectric.example", "service_provider", null, null, "electrician", "Bhiwandi", 1, "+919820011122")
+
+  db.prepare("INSERT INTO agent_landlord_access (agent_user_id, tenant_id) VALUES (?, ?)").run(
+    "u_riya",
+    "t_bbm",
+  )
 
   db.prepare("INSERT INTO provider_approvals (tenant_id, user_id, status) VALUES (?, ?, ?)").run(
     "t_bbm",
