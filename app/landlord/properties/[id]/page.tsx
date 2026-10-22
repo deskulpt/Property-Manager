@@ -26,7 +26,7 @@ export default async function FloorPlanEditorPage({ params }: { params: Promise<
         <input type="hidden" name="propertyId" value={property.id} />
         <label className="grid gap-1 text-sm">
           Floor image
-          <input name="floorPlan" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" required className="text-sm" />
+          <input name="floorPlan" type="file" accept="image/png,image/jpeg,image/webp,image/gif" required className="text-sm" />
         </label>
         <SubmitButton pendingLabel="Uploading…">Upload floor plan</SubmitButton>
       </form>

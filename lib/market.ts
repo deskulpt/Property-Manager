@@ -4,7 +4,7 @@ export type DisplayCurrency = "INR" | "USD" | "CAD" | "GBP"
 
 export type PaymentMethodKind = "upi" | "enach" | "card_demo"
 
-export type IdDocumentKind = "aadhaar" | "driving_licence"
+export type IdDocumentKind = "kyc_provider" | "driving_licence"
 
 export type MarketProfile = {
   id: MarketId
@@ -58,7 +58,7 @@ export const MARKETS: Record<MarketId, MarketProfile> = {
       },
     ],
     idDocuments: [
-      { country: "India", docType: "aadhaar", label: "Aadhaar" },
+      { country: "India", docType: "kyc_provider", label: "Licensed KYC provider (no Aadhaar image)" },
     ],
     defaultCountry: "India",
     statesLabel: "State / UT",

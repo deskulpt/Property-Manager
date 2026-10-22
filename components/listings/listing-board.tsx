@@ -1,14 +1,39 @@
 import Link from "next/link"
+import { listingSpecLine } from "@/components/listings/unit-specs"
 import { StatusBadge } from "@/components/product"
-import { money, rateLabel, sqft, type UnitStatus } from "@/lib/format"
+import { money, rateLabel, type UnitStatus } from "@/lib/format"
+import { leaseProfile, segmentLabel } from "@/lib/listing-schemas"
 import type { ListingCard } from "@/lib/db"
 
 function SpecLine({ card }: { card: ListingCard }) {
   return (
     <span className="font-mono text-[11px] uppercase tracking-wider text-ink-faint">
-      {sqft(card.sqft)} · {card.clearHeight} clear · {card.docks} docks · {card.driveIns} drive-in ·{" "}
-      {card.power}
+      {segmentLabel(card.segment)} · {listingSpecLine(card)}
     </span>
+  )
+}
+
+function RateBlock({ card }: { card: ListingCard }) {
+  const profile = leaseProfile(card.segment)
+  if (card.rateBasis === "flat_month") {
+    return (
+      <div>
+        <p className="font-mono text-xl font-semibold tracking-tight text-brand">
+          {money(card.monthlyCents)}
+          <span className="ml-1 text-xs font-normal text-ink-faint">/ mo</span>
+        </p>
+        <p className="text-sm text-ink-soft">{profile.rateCaption}</p>
+      </div>
+    )
+  }
+  return (
+    <div>
+      <p className="font-mono text-xl font-semibold tracking-tight text-brand">
+        ₹{rateLabel(card.ratePsf)}
+        <span className="ml-1 text-xs font-normal text-ink-faint">/ SF · mo</span>
+      </p>
+      <p className="text-sm text-ink-soft">{money(card.monthlyCents)} / mo</p>
+    </div>
   )
 }
 
@@ -61,13 +86,7 @@ function FeaturedCard({ card }: { card: ListingCard }) {
         <p className="mt-3 line-clamp-3 text-sm text-ink-soft">{card.description}</p>
         <MediaTags card={card} />
         <div className="mt-auto flex flex-wrap items-end justify-between gap-3 pt-5">
-          <div>
-            <p className="font-mono text-xl font-semibold tracking-tight text-brand">
-              ₹{rateLabel(card.ratePsf)}
-              <span className="ml-1 text-xs font-normal text-ink-faint">/ SF · mo</span>
-            </p>
-            <p className="text-sm text-ink-soft">{money(card.monthlyCents)} / mo</p>
-          </div>
+          <RateBlock card={card} />
           <Link
             href={`/properties/${card.propertySlug}/units/${card.code}`}
             className="bg-terra px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-terra-dark"
@@ -113,7 +132,7 @@ function RowCard({ card }: { card: ListingCard }) {
         </div>
       </div>
       <div className="flex flex-row items-center justify-between gap-3 sm:flex-col sm:items-end">
-        <p className="font-mono text-lg font-semibold text-brand">₹{rateLabel(card.ratePsf)}</p>
+        <RateBlock card={card} />
         <Link
           href={`/properties/${card.propertySlug}/units/${card.code}`}
           className="border border-ink/20 px-3 py-1.5 text-sm font-semibold transition-colors hover:border-terra hover:text-terra"
@@ -157,15 +176,14 @@ function TileCard({ card }: { card: ListingCard }) {
             {card.propertyName} · {card.code}
           </Link>
         </h2>
-        <p className="mt-2 font-mono text-base font-semibold text-brand">
-          ₹{rateLabel(card.ratePsf)}
-          <span className="ml-1 text-[10px] font-normal text-ink-faint">/ SF · mo</span>
-        </p>
+        <div className="mt-2">
+          <RateBlock card={card} />
+        </div>
         <Link
           href={`/properties/${card.propertySlug}/units/${card.code}`}
           className="mt-auto pt-3 text-sm font-semibold text-terra hover:underline"
         >
-          View bay →
+          View unit →
         </Link>
       </div>
     </article>

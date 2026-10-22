@@ -1,11 +1,12 @@
 import { expect, type Page, type Response } from "@playwright/test"
+import { mintDemoSessionCookie } from "./session"
 
-/** Cookie-based demo identity (same seam as leasing-path). */
+/** Cookie-based demo identity (signed session value). */
 export async function setDemoIdentity(page: Page, userId: string) {
   await page.context().addCookies([
     {
       name: "deskulpt_user",
-      value: userId,
+      value: mintDemoSessionCookie(userId),
       domain: "127.0.0.1",
       path: "/",
       httpOnly: true,
