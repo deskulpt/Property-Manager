@@ -1,0 +1,443 @@
+/**
+ * High-contrast chrome for the side-stack floor viewer only.
+ * Brand family (navy / cyan / steel gold) pushed for 3D readability.
+ * Does not alter global Easy Rental tokens.
+ */
+
+.floor-stack-stage {
+  --fs-bg: #040c14;
+  --fs-bg-mid: #0a1624;
+  --fs-chrome: #0d1f30;
+  --fs-border: #4aa8c4;
+  --fs-border-dim: #1e4a5c;
+  --fs-cyan: #1ec8e8;
+  --fs-cyan-deep: #0a5570;
+  --fs-gold: #d4b85a;
+  --fs-gold-deep: #8f6f1f;
+  --fs-ink: #f2f6fa;
+  --fs-ink-soft: #a8b4c0;
+  --fs-avail: #2dd4a0;
+  --fs-avail-ink: #042016;
+  --fs-pending: #e8c547;
+  --fs-pending-ink: #1a1504;
+  --fs-leased: #7a8494;
+  --fs-leased-ink: #0c1016;
+  --fs-plate: #102536;
+  --fs-plate-edge: #163248;
+  --fs-focus-glow: color-mix(in srgb, var(--fs-cyan) 55%, transparent);
+  --fs-radius: 2px;
+
+  position: relative;
+  border: 1px solid var(--fs-border);
+  background:
+    radial-gradient(120% 80% at 10% 0%, #0e2a3a 0%, transparent 55%),
+    linear-gradient(165deg, var(--fs-bg-mid) 0%, var(--fs-bg) 55%, #02060a 100%);
+  color: var(--fs-ink);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.floor-stack-stage .fs-scene {
+  position: relative;
+  min-height: 420px;
+  height: clamp(420px, 62vw, 560px);
+  perspective: 1400px;
+  perspective-origin: 50% 40%;
+  overflow: hidden;
+  cursor: default;
+}
+
+.floor-stack-stage .fs-scene-inner {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  transform-style: preserve-3d;
+}
+
+.floor-stack-stage .fs-plate {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(72%, 520px);
+  aspect-ratio: 16 / 10;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--fs-border-dim);
+  background: var(--fs-plate);
+  color: inherit;
+  cursor: pointer;
+  transform-style: preserve-3d;
+  transform-origin: center center;
+  box-shadow:
+    0 18px 40px rgb(0 0 0 / 0.45),
+    inset 0 0 0 1px rgb(255 255 255 / 0.04);
+  outline: none;
+}
+
+.floor-stack-stage .fs-plate:focus-visible {
+  border-color: var(--fs-cyan);
+  box-shadow:
+    0 0 0 2px var(--fs-focus-glow),
+    0 18px 40px rgb(0 0 0 / 0.45);
+}
+
+.floor-stack-stage .fs-plate[data-focused="true"] {
+  border-color: var(--fs-cyan);
+  z-index: 40;
+}
+
+.floor-stack-stage .fs-plate[data-focused="true"] .fs-plate-label {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.floor-stack-stage .fs-plate[data-focused="true"] .fs-plate-pointer {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.floor-stack-stage .fs-plate-face {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--fs-bg-mid);
+}
+
+.floor-stack-stage .fs-plate-face img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  user-select: none;
+}
+
+.floor-stack-stage .fs-plate-edge {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -10px;
+  height: 10px;
+  background: linear-gradient(180deg, var(--fs-plate-edge), #071018);
+  border: 1px solid var(--fs-border-dim);
+  border-top: 0;
+  transform: translateZ(-1px);
+  opacity: 0.95;
+}
+
+.floor-stack-stage .fs-plate-label {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--fs-border);
+  background: color-mix(in srgb, var(--fs-chrome) 92%, transparent);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fs-ink);
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 120ms ease, transform 120ms ease;
+  pointer-events: none;
+}
+
+.floor-stack-stage .fs-plate-pointer {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--fs-gold);
+  background: color-mix(in srgb, var(--fs-chrome) 88%, transparent);
+  color: var(--fs-gold);
+  opacity: 0;
+  transform: scale(0.85);
+  transition: opacity 120ms ease, transform 120ms ease;
+  pointer-events: none;
+}
+
+.floor-stack-stage .fs-plate-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 1rem;
+  font-size: 0.875rem;
+  color: var(--fs-ink-soft);
+  text-align: center;
+}
+
+.floor-stack-stage .fs-open {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  background: var(--fs-bg);
+}
+
+.floor-stack-stage .fs-open-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--fs-border-dim);
+  background: var(--fs-chrome);
+}
+
+.floor-stack-stage .fs-open-toolbar .fs-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.floor-stack-stage .fs-open-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.floor-stack-stage .fs-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  min-width: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--fs-border-dim);
+  background: var(--fs-bg-mid);
+  color: var(--fs-ink);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.floor-stack-stage .fs-icon-btn:hover,
+.floor-stack-stage .fs-icon-btn:focus-visible {
+  border-color: var(--fs-cyan);
+  color: var(--fs-cyan);
+  outline: none;
+}
+
+.floor-stack-stage .fs-open-canvas {
+  position: relative;
+  flex: 1;
+  overflow: auto;
+  background:
+    linear-gradient(90deg, rgb(30 74 92 / 0.25) 1px, transparent 1px) 0 0 / 24px 24px,
+    linear-gradient(rgb(30 74 92 / 0.25) 1px, transparent 1px) 0 0 / 24px 24px,
+    var(--fs-bg);
+}
+
+.floor-stack-stage .fs-open-plate {
+  position: relative;
+  margin: 16px auto;
+  width: min(100% - 32px, 920px);
+  border: 1px solid var(--fs-border);
+  background: var(--fs-plate);
+  transform-origin: center top;
+}
+
+.floor-stack-stage .fs-open-plate img {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+  pointer-events: none;
+}
+
+.floor-stack-stage .fs-pin {
+  position: absolute;
+  display: flex;
+  min-height: 32px;
+  min-width: 32px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  transform: translate(-50%, -50%);
+  text-decoration: none;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.35);
+}
+
+.floor-stack-stage .fs-pin[data-status="available"] {
+  background: var(--fs-avail);
+  color: var(--fs-avail-ink);
+}
+
+.floor-stack-stage .fs-pin[data-status="pending"] {
+  background: var(--fs-pending);
+  color: var(--fs-pending-ink);
+}
+
+.floor-stack-stage .fs-pin[data-status="leased"] {
+  background: var(--fs-leased);
+  color: var(--fs-leased-ink);
+}
+
+.floor-stack-stage .fs-chrome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px;
+  border-top: 1px solid var(--fs-border-dim);
+  background: color-mix(in srgb, var(--fs-chrome) 94%, black);
+}
+
+.floor-stack-stage .fs-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.floor-stack-stage .fs-chips {
+  display: flex;
+  max-width: min(100%, 280px);
+  max-height: 200px;
+  flex-direction: column;
+  overflow: auto;
+  border: 1px solid var(--fs-border-dim);
+  background: var(--fs-bg-mid);
+}
+
+.floor-stack-stage .fs-chip {
+  display: flex;
+  height: 36px;
+  width: 100%;
+  min-width: 88px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-bottom: 1px solid var(--fs-border-dim);
+  background: transparent;
+  color: var(--fs-ink-soft);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.floor-stack-stage .fs-chip:last-child {
+  border-bottom: 0;
+}
+
+.floor-stack-stage .fs-chip[aria-selected="true"] {
+  background: var(--fs-cyan-deep);
+  color: var(--fs-ink);
+}
+
+.floor-stack-stage .fs-chip:hover,
+.floor-stack-stage .fs-chip:focus-visible {
+  color: var(--fs-ink);
+  outline: none;
+  background: color-mix(in srgb, var(--fs-cyan) 18%, transparent);
+}
+
+.floor-stack-stage .fs-select {
+  min-height: 36px;
+  border: 1px solid var(--fs-border-dim);
+  background: var(--fs-bg-mid);
+  color: var(--fs-ink);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0 10px;
+}
+
+.floor-stack-stage .fs-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fs-ink-soft);
+}
+
+.floor-stack-stage .fs-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.floor-stack-stage .fs-swatch {
+  width: 10px;
+  height: 10px;
+  border: 1px solid rgb(255 255 255 / 0.25);
+}
+
+.floor-stack-stage .fs-swatch[data-status="available"] {
+  background: var(--fs-avail);
+}
+
+.floor-stack-stage .fs-swatch[data-status="pending"] {
+  background: var(--fs-pending);
+}
+
+.floor-stack-stage .fs-swatch[data-status="leased"] {
+  background: var(--fs-leased);
+}
+
+.floor-stack-stage .fs-amenity-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--fs-ink-soft);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.floor-stack-stage .fs-amenity {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.floor-stack-stage .fs-status {
+  padding: 0 10px 10px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fs-ink-soft);
+}
+
+.floor-stack-stage .fs-hint {
+  color: var(--fs-gold);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floor-stack-stage .fs-plate-label,
+  .floor-stack-stage .fs-plate-pointer {
+    transition: none;
+  }
+}
