@@ -6,6 +6,7 @@ import { SiteHeader } from "@/components/site-header"
 import { PwaRegister } from "@/components/pwa-register"
 import { Toaster } from "@/components/ui/sonner"
 import { listSessionUsers, unreadCount } from "@/lib/db"
+import { isDemoSwitcherEnabled } from "@/lib/env"
 import { t } from "@/lib/i18n"
 import { getSessionUser } from "@/lib/session"
 
@@ -52,7 +53,11 @@ export const viewport: Viewport = {
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const [users, session] = await Promise.all([listSessionUsers(), getSessionUser()])
+  const demoOn = isDemoSwitcherEnabled()
+  const [users, session] = await Promise.all([
+    demoOn ? listSessionUsers() : Promise.resolve([]),
+    getSessionUser(),
+  ])
   const unread = session ? unreadCount(session.id) : 0
 
   return (
@@ -74,6 +79,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           unread={unread}
           role={session?.role ?? null}
           signedIn={Boolean(session)}
+          demoSwitcher={demoOn}
         />
         <div className="flex-1">{children}</div>
         <footer className="border-t border-white/10 bg-brand-deep px-4 py-12 text-paper/65 md:px-8">
@@ -86,10 +92,19 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             </div>
             <nav
               className="flex flex-wrap gap-x-5 gap-y-2 font-mono text-xs uppercase tracking-[0.12em]"
-              aria-label="Legal"
+              aria-label="Legal and help"
             >
               <Link href="/listings" className="text-[#9ed0e0] transition-colors hover:text-paper">
                 {t("nav.listings")}
+              </Link>
+              <Link href="/help/faq" className="text-[#9ed0e0] transition-colors hover:text-paper">
+                FAQ
+              </Link>
+              <Link href="/help/landlord" className="text-[#9ed0e0] transition-colors hover:text-paper">
+                Landlord help
+              </Link>
+              <Link href="/help/tenant" className="text-[#9ed0e0] transition-colors hover:text-paper">
+                Tenant help
               </Link>
               <Link href="/legal/terms" className="text-[#9ed0e0] transition-colors hover:text-paper">
                 {t("nav.legal.terms")}

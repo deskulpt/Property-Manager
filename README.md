@@ -27,13 +27,13 @@ The header always shows browse links (Listings, Map, Portfolio). After you pick 
 
 ## Current market
 
-**India only.** The live market code is `IN`. Public forms offer India. Rent, fees, GST, and the ledger are charged in **INR**. Asking rates are stored and shown as **₹ / SF · month**. GST on rent is 18%. Address capture uses a 6-digit PIN code. The default phone country code is +91. Seeded payment methods are **UPI (demo)** and **eNACH / auto-debit (demo)**. Verification for India uses **Aadhaar** as the document type label. None of those paths call NPCI, a bank, or UIDAI.
+**India only.** The live market code is `IN`. Public forms offer India. Rent, fees, GST, and the ledger are charged in **INR**. Warehouse rates are **₹ / SF · month**; commercial and residential use flat monthly rent. GST on warehouse/commercial rent is 18% (residential defaults off). Address capture uses a 6-digit PIN code. The default phone country code is +91. Seeded payment methods are **UPI (demo)** and **eNACH / auto-debit (demo)**. Verification for India uses a **licensed KYC provider reference** — not Aadhaar images. None of those paths call NPCI, a bank, or UIDAI.
 
 Web and an installable PWA. There is no separate native app in this repo. `app/manifest.ts` and `public/sw.js` make the site installable. The service worker caches icons and media. It does not cache the ledger or applications.
 
 ### NRI display currencies
 
-Ledger rows and charges stay in INR. A landlord can set a **display** currency of INR, USD, CAD, or GBP (`/landlord/settings`). Conversion is a view, not a second ledger. The rate table is `DEMO_FX_PER_INR` in `lib/market.ts`, labeled `2026-09-01 (demo table)`. It is not a live FX feed. Meera Sahni's organisation, Sahni Global Realty (NRI), is seeded with USD as the display preference and a +1 phone. Sahni Thane Warehouse still posts rent and GST in INR.
+Ledger rows and charges stay in INR. A landlord can set a **display** currency of INR, USD, CAD, or GBP (`/landlord/settings`). Conversion is a view, not a second ledger. The rate table is `DEMO_FX_PER_INR` in `lib/market.ts`, labeled `2026-09-01 (demo table)`. It is not a live FX feed.
 
 ### International OTP
 
@@ -56,34 +56,30 @@ Each future market is meant to plug in through the same seams: currency, phone, 
 
 ## Roles and demo identities
 
-There is no password. The header **Identity** control (`data-testid="demo-identity"`) is a native `<select>` inside a form. Changing it submits and sets the `deskulpt_user` cookie. Pick **Visitor · browse only** to clear the session. Visitors can browse the marketing home, listings, and public unit pages. Applying, paying, the landlord desk, the provider desk, and the CMS each require the matching role.
+**Real landlords** sign up with email/password at `/signup` (`is_demo=0`). Sessions use a signed cookie (`DESKULPT_SECRET_KEY`).
+
+The header **Identity** control (`data-testid="demo-identity"`) appears only when the demo switcher is enabled (`DESKULPT_DEMO_SWITCHER=1`, or non-production by default). It lists **only** `is_demo=1` fixtures. Pick **Visitor · browse only** to clear the session. **Never enable the switcher on a production host that holds real data.**
+
+One labelled demo landlord organisation: **DEMO · EasyRent Hyderabad** (`t_bbm`).
 
 | Person | Id | Role | What to try |
 | --- | --- | --- | --- |
-| Avery Quinn | `u_avery` | Super Admin | Full CMS: staff, landlords, applicants, providers, listings, markets, languages |
-| Sam Rivera | `u_sam` | Account Manager | Landlords and applicants; invite a demo landlord. No ledger, no markets |
-| Priya Nair | `u_priya` | Service Manager | Verify providers and approve them for a landlord |
-| Chris Vogel | `u_chris` | Property Manager | Applicants with masked email, plus listing readiness |
-| Jordan Blake | `u_jordan` | Merchandiser | Listing readiness only. No emails |
-| Maya Chen | `u_maya` | Applicant | Apex Logistics India. In-review application for Unit B2. Apply, demo Aadhaar check, phone OTP |
-| Devon Hale | `u_devon` | Applicant | Northline Distribution India. Approved on Unit A1. Ledger: rent, GST, late fee, eNACH demo payment |
-| Nadia Okonkwo | `u_nadia` | Landlord admin | BBM Logistics Parks (Mumbai). Inbox, floor plans, concierge, providers, INR ledger |
-| Jonah Ellis | `u_jonah` | Landlord admin | Harbourline Yards India (Chennai). Empty application inbox. Own buildings only |
-| Meera Sahni | `u_meera` | Landlord admin | Sahni Global Realty (NRI). USD display, +1 phone, settings. Charges stay INR |
-| Luis Ortega | `u_luis` | Electrician, Bhiwandi | Approved for BBM. Accept or complete the assigned weather-seal job |
-| Rosa Delgado | `u_rosa` | Cleaning, Bhiwandi | Approved for BBM. Seeded completed sweep |
-| Kei Watanabe | `u_kei` | Courier, Bhiwandi | Approval still pending at BBM |
-| Hana Berger | `u_hana` | Electrician, Whitefield | Approval pending. Not in Luis's area |
-| Amrita Singh | `u_amrita` | Plumber, Sriperumbudur | Approved for Harbourline |
-| Idris Cole | `u_idris` | Electrician, Sriperumbudur | Approval pending at Harbourline |
+| Avery Quinn | `u_avery` | Super Admin | CMS (demo platform org) |
+| Chris Vogel | `u_chris` | Property Manager | Applicants with masked email |
+| Jordan Blake | `u_jordan` | Merchandiser | Listing readiness only |
+| Maya Chen | `u_maya` | Applicant | Apex Logistics. Submitted app for warehouse Unit B2. Demo KYC + OTP |
+| Devon Hale | `u_devon` | Applicant | Northline. Approved on Unit A1. Demo rent/GST/late-fee ledger |
+| Ravi Menon | `u_ravi` | Applicant | Residential applicant fixture |
+| Nadia Okonkwo | `u_nadia` | Landlord admin | DEMO · EasyRent Hyderabad — warehouse, commercial, residential |
+| Luis Ortega | `u_luis` | Electrician, Bhiwandi | Approved provider; weather-seal job |
 
-Staff capabilities are in `lib/permissions.ts`. A Property Manager sees a masked applicant email. A Merchandiser does not see emails. Account data for one landlord organisation is not readable as another: Harbourline cannot load a BBM property id.
+Staff capabilities are in `lib/permissions.ts`. Real signup accounts never appear in the demo switcher and cannot read another organisation’s properties.
 
-Seeded landlord portfolios:
+Seeded DEMO portfolio properties:
 
-- **BBM Logistics Parks:** BBM Bhiwandi Hub (PIN 421302), BBM Whitefield Sheds (PIN 560066), BBM Andheri East (PIN 400093)
-- **Harbourline Yards India:** Harbourline Sriperumbudur (PIN 602105)
-- **Sahni Global Realty (NRI):** Sahni Thane Warehouse (PIN 400604)
+- **Demo Bhiwandi Hub** (warehouse)
+- **Demo Forum Mall Storefronts** (commercial)
+- **Demo Jubilee Hills Residences** (residential)
 
 ## Main surfaces
 
@@ -115,11 +111,11 @@ Seeded SVG plans live in `public/floorplans/`. A building page plots unit hotspo
 
 An applicant applies at `/apply/[unitId]` (company, contact, email, intended use, notes). Status is tracked at `/account`. Maya's B2 application starts as submitted. Devon's A1 application is already approved.
 
-Nadia's inbox is `/landlord/applications`. Approve or deny there. Jonah's Harbourline inbox is empty on purpose. Approving Maya is the path covered by `e2e/leasing-path.spec.ts`.
+Nadia's inbox is `/landlord/applications`. Approving Maya is the path covered by `e2e/leasing-path.spec.ts`.
 
 ### Landlord desk (`/landlord`)
 
-Requires a landlord admin. Nadia, Jonah, and Meera each see only their organisation. Portal chrome uses a left accent rail and desk-scoped side nav.
+Requires a landlord admin. Demo: Nadia (DEMO · EasyRent Hyderabad). Real signups see only their organisation. Portal chrome uses a left accent rail and desk-scoped side nav.
 
 - `/landlord` overview
 - `/landlord/properties` and `/landlord/properties/[id]` buildings, floor plan, hotspots
@@ -138,11 +134,11 @@ Requires a landlord admin. Nadia, Jonah, and Meera each see only their organisat
 
 `/account/payments` is the applicant ledger. Devon's BBM rows are INR: June rent and GST marked paid via the demo eNACH method, September rent plus GST still due, a late fee after the 5-day grace, and October rent and GST. Late-fee rules are per organisation (flat amount plus a percent of rent). The pay action calls `demoPayments` in `lib/payments.ts`, which returns a demo reference and writes a ledger line. It does not contact a bank or NPCI. The form keeps a last-4 only. It never asks for a full card or a full UPI secret.
 
-`/landlord/ledger` is the same money from the landlord side. Sahni's September T2 rent is also INR, with USD only as Meera's display view.
+`/landlord/ledger` is the same money from the landlord side.
 
 ### Verification (demo)
 
-`/account/verify` is a labeled demo wizard. India selects Aadhaar. Any other country selects a driving licence. The score is a deterministic function of the filenames you type (`lib/verification.ts`). The server keeps country, region, document type, original filename, and the simulated score. It does not write the document or face image to disk and does not keep a biometric template. A "match" is not an identity proof. Devon's seed row is a pre-baked match so the approved applicant has a verification on file.
+`/account/verify` is a labeled demo wizard. India uses a licensed KYC provider reference (no Aadhaar images). The score is simulated. The server keeps country, region, document type, and a provider reference — not document bytes or biometrics. A "match" is not an identity proof. Devon's seed row is a pre-baked match so the approved applicant has a verification on file.
 
 ### CMS
 
@@ -172,12 +168,15 @@ In-app notices for the current identity: application received, late fee, job ass
 
 Manifest name is Easy Rental. Display is `standalone`. Icons are `public/icons/icon-192.png` and `icon-512.png`. `components/pwa-register.tsx` registers `/sw.js` and shows an install button when the browser fires `beforeinstallprompt`.
 
-### Legal
+### Legal and help
 
-- `/legal/terms` covers the software, the demo fixtures, organisation scoping, and the MIT / GSAP / Matterport split
-- `/legal/privacy` lists what the SQLite file stores and what the demo refuses to store or send
+- `/legal/terms` — software, demo fixtures, organisation scoping, MIT / GSAP / Matterport
+- `/legal/privacy` — storage, DPDP consent/export/erasure, no Aadhaar images
+- `/help/landlord`, `/help/tenant`, `/help/faq` — in-app manuals (markdown mirrors under `/docs`)
 
-Both are written for this product. They are not a generic template.
+### Developer docs
+
+See [`docs/setup.md`](docs/setup.md), [`docs/architecture.md`](docs/architecture.md), and env checklist in `.env.example`. Health: `GET /api/health`. Hosting target: Railway (volume + `DESKULPT_SECRET_KEY`; not deployed from this PR).
 
 ## Stack and licensing
 
@@ -236,7 +235,7 @@ npm run test  # isolation + shop:e2e
 
 - `npm test` runs `test/isolation.test.ts` on a temporary SQLite file. It checks tenant isolation, approving Maya (rent plus GST, and a second approve fails), late-fee idempotence, CMS email redaction, provider area approval, and that public form countries stay India-only until a draft checklist is complete. It does not use `data/deskulpt.sqlite`.
 - `npm run test:watch` runs the same file under Vitest watch.
-- `npm run test:e2e` runs Playwright (`e2e/leasing-path.spec.ts`) against its own Next process on **port 43124** and a throwaway database. It does not reuse the dev server on 43123. The script loads the home page, switches to Nadia, approves Maya's application, confirms Maya sees approved status and an INR rent row, then confirms Jonah's inbox is empty.
+- `npm run test:e2e` runs Playwright (`e2e/leasing-path.spec.ts`) against its own Next process on **port 43124** and a throwaway database. It does not reuse the dev server on 43123. The script loads the home page, switches to Nadia, approves Maya's application, and confirms Maya sees approved status and an INR rent row.
 - `npm run lint` runs ESLint.
 
 Playwright downloads a browser on first use (`npx playwright install` if the run asks for one).

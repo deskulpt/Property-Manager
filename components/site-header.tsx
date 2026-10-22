@@ -160,12 +160,14 @@ export function SiteHeader({
   unread,
   role,
   signedIn,
+  demoSwitcher = false,
 }: {
   users: SwitchUser[]
   currentId: string
   unread: number
   role?: Role | null
   signedIn?: boolean
+  demoSwitcher?: boolean
 }) {
   const browse = publicLinks()
   const desk = deskLinks(role, unread)
@@ -231,9 +233,11 @@ export function SiteHeader({
                 </button>
               </form>
             )}
-            <div className="hidden border-l border-ink/10 pl-2 md:block">
-              <SessionSwitcher users={users} currentId={currentId} />
-            </div>
+            {demoSwitcher ? (
+              <div className="hidden border-l border-ink/10 pl-2 md:block">
+                <SessionSwitcher users={users} currentId={currentId} />
+              </div>
+            ) : null}
             <Sheet>
               <SheetTrigger
                 render={
@@ -323,9 +327,14 @@ export function SiteHeader({
                         </button>
                       </form>
                     )}
-                    <div className="pt-2 md:hidden">
-                      <SessionSwitcher users={users} currentId={currentId} />
-                    </div>
+                    {demoSwitcher ? (
+                      <div className="pt-2 md:hidden">
+                        <SessionSwitcher users={users} currentId={currentId} />
+                      </div>
+                    ) : null}
+                    <Link href="/help/faq" className="text-sm text-ink-soft">
+                      Help & FAQ
+                    </Link>
                     <Link href="/legal/terms" className="text-sm text-ink-soft">
                       {t("nav.legal.terms")}
                     </Link>

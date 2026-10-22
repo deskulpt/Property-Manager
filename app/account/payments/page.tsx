@@ -9,7 +9,12 @@ export const metadata = { title: "Payments" }
 export default async function PaymentsPage() {
   const user = await getSessionUser()
   if (!user || user.role !== "applicant") {
-    return <RoleGate title="The ledger is on the applicant desk" body="Switch to Devon Hale to see rent due, GST, a late fee, and a paid month. Maya Chen can add a UPI or eNACH method after she applies." />
+    return (
+      <RoleGate
+        title="The ledger is on the applicant desk"
+        body="Sign in as an approved applicant, or use Devon Hale in the Demo switcher when enabled."
+      />
+    )
   }
   const entries = ledgerForUser(user.id)
   const methods = methodsForUser(user.id)

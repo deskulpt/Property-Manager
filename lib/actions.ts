@@ -16,7 +16,12 @@ import {
   addCustomDomain,
   createApplication,
   createLandlordAccount,
+  createPropertyForLandlord,
   createVisitRequest,
+  exportUserData,
+  propertyForLandlord,
+  recordConsentEvent,
+  redactUserPersonalData,
   getPasswordHashForEmail,
   getUserByEmail,
   getTenantPackage,
@@ -52,6 +57,13 @@ import {
 } from "@/lib/db"
 import { TRADES } from "@/lib/format"
 import { t } from "@/lib/i18n"
+import {
+  isPropertySegment,
+  leaseProfile,
+  PROPERTY_SUBTYPES,
+  type PropertySegment,
+  warehouseAttributesFromColumns,
+} from "@/lib/listing-schemas"
 import { toE164, type DisplayCurrency, type PaymentMethodKind } from "@/lib/market"
 import { MARKET_CHECKLIST_KEYS, type MarketChecklistKey } from "@/lib/market-checklist"
 import { notify, notifyMany } from "@/lib/notifications"
@@ -60,9 +72,11 @@ import { demoOtpCode, requestDemoOtp, verifyDemoOtp } from "@/lib/otp"
 import { demoPayments } from "@/lib/payments"
 import { staffCapabilities } from "@/lib/permissions"
 import { agentCanAccessTenant } from "@/lib/agent-context"
+import { isDemoSwitcherEnabled, sessionCookieOptions } from "@/lib/env"
 import {
   clearAgentTenantCookie,
   getSessionUser,
+  mintSessionValue,
   SESSION_COOKIE,
   setAgentTenantCookie,
 } from "@/lib/session"
@@ -99,6 +113,12 @@ export async function signupLandlord(
   _prev: AuthFormState,
   formData: FormData,
 ): Promise<AuthFormState> {
+  if (formData.get("consent") !== "on") {
+    return {
+      error: "Accept the privacy notice to continue.",
+      fieldErrors: { consent: "Required" },
+    }
+  }
   const parsed = signupSchema.safeParse({
     name: formData.get("name"),
     email: formData.get("email"),
@@ -119,13 +139,14 @@ export async function signupLandlord(
     packageTier: "starter",
   })
   if (!result.ok) return { error: result.error, fieldErrors: {} }
-  const jar = await cookies()
-  jar.set(SESSION_COOKIE, result.userId, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
+  recordConsentEvent({
+    userId: result.userId,
+    email: parsed.data.email,
+    purpose: "signup_privacy_terms",
+    version: "dpdp-2023-v1",
   })
+  const jar = await cookies()
+  jar.set(SESSION_COOKIE, mintSessionValue(result.userId), sessionCookieOptions())
   notify({
     userId: result.userId,
     title: "Welcome to Easy Rental",
@@ -153,23 +174,18 @@ export async function loginWithPassword(
     return { error: "Check the highlighted fields.", fieldErrors: issues(parsed.error) }
   }
   const hash = getPasswordHashForEmail(parsed.data.email)
+  const generic = { error: "Email or password is incorrect.", fieldErrors: {} }
   if (!hash) {
-    return {
-      error: "No password login for that email. Use Sign up, or the Demo identity switcher for fixtures.",
-      fieldErrors: {},
-    }
+    // Constant-time-ish: still hash a dummy so timing is closer; never reveal fixture emails.
+    await verifyPassword(parsed.data.password, "$2a$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUV")
+    return generic
   }
   const ok = await verifyPassword(parsed.data.password, hash)
-  if (!ok) return { error: "Email or password is incorrect.", fieldErrors: {} }
+  if (!ok) return generic
   const account = getUserByEmail(parsed.data.email)
-  if (!account) return { error: "Email or password is incorrect.", fieldErrors: {} }
+  if (!account) return generic
   const jar = await cookies()
-  jar.set(SESSION_COOKIE, account.id, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
-  })
+  jar.set(SESSION_COOKIE, mintSessionValue(account.id), sessionCookieOptions())
   refresh(["/", "/landlord", "/inbox"])
   if (account.role === "landlord_admin") redirect("/landlord")
   redirect("/")
@@ -229,18 +245,17 @@ export async function switchSession(userId: string) {
   if (!userId || userId === "visitor") {
     jar.delete(SESSION_COOKIE)
     await clearAgentTenantCookie()
-  } else {
-    const user = getUser(userId)
-    if (!user) return
-    jar.set(SESSION_COOKIE, user.id, {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 30,
-    })
-    if (user.role !== "managing_agent") {
-      await clearAgentTenantCookie()
-    }
+    revalidatePath("/", "layout")
+    return
+  }
+  if (!isDemoSwitcherEnabled()) {
+    return
+  }
+  const user = getUser(userId)
+  if (!user || !user.isDemo) return
+  jar.set(SESSION_COOKIE, mintSessionValue(user.id), sessionCookieOptions())
+  if (user.role !== "managing_agent") {
+    await clearAgentTenantCookie()
   }
   revalidatePath("/", "layout")
 }
@@ -257,10 +272,10 @@ export async function setAgentLandlordForm(formData: FormData) {
 
 const applicationSchema = z.object({
   unitId: z.string().min(1),
-  company: z.string().trim().min(2, "Enter the company name"),
+  company: z.string().trim().min(2, "Enter a name or company"),
   contactName: z.string().trim().min(2, "Enter a contact name"),
-  email: z.string().trim().regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Enter a work email"),
-  intendedUse: z.string().trim().min(3, "Say how the bay will be used"),
+  email: z.string().trim().regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Enter an email"),
+  intendedUse: z.string().trim().min(3, "Add a short note on intended use"),
   notes: z.string().trim().max(1000).optional(),
 })
 
@@ -310,6 +325,136 @@ export async function submitApplication(_prev: ApplyState, formData: FormData): 
   )
   refresh(["/", "/properties", `/properties/${result.slug}`, `/properties/${result.slug}/units/${result.code}`, "/account", "/landlord", "/landlord/applications", "/inbox"])
   redirect("/account?notice=Application+submitted.+The+landlord+can+review+it+from+their+inbox.")
+}
+
+export type CreateListingState = {
+  error: string | null
+  fieldErrors?: Record<string, string>
+}
+
+export async function createListingProperty(
+  _prev: CreateListingState,
+  formData: FormData,
+): Promise<CreateListingState> {
+  const user = await getSessionUser()
+  if (!user?.tenantId || user.role !== "landlord_admin") {
+    return { error: "Switch to a landlord admin to create listings.", fieldErrors: {} }
+  }
+  const segmentRaw = String(formData.get("segment") ?? "")
+  if (!isPropertySegment(segmentRaw)) {
+    return { error: "Pick a valid segment.", fieldErrors: { segment: "Invalid segment" } }
+  }
+  const segment = segmentRaw as PropertySegment
+  const subtype = String(formData.get("subtype") ?? "")
+  if (!(PROPERTY_SUBTYPES[segment] as readonly string[]).includes(subtype)) {
+    return { error: "Pick a subtype for that segment.", fieldErrors: { subtype: "Invalid subtype" } }
+  }
+  const name = String(formData.get("name") ?? "").trim()
+  const address = String(formData.get("address") ?? "").trim()
+  const area = String(formData.get("area") ?? "").trim()
+  const cityLine = String(formData.get("cityLine") ?? "").trim()
+  const unitCode = String(formData.get("unitCode") ?? "").trim()
+  const description = String(formData.get("description") ?? "").trim()
+  const sqft = Number(formData.get("sqft"))
+  if (!name || !address || !area || !cityLine || !unitCode || !description || !Number.isFinite(sqft) || sqft <= 0) {
+    return { error: "Fill property name, address, area, city line, unit code, area SF, and description." }
+  }
+  const profile = leaseProfile(segment)
+  let rateBasis: "per_sqft_month" | "flat_month" = profile.rateBasisDefault
+  let ratePsf = 0
+  let rentAmountMinor: number | null = null
+  let attributes: Record<string, unknown> = {}
+  let clearHeight = ""
+  let docks = 0
+  let driveIns = 0
+  let power = ""
+  let bhk: number | null = null
+  let carpetSqft: number | null = null
+  let securityDepositMonths: number | null = profile.defaultDepositMonths
+  let maintenanceMinor: number | null = null
+
+  if (segment === "warehouse") {
+    ratePsf = Number(formData.get("ratePsf"))
+    if (!Number.isFinite(ratePsf) || ratePsf <= 0) {
+      return { error: "Enter a positive ₹/SF rate.", fieldErrors: { ratePsf: "Required" } }
+    }
+    clearHeight = String(formData.get("clearHeight") ?? "").trim() || "—"
+    docks = Number(formData.get("docks") ?? 0) || 0
+    driveIns = Number(formData.get("driveIns") ?? 0) || 0
+    power = String(formData.get("power") ?? "").trim() || "—"
+    attributes = warehouseAttributesFromColumns({
+      clearHeight,
+      docks,
+      driveIns,
+      power,
+    })
+  } else {
+    const monthly = Number(formData.get("monthlyRent"))
+    if (!Number.isFinite(monthly) || monthly <= 0) {
+      return { error: "Enter monthly rent in ₹.", fieldErrors: { monthlyRent: "Required" } }
+    }
+    rentAmountMinor = Math.round(monthly * 100)
+    rateBasis = "flat_month"
+    carpetSqft = Number(formData.get("carpetSqft"))
+    if (!Number.isFinite(carpetSqft) || carpetSqft <= 0) carpetSqft = sqft
+    if (segment === "residential") {
+      bhk = Number(formData.get("bhk")) || 1
+      const furnishing = String(formData.get("furnishing") ?? "semi")
+      securityDepositMonths = Number(formData.get("depositMonths")) || profile.defaultDepositMonths
+      const maintenance = Number(formData.get("maintenance") ?? 0)
+      maintenanceMinor = Number.isFinite(maintenance) && maintenance > 0 ? Math.round(maintenance * 100) : null
+      attributes = {
+        bhk,
+        furnishing: furnishing === "fully" || furnishing === "unfurnished" ? furnishing : "semi",
+        societyAmenities: [],
+      }
+    } else {
+      attributes = {
+        carpetSqft,
+        superBuiltUpSqft: sqft,
+        frontageFt: Number(formData.get("frontageFt")) || undefined,
+        floor: String(formData.get("floor") ?? "").trim() || undefined,
+        mallName: String(formData.get("mallName") ?? "").trim() || undefined,
+        fitOut: (() => {
+          const raw = String(formData.get("fitOut") ?? "")
+          if (raw === "fitted" || raw === "warm_shell" || raw === "bare_shell") return raw
+          return "bare_shell" as const
+        })(),
+      }
+    }
+  }
+
+  const result = createPropertyForLandlord({
+    tenantId: user.tenantId,
+    name,
+    address,
+    area,
+    cityLine,
+    segment,
+    subtype,
+    totalSqft: sqft,
+    unit: {
+      code: unitCode,
+      description,
+      sqft,
+      ratePsf,
+      rateBasis,
+      rentAmountMinor,
+      clearHeight,
+      docks,
+      driveIns,
+      power,
+      attributes: attributes as import("@/lib/listing-schemas").UnitAttributes,
+      bhk,
+      carpetSqft,
+      securityDepositMonths,
+      maintenanceMinor,
+      gstApplicable: profile.gstOnRent,
+    },
+  })
+  if (!result.ok) return { error: result.error }
+  refresh(["/landlord/properties", `/landlord/properties/${result.propertyId}`, "/listings", "/properties"])
+  redirect(`/landlord/properties/${result.propertyId}`)
 }
 
 
@@ -539,13 +684,15 @@ const TYPES = new Map([
   ["image/jpeg", "jpg"],
   ["image/webp", "webp"],
   ["image/gif", "gif"],
-  ["image/svg+xml", "svg"],
 ])
 
 export async function submitFloorPlan(formData: FormData) {
   const user = await getSessionUser()
   if (!user || user.role !== "landlord_admin" || !user.tenantId) return
   const propertyId = String(formData.get("propertyId") ?? "")
+  if (!/^[a-zA-Z0-9_-]+$/.test(propertyId)) return
+  const owned = propertyForLandlord(user.tenantId, propertyId)
+  if (!owned) return
   const file = formData.get("floorPlan")
   if (!(file instanceof File) || file.size === 0) return
   if (file.size > 5_000_000) return
@@ -554,7 +701,10 @@ export async function submitFloorPlan(formData: FormData) {
   const name = `${propertyId}-${Date.now()}.${ext}`
   const dir = path.join(process.cwd(), "data", "uploads")
   await fs.mkdir(dir, { recursive: true })
-  await fs.writeFile(path.join(dir, name), Buffer.from(await file.arrayBuffer()))
+  const target = path.join(dir, name)
+  const resolved = path.resolve(target)
+  if (!resolved.startsWith(path.resolve(dir) + path.sep)) return
+  await fs.writeFile(resolved, Buffer.from(await file.arrayBuffer()))
   const result = saveFloorPlan(user.tenantId, propertyId, `/files/${name}`)
   if (!result.ok) return
   refresh([`/properties/${result.slug}`, `/landlord/properties/${propertyId}`])
@@ -792,8 +942,12 @@ export async function submitPayment(formData: FormData) {
 const verificationSchema = z.object({
   country: z.string().trim().min(2),
   region: z.string().trim().min(2, "Enter a province, state, or region"),
-  docType: z.enum(["aadhaar", "driving_licence"]),
-  fileName: z.string().trim().max(180),
+  docType: z.enum(["kyc_provider", "driving_licence"]),
+  fileName: z
+    .string()
+    .trim()
+    .max(64)
+    .regex(/^[A-Za-z0-9._:-]+$/, "Use a provider reference id (letters, numbers, . _ : -)"),
   faceName: z.string().trim().max(180),
 })
 
@@ -824,11 +978,15 @@ export async function completeVerification(_prev: VerifyState, payload: {
     }
   }
   const isIndia = parsed.data.country === "India" || parsed.data.country === "IN"
-  if (isIndia && parsed.data.docType !== "aadhaar") {
-    return { error: "India uses Aadhaar in this demo.", result: null }
+  if (isIndia && parsed.data.docType !== "kyc_provider") {
+    return { error: "India uses a licensed KYC provider reference in this demo (no Aadhaar images).", result: null }
   }
   if (!isIndia && parsed.data.docType !== "driving_licence") {
-    return { error: "Non-India markets use a driving licence in this demo.", result: null }
+    return { error: "Non-India markets use a driving licence reference in this demo.", result: null }
+  }
+  // Refuse obvious Aadhaar number patterns in free-text refs.
+  if (/\b\d{4}\s?\d{4}\s?\d{4}\b/.test(parsed.data.fileName)) {
+    return { error: "Do not enter an Aadhaar number. Use a provider reference only.", result: null }
   }
   const simulated = simulateMatch(parsed.data)
   saveVerification({
@@ -1229,4 +1387,24 @@ export async function getShopSettingsPublicAction(tenantId: string) {
     return null
   }
   return getShopSettingsPublic(tenantId)
+}
+
+export async function downloadMyData() {
+  const user = await getSessionUser()
+  if (!user) return { ok: false as const, error: "Sign in first." }
+  const payload = exportUserData(user.id)
+  if (!payload) return { ok: false as const, error: "No data." }
+  recordConsentEvent({
+    userId: user.id,
+    email: user.email,
+    purpose: "data_export",
+    version: "dpdp-2023-v1",
+  })
+  return { ok: true as const, payload }
+}
+
+export async function requestAccountErasure() {
+  const user = await getSessionUser()
+  if (!user) return { ok: false as const, error: "Sign in first." }
+  return redactUserPersonalData(user.id)
 }

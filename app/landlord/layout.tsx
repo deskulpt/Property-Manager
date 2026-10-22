@@ -22,7 +22,7 @@ export default async function LandlordLayout({ children }: { children: React.Rea
     return (
       <RoleGate
         title="This desk is for a landlord admin"
-        body="Create an account at Sign up, log in, or use the Demo identity switcher (Nadia for BBM, Jonah for Harbourline, Meera for Sahni NRI). Each organisation only sees its own data."
+        body="Create an account at Sign up, log in, or use the Demo identity switcher (Nadia · DEMO · EasyRent Hyderabad) when the demo switcher is enabled. Each organisation only sees its own data."
       />
     )
   }

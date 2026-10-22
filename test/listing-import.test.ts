@@ -70,10 +70,11 @@ describe("listing import drafts", () => {
     expect(listImportDrafts("t_bbm").some((d) => d.id === created.draft.id)).toBe(true)
   })
 
-  it("managing agent seed can access BBM and Harbourline only", async () => {
+  it("managing agent seed can access the demo landlord only", async () => {
     const { agentCanAccessTenant, agentLandlords } = await import("@/lib/agent-context")
     const landlords = agentLandlords("u_riya")
-    expect(landlords.map((l) => l.id).sort()).toEqual(["t_bbm", "t_harbour"])
-    expect(agentCanAccessTenant("u_riya", "t_nri")).toBe(false)
+    expect(landlords.map((l) => l.id)).toEqual(["t_bbm"])
+    expect(agentCanAccessTenant("u_riya", "t_bbm")).toBe(true)
+    expect(agentCanAccessTenant("u_riya", "t_unknown")).toBe(false)
   })
 })

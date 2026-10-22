@@ -3,6 +3,7 @@ import { CurrencyForm } from "@/components/landlord/currency-form"
 import { DomainSettings } from "@/components/landlord/domain-settings"
 import { RazorpaySettings } from "@/components/landlord/razorpay-settings"
 import { PhoneOtpForm } from "@/components/otp/phone-otp"
+import { DataRightsPanel } from "@/components/privacy/data-rights"
 import { getShopSettingsPublic, getTenantPackage, listCustomDomains } from "@/lib/db"
 import { getSessionUser } from "@/lib/session"
 
@@ -47,7 +48,7 @@ export default async function LandlordSettingsPage() {
           <CurrencyForm current={user.displayCurrency} />
         </div>
       </section>
-      <section className="bg-card p-4 ring-1 ring-foreground/10 md:p-6">
+      <section className="mb-10 bg-card p-4 ring-1 ring-foreground/10 md:p-6">
         <h2 className="font-sans text-lg font-extrabold">Phone OTP (demo)</h2>
         <p className="mt-1 text-sm text-ink-soft">
           Country-code picker and E.164 validation. Demo send and verify — no SMS provider.
@@ -56,6 +57,7 @@ export default async function LandlordSettingsPage() {
           <PhoneOtpForm currentPhone={user.phone} />
         </div>
       </section>
+      <DataRightsPanel role={user.role} />
     </div>
   )
 }

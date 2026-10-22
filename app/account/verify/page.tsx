@@ -9,7 +9,12 @@ export const metadata = { title: "Verification" }
 export default async function VerifyPage() {
   const user = await getSessionUser()
   if (!user || user.role !== "applicant") {
-    return <RoleGate title="Verification is for applicants" body="Switch to Maya Chen to run the wizard, or Devon Hale to see a completed demo result." />
+    return (
+      <RoleGate
+        title="Verification is for applicants"
+        body="Sign in as an applicant, or use the Demo switcher (Maya Chen / Devon Hale) when enabled."
+      />
+    )
   }
   const existing = latestVerification(user.id)
   const countries = publicFormCountries()

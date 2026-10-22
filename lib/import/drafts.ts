@@ -65,11 +65,12 @@ export function createDraftFromImport(input: {
   const now = new Date().toISOString()
 
   try {
+    // Defaults keep imports on the warehouse spine; landlords can retarget segment later.
     db.prepare(
       `INSERT INTO properties (
-        id, tenant_id, name, slug, address, area, city_line, total_sqft,
+        id, tenant_id, name, slug, address, area, city_line, total_sqft, segment, subtype,
         floor_plan_path, model_path, latitude, longitude
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'warehouse', 'logistics_park', NULL, NULL, ?, ?)`,
     ).run(
       propertyId,
       input.tenantId,
@@ -86,8 +87,9 @@ export function createDraftFromImport(input: {
     db.prepare(
       `INSERT INTO units (
         id, tenant_id, property_id, floor_id, code, sqft, clear_height, docks, drive_ins, power,
-        rate_psf, status, hotspot_x, hotspot_y, matterport_url, description
-      ) VALUES (?, ?, ?, NULL, ?, ?, ?, 0, 0, ?, ?, 'pending', NULL, NULL, NULL, ?)`,
+        rate_psf, rate_basis, rent_amount_minor, attributes, status, hotspot_x, hotspot_y,
+        matterport_url, description
+      ) VALUES (?, ?, ?, NULL, ?, ?, ?, 0, 0, ?, ?, 'per_sqft_month', NULL, '{}', 'pending', NULL, NULL, NULL, ?)`,
     ).run(
       unitId,
       input.tenantId,
