@@ -1327,3 +1327,34 @@ export async function demoDiscardIndication(formData: FormData) {
   refresh(["/refer/dashboard", "/cms/referrals"])
 }
 
+
+export async function submitTicketForm(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user) return { error: "Sign in to open a ticket." }
+  const { activeLeasesForUser, createTicket } = await import("@/lib/role-cms-store")
+  const leases = activeLeasesForUser(user.id)
+  if (leases.length === 0) return { error: "Tickets are for current occupants with an active lease." }
+  const lease = leases[0]
+  const subject = String(formData.get("subject") ?? "").trim()
+  const body = String(formData.get("body") ?? "").trim()
+  if (subject.length < 3 || body.length < 3) return { error: "Add a short subject and details." }
+  createTicket({
+    tenantId: lease.tenantId,
+    propertyId: lease.propertyId,
+    unitId: lease.unitId,
+    userId: user.id,
+    subject,
+    body,
+  })
+  refresh(["/portal", "/portal/tickets", "/inbox"])
+  return { error: null, message: "Ticket opened." }
+}
+
+export async function cancelTicket(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user) return
+  const ticketId = String(formData.get("ticketId") ?? "")
+  const { setTicketStatus } = await import("@/lib/role-cms-store")
+  setTicketStatus(user.id, ticketId, "cancelled")
+  refresh(["/portal/tickets"])
+}
