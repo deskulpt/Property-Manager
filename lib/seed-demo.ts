@@ -130,6 +130,41 @@ export function seedDemoDatabase(db: Sql) {
     17.4326,
     78.4071,
   )
+  // Multi-floor stack/peel demo (PRD §4.4) — 8 levels so the selector scrolls (>5).
+  property.run(
+    "p_powai",
+    "t_bbm",
+    "Demo Powai Tower",
+    "powai",
+    "12 Hiranandani Gardens, Powai, Mumbai, Maharashtra 400076",
+    "Powai",
+    "DEMO · POWAI · 8 FLOORS",
+    96000,
+    "commercial",
+    "office",
+    "/floorplans/powai-plate.svg",
+    null,
+    19.1197,
+    72.9051,
+  )
+
+  const floorStmt = db.prepare(
+    `INSERT INTO floors (id, tenant_id, property_id, label, level_index, plan_path, plan_draft_json)
+     VALUES (?, ?, ?, ?, ?, ?, NULL)`,
+  )
+  const POWAI_FLOORS: { id: string; label: string; level: number }[] = [
+    { id: "f_powai_g", label: "Ground", level: 0 },
+    { id: "f_powai_1", label: "L1", level: 1 },
+    { id: "f_powai_2", label: "L2", level: 2 },
+    { id: "f_powai_3", label: "L3", level: 3 },
+    { id: "f_powai_4", label: "L4", level: 4 },
+    { id: "f_powai_5", label: "L5", level: 5 },
+    { id: "f_powai_6", label: "L6", level: 6 },
+    { id: "f_powai_7", label: "L7", level: 7 },
+  ]
+  for (const floor of POWAI_FLOORS) {
+    floorStmt.run(floor.id, "t_bbm", "p_powai", floor.label, floor.level, "/floorplans/powai-plate.svg")
+  }
 
   const unitStmt = db.prepare(
     `INSERT INTO units (
@@ -279,6 +314,53 @@ export function seedDemoDatabase(db: Sql) {
     null,
     "Demo 3 BHK. 11-month agreement. Residential rent — GST not charged in this demo.",
   )
+
+  // One leasable bay per Powai floor so stack/scroll acceptance is easy to demo.
+  const powaiStatuses: UnitStatus[] = [
+    "available",
+    "leased",
+    "available",
+    "pending",
+    "available",
+    "leased",
+    "available",
+    "pending",
+  ]
+  POWAI_FLOORS.forEach((floor, index) => {
+    const code = `P${floor.level}`
+    const sqft = 11000 + index * 400
+    unitStmt.run(
+      `u_powai_${code.toLowerCase()}`,
+      "t_bbm",
+      "p_powai",
+      floor.id,
+      code,
+      sqft,
+      "12'",
+      0,
+      1,
+      "200A / 415V",
+      110 - index,
+      "per_sqft_month",
+      null,
+      stringifyAttributes({
+        carpetSqft: Math.round(sqft * 0.85),
+        superBuiltUpSqft: sqft,
+        floor: floor.label,
+        fitOut: "warm_shell",
+      }),
+      null,
+      Math.round(sqft * 0.85),
+      6,
+      null,
+      1,
+      powaiStatuses[index],
+      28 + (index % 3) * 22,
+      38 + (index % 2) * 28,
+      null,
+      `${sqft.toLocaleString("en-IN")} SF commercial plate on ${floor.label}.`,
+    )
+  })
 
   const media = db.prepare(
     `INSERT INTO unit_media (id, tenant_id, unit_id, kind, url, caption, sort_order)
