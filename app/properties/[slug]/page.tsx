@@ -30,8 +30,8 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
         title={property.name}
         lede={
           multiFloor
-            ? `${property.address}. Peel floors with the level list (scrolls when there are more than five). Pins on the active plate open that bay.`
-            : `${property.address}. Click a pin to open that bay. Coordinates are stored on the unit, not drawn into the image.`
+            ? `${property.address}. Hover a floor plate to focus it, click or hold to open the plan, click away to settle the stack. Pins on the open plate open that bay.`
+            : `${property.address}. Click a pin to open that bay.`
         }
       />
       {multiFloor ? (

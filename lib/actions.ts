@@ -37,7 +37,9 @@ import {
   openApplicationTenants,
   payDue,
   publicFormCountries,
+  addFloorLevel,
   saveFloorPlan,
+  saveFloorPlanDraft,
   saveHotspots,
   saveLateFeeRule,
   saveVerification,
@@ -677,6 +679,83 @@ export async function submitHotspots(formData: FormData) {
   const result = saveHotspots(user.tenantId, propertyId, spots)
   if (!result.ok) return
   refresh([`/properties/${result.slug}`, `/landlord/properties/${propertyId}`])
+}
+
+const planDraftPayloadSchema = z.object({
+  propertyId: z.string().regex(/^[a-zA-Z0-9_-]+$/),
+  floorId: z.string().regex(/^[a-zA-Z0-9_-]+$/),
+  draftJson: z.string().min(2).max(200_000),
+})
+
+/** Landlord-only: save validated unit-plan creator JSON on a floor. */
+export async function savePlanDraftAction(input: {
+  propertyId: string
+  floorId: string
+  draftJson: string
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) {
+    return { ok: false, error: "Landlord session required." }
+  }
+  const parsed = planDraftPayloadSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, error: "Invalid plan draft payload." }
+
+  // Validate structure with the shared schema (no HTML / eval).
+  const { planDraftSchema } = await import("@/lib/plan-draft")
+  let draftUnknown: unknown
+  try {
+    draftUnknown = JSON.parse(parsed.data.draftJson)
+  } catch {
+    return { ok: false, error: "Plan draft must be valid JSON." }
+  }
+  const draft = planDraftSchema.safeParse(draftUnknown)
+  if (!draft.success) return { ok: false, error: "Plan draft failed validation." }
+
+  const result = saveFloorPlanDraft(
+    user.tenantId,
+    parsed.data.propertyId,
+    parsed.data.floorId,
+    JSON.stringify(draft.data),
+  )
+  if (!result.ok) return { ok: false, error: result.error }
+  refresh([
+    `/properties/${result.slug}`,
+    `/landlord/properties/${parsed.data.propertyId}`,
+  ])
+  return { ok: true }
+}
+
+const addFloorPayloadSchema = z.object({
+  propertyId: z.string().regex(/^[a-zA-Z0-9_-]+$/),
+  label: z.string().trim().min(1).max(40),
+})
+
+/** Landlord-only: append a floor level for stack + plan creator. */
+export async function addFloorLevelAction(input: {
+  propertyId: string
+  label: string
+}): Promise<
+  | { ok: true; floorId: string; label: string; levelIndex: number }
+  | { ok: false; error: string }
+> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) {
+    return { ok: false, error: "Landlord session required." }
+  }
+  const parsed = addFloorPayloadSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, error: "Invalid floor label." }
+  const result = addFloorLevel(user.tenantId, parsed.data.propertyId, parsed.data.label)
+  if (!result.ok) return { ok: false, error: result.error }
+  refresh([
+    `/properties/${result.slug}`,
+    `/landlord/properties/${parsed.data.propertyId}`,
+  ])
+  return {
+    ok: true,
+    floorId: result.floorId,
+    label: result.label,
+    levelIndex: result.levelIndex,
+  }
 }
 
 const TYPES = new Map([
