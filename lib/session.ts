@@ -1,7 +1,6 @@
 import "server-only"
 import { createHmac, timingSafeEqual } from "node:crypto"
 import { cookies } from "next/headers"
-import { demoAuthAllowed } from "@/lib/auth/mode"
 import { getUser } from "@/lib/db"
 import { canImpersonate } from "@/lib/role-level"
 import { requireSecretKey, sessionCookieOptions } from "@/lib/env"
@@ -23,6 +22,7 @@ export function mintSessionValue(userId: string) {
 
 export function parseSessionValue(raw: string | undefined | null): string | null {
   if (!raw) return null
+  // New signed form: v1.<userId>.<sig>
   if (raw.startsWith("v1.")) {
     const parts = raw.split(".")
     if (parts.length !== 3) return null
@@ -38,6 +38,7 @@ export function parseSessionValue(raw: string | undefined | null): string | null
     }
     return userId
   }
+  // Legacy unsigned cookies (dev only migration). Reject in production.
   if (process.env.NODE_ENV === "production") return null
   if (/^[a-zA-Z0-9_-]+$/.test(raw)) return raw
   return null
@@ -89,19 +90,4 @@ export async function setAgentTenantCookie(tenantId: string) {
 export async function clearAgentTenantCookie() {
   const jar = await cookies()
   jar.delete(AGENT_TENANT_COOKIE)
-}
-
-/** Slice A helper — sets or clears the signed user session (not admin cookie). */
-export async function setSessionUserId(userId: string | null) {
-  if (!userId) {
-    const jar = await cookies()
-    jar.delete(SESSION_COOKIE)
-    return
-  }
-  await setSessionCookie(userId)
-}
-
-/** Demo identity switcher — blocked in hosted mode unless ALLOW_DEMO_AUTH=1. */
-export function demoSwitcherEnabled() {
-  return demoAuthAllowed()
 }

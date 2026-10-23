@@ -6,9 +6,6 @@ import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
-import { getAuthProvider } from "@/lib/auth/provider"
-import { isSeatRole, seatCapabilities } from "@/lib/auth/seats"
-import { DEFAULT_PACKAGE, parsePackage } from "@/lib/auth/packages"
 import {
   decideProposal,
   stubAutofillListing,
@@ -35,7 +32,6 @@ import {
   createJob,
   createMarketDraft,
   decideApplication,
-  getInviteByToken,
   getUser,
   inviteLandlord,
   isPublicFormCountry,
@@ -123,7 +119,6 @@ import {
   setAdminSessionCookie,
   setAgentTenantCookie,
   setSessionCookie,
-  setSessionUserId,
 } from "@/lib/session"
 import { translateEnglishCatalog, writeLocaleFile } from "@/lib/translate"
 import { simulateMatch } from "@/lib/verification"
@@ -144,7 +139,6 @@ function issues(error: z.ZodError) {
 
 export type AuthFormState = {
   error?: string | null
-  message?: string | null
   fieldErrors?: Record<string, string>
 }
 
@@ -2098,203 +2092,4 @@ export async function ensureMyReferralLink() {
   // Soft: allow staff / landlords to mint a demo referrer code tied to their user
   const ref = ensureReferrerForUser(user)
   return { ok: true as const, code: ref.code }
-}
-
-/* ─── Slice A SaaS auth actions ───────────────────────────────────── */
-
-type LandlordActor = NonNullable<Awaited<ReturnType<typeof getSessionUser>>> & {
-  tenantId: string
-}
-
-function requireLandlordCap(
-  user: Awaited<ReturnType<typeof getSessionUser>>,
-  cap: keyof NonNullable<ReturnType<typeof seatCapabilities>>,
-): LandlordActor | null {
-  if (!user || user.role !== "landlord_admin" || !user.tenantId) return null
-  const caps = seatCapabilities(user.seatRole ?? "owner")
-  if (!caps?.[cap]) return null
-  return user as LandlordActor
-}
-
-const emptyAuth: AuthFormState = { error: null, message: null, fieldErrors: {} }
-
-export async function signUpAction(
-  _prev: AuthFormState,
-  formData: FormData,
-): Promise<AuthFormState> {
-  const name = String(formData.get("name") ?? "").trim()
-  const email = String(formData.get("email") ?? "").trim()
-  const password = String(formData.get("password") ?? "")
-  const parsed = z
-    .object({
-      name: z.string().min(2, "Enter your name"),
-      email: z.string().email("Enter a work email"),
-      password: z.string().min(8, "Use at least 8 characters"),
-    })
-    .safeParse({ name, email, password })
-  if (!parsed.success) {
-    return { ...emptyAuth, error: "Check the form.", fieldErrors: issues(parsed.error) }
-  }
-  const auth = getAuthProvider()
-  const result = await auth.signUp(parsed.data)
-  if (!result.ok) return { ...emptyAuth, error: result.error }
-  await setSessionUserId(result.userId)
-  {
-    const jar = await cookies()
-    jar.delete(ADMIN_SESSION_COOKIE)
-  }
-  revalidatePath("/", "layout")
-  redirect("/create-account")
-}
-
-export async function logInAction(
-  _prev: AuthFormState,
-  formData: FormData,
-): Promise<AuthFormState> {
-  const email = String(formData.get("email") ?? "").trim()
-  const password = String(formData.get("password") ?? "")
-  const auth = getAuthProvider()
-  const result = await auth.logIn({ email, password })
-  if (!result.ok) return { ...emptyAuth, error: result.error }
-  await setSessionUserId(result.userId)
-  if (canImpersonate(getUser(result.userId)?.roleLevel ?? 5)) {
-    await setAdminSessionCookie(result.userId)
-  } else {
-    const jar = await cookies()
-    jar.delete(ADMIN_SESSION_COOKIE)
-  }
-  revalidatePath("/", "layout")
-  const user = getUser(result.userId)
-  if (!user) redirect("/")
-  if (!user.onboardingComplete || user.role === "pending") {
-    redirect("/onboarding/role")
-  }
-  if (
-    user.roleLevel === 2 &&
-    !user.tenantIsDemo &&
-    !subscriptionAllowsDesk(user.tenantStatus)
-  ) {
-    redirect(`${SUBSCRIBE_PATH}?from=onboard`)
-  }
-  if (user.role === "landlord_admin" && user.tenantId) redirect("/landlord")
-  if (canOpenConsole(user.roleLevel)) redirect("/console")
-  if (user.role === "applicant") redirect("/account")
-  redirect(deskPathForLevel(user.roleLevel))
-}
-
-export async function logOutAction() {
-  await clearSessionCookies()
-  revalidatePath("/", "layout")
-  redirect("/")
-}
-
-export async function createAccountAction(
-  _prev: AuthFormState,
-  formData: FormData,
-): Promise<AuthFormState> {
-  const user = await getSessionUser()
-  if (!user) {
-    return { ...emptyAuth, error: "Sign up or log in before creating an organisation." }
-  }
-  const parsed = z
-    .object({
-      legalName: z.string().trim().min(2, "Enter the legal name"),
-      city: z.string().trim().min(2, "Enter a city"),
-      actingAs: z.string().trim().min(2, "Say who is acting"),
-      entityType: z.string().trim().min(2, "Enter an entity type"),
-      contactName: z.string().trim().min(2, "Enter a contact name"),
-      contactEmail: z.string().trim().email("Enter a contact email"),
-      country: z.string().trim().min(2),
-      packageId: z.string().optional(),
-    })
-    .safeParse({
-      legalName: formData.get("legalName"),
-      city: formData.get("city"),
-      actingAs: formData.get("actingAs"),
-      entityType: formData.get("entityType"),
-      contactName: formData.get("contactName") || user.name,
-      contactEmail: formData.get("contactEmail") || user.email,
-      country: formData.get("country"),
-      packageId: formData.get("packageId") || DEFAULT_PACKAGE,
-    })
-  if (!parsed.success) {
-    return { ...emptyAuth, error: "Check the organisation form.", fieldErrors: issues(parsed.error) }
-  }
-  const country = parsed.data.country
-  if (country.toLowerCase() !== "india" && country.toUpperCase() !== "IN") {
-    return {
-      ...emptyAuth,
-      error: "Public Create account is India-only until another market clears the checklist.",
-      fieldErrors: { country: "India only" },
-    }
-  }
-  const auth = getAuthProvider()
-  const result = await auth.createOrg(user.id, {
-    ...parsed.data,
-    packageId: parsePackage(parsed.data.packageId),
-  })
-  if (!result.ok) return { ...emptyAuth, error: result.error }
-  revalidatePath("/", "layout")
-  redirect("/landlord")
-}
-
-export async function forgotPasswordAction(
-  _prev: AuthFormState,
-  formData: FormData,
-): Promise<AuthFormState> {
-  const email = String(formData.get("email") ?? "").trim()
-  const auth = getAuthProvider()
-  const result = await auth.requestPasswordReset(email)
-  if (!result.ok) return { ...emptyAuth, error: result.error }
-  return {
-    ...emptyAuth,
-    message:
-      "If that email has an account, a demo reset notice was queued. Check the inbox (email_demo) — live SMTP is not wired yet.",
-  }
-}
-
-export async function inviteSeatAction(
-  _prev: AuthFormState,
-  formData: FormData,
-): Promise<AuthFormState> {
-  const user = requireLandlordCap(await getSessionUser(), "inviteSeats")
-  if (!user?.tenantId) {
-    return { ...emptyAuth, error: "Only an owner can invite teammates." }
-  }
-  const email = String(formData.get("email") ?? "").trim()
-  const seatRoleRaw = String(formData.get("seatRole") ?? "")
-  if (!isSeatRole(seatRoleRaw) || seatRoleRaw === "owner") {
-    return { ...emptyAuth, error: "Choose leasing manager, accountant, or viewer." }
-  }
-  const auth = getAuthProvider()
-  const result = await auth.inviteSeat({
-    tenantId: user.tenantId,
-    email,
-    seatRole: seatRoleRaw,
-    invitedByUserId: user.id,
-  })
-  if (!result.ok) return { ...emptyAuth, error: result.error }
-  refresh(["/landlord/settings", "/inbox"])
-  return {
-    ...emptyAuth,
-    message: `Invite sent to ${email}. Accept link: /invite/${result.token}`,
-  }
-}
-
-export async function acceptInviteAction(token: string) {
-  const user = await getSessionUser()
-  if (!user) {
-    redirect(`/login?next=${encodeURIComponent(`/invite/${token}`)}`)
-  }
-  const auth = getAuthProvider()
-  const result = await auth.acceptInvite(token, user.id)
-  if (!result.ok) {
-    redirect(`/invite/${token}?error=${encodeURIComponent(result.error)}`)
-  }
-  revalidatePath("/", "layout")
-  redirect("/landlord")
-}
-
-export async function previewInvite(token: string) {
-  return getInviteByToken(token)
 }
