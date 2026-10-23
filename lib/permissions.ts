@@ -8,6 +8,7 @@ export type PersonaKind =
   | "listings"
   | "markets"
   | "languages"
+  | "referrals"
 
 export type StaffCapabilities = {
   openCms: boolean
@@ -22,12 +23,13 @@ export type StaffCapabilities = {
   seeListingReadiness: boolean
   manageMarkets: boolean
   manageLanguages: boolean
+  manageReferrals: boolean
 }
 
 const CAPS: Record<StaffRole, StaffCapabilities> = {
   super_admin: {
     openCms: true,
-    personas: ["platform_staff", "landlords", "applicants", "providers", "listings", "markets", "languages"],
+    personas: ["platform_staff", "landlords", "applicants", "providers", "listings", "markets", "languages", "referrals"],
     seeFullEmail: true,
     seeMaskedEmail: true,
     seeVerification: true,
@@ -38,10 +40,11 @@ const CAPS: Record<StaffRole, StaffCapabilities> = {
     seeListingReadiness: true,
     manageMarkets: true,
     manageLanguages: true,
+    manageReferrals: true,
   },
   account_manager: {
     openCms: true,
-    personas: ["landlords", "applicants"],
+    personas: ["landlords", "applicants", "referrals"],
     seeFullEmail: true,
     seeMaskedEmail: true,
     seeVerification: true,
@@ -52,6 +55,7 @@ const CAPS: Record<StaffRole, StaffCapabilities> = {
     seeListingReadiness: false,
     manageMarkets: false,
     manageLanguages: false,
+    manageReferrals: true,
   },
   service_manager: {
     openCms: true,
@@ -66,6 +70,7 @@ const CAPS: Record<StaffRole, StaffCapabilities> = {
     seeListingReadiness: false,
     manageMarkets: false,
     manageLanguages: false,
+    manageReferrals: false,
   },
   property_manager: {
     openCms: true,
@@ -80,6 +85,7 @@ const CAPS: Record<StaffRole, StaffCapabilities> = {
     seeListingReadiness: true,
     manageMarkets: false,
     manageLanguages: false,
+    manageReferrals: false,
   },
   merchandiser: {
     openCms: true,
@@ -94,6 +100,7 @@ const CAPS: Record<StaffRole, StaffCapabilities> = {
     seeListingReadiness: true,
     manageMarkets: false,
     manageLanguages: false,
+    manageReferrals: false,
   },
 }
 

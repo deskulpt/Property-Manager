@@ -26,11 +26,11 @@ export function HomePage({
             <p className="hero-brand">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="/logo.png"
+                src="/logo.svg"
                 alt="Easy Rental"
                 width={480}
                 height={270}
-                className="h-14 w-auto object-contain md:h-20"
+                className="h-16 w-auto object-contain md:h-24"
               />
             </p>
             <h1 className="hero-rise mt-5 max-w-[22ch] font-serif text-2xl font-medium leading-snug tracking-tight text-ink md:text-3xl">
@@ -103,9 +103,10 @@ export function HomePage({
           Today, a great portfolio sits behind a brochure.
         </h2>
         <p className="reveal mt-4 max-w-[62ch] text-lg text-ink-soft">
-          Industrial, commercial, and residential landlords still lean on brochures and WhatsApp —
-          availabilities stuck on “Coming Soon,” every lead in one thread, tenants with no way to
-          apply or pay online. Easy Rental closes that gap for more than one landlord organisation.
+          BBM Logistics Parks and Harbourline Yards India run quality industrial space across
+          Bhiwandi, Whitefield, and Sriperumbudur — and the old pattern is familiar: availabilities
+          stuck on “Coming Soon,” every lead in one WhatsApp thread, tenants with no way to
+          transact. Easy Rental closes that gap for more than one landlord.
         </p>
         <div className="reveal mt-10 grid border border-ink/20 md:grid-cols-2">
           <div className="bg-paper-2 p-6 md:p-9">
@@ -198,10 +199,10 @@ export function HomePage({
             Select a building. Click a unit. See everything.
           </h2>
           <p className="reveal mt-4 max-w-[62ch] text-lg text-paper/75">
-            A working preview of the leasing map. Vacant units stay bright, leased units dim. The
-            numbers come from the labelled demo portfolio —{" "}
-            <strong className="font-semibold text-paper">DEMO · EasyRent Hyderabad</strong>.{" "}
-            <span className="text-[#9ed0e0]">Open a unit to apply.</span>
+            A working preview of the leasing map. Vacant bays stay bright, leased bays dim. The
+            numbers are the seeded India portfolio — BBM Logistics Parks, Harbourline Yards India,
+            and Sahni Global Realty (NRI).{" "}
+            <span className="text-[#9ed0e0]">Open a bay to apply.</span>
           </p>
           <div className="reveal">
             <LeasingMap properties={properties} />
@@ -221,8 +222,8 @@ export function HomePage({
             {[
               [
                 "01",
-                "Demo identity or real signup",
-                "Landlords can sign up with email/password. Demo applicants: Maya Chen or Devon Hale when the switcher is on.",
+                "Demo identity, not a password",
+                "Pick Maya Chen or Devon Hale in the header. There is no auth provider and no secret.",
               ],
               [
                 "02",
@@ -237,7 +238,7 @@ export function HomePage({
               [
                 "04",
                 "Verification wizard",
-                "Licensed KYC provider reference for India (no Aadhaar images). Face match is simulated.",
+                "Defaults to India / Aadhaar. Other countries use a driving licence. Face match is simulated.",
               ],
               [
                 "05",
@@ -390,7 +391,7 @@ export function HomePage({
             [
               "F—03",
               "Demo verification",
-              "Licensed KYC provider reference for India — no Aadhaar images. Simulated match only.",
+              "Aadhaar for India, a driving licence elsewhere. Simulated match only.",
             ],
             [
               "F—04",

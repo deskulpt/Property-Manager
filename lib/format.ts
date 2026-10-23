@@ -4,7 +4,7 @@ import {
   monthlyRentCents as rustMonthlyRentCents,
 } from "@/lib/rust/money"
 
-export type MarketRole = "applicant" | "landlord_admin" | "service_provider" | "managing_agent"
+export type MarketRole = "applicant" | "landlord_admin" | "service_provider" | "managing_agent" | "referrer"
 export type StaffRole =
   | "super_admin"
   | "account_manager"
@@ -34,6 +34,7 @@ export const MARKET_ROLES: MarketRole[] = [
   "landlord_admin",
   "service_provider",
   "managing_agent",
+  "referrer",
 ]
 
 export function isStaffRole(role: string): role is StaffRole {
@@ -138,6 +139,7 @@ export function roleLabel(role: Role) {
   if (role === "landlord_admin") return "Landlord admin"
   if (role === "managing_agent") return "Managing agent"
   if (role === "service_provider") return "Service provider"
+  if (role === "referrer") return "Referrer"
   if (role === "super_admin") return "Super Admin"
   if (role === "account_manager") return "Account Manager"
   if (role === "service_manager") return "Service Manager"
@@ -164,6 +166,9 @@ export function identityLabel(user: {
   }
   if (user.role === "service_provider") {
     return `${user.name} · ${user.trade ?? "Trade"} · ${user.serviceArea ?? ""}`
+  }
+  if (user.role === "referrer") {
+    return `${user.name} · Refer & Earn`
   }
   return `${user.name} · Applicant`
 }

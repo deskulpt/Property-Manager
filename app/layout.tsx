@@ -3,6 +3,7 @@ import { IBM_Plex_Mono, Source_Sans_3, Source_Serif_4 } from "next/font/google"
 import Link from "next/link"
 import "./globals.css"
 import { AdminSessionBar } from "@/components/admin/admin-session-bar"
+import { BrandLogo } from "@/components/brand-logo"
 import { SiteHeader } from "@/components/site-header"
 import { PwaRegister } from "@/components/pwa-register"
 import { Toaster } from "@/components/ui/sonner"
@@ -89,8 +90,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <footer className="border-t border-white/10 bg-brand-deep px-4 py-12 text-paper/65 md:px-8">
           <div className="mx-auto flex max-w-[1200px] flex-col gap-8 md:flex-row md:items-end md:justify-between">
             <div>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo.png" alt="Easy Rental" className="h-10 w-auto object-contain brightness-110" />
+              <BrandLogo variant="white" />
               <p className="mt-3 max-w-sm font-mono text-xs leading-relaxed">{t("app.tagline")}</p>
               <p className="mt-2 max-w-sm text-sm text-paper/80">{t("app.legal")}</p>
             </div>
@@ -100,6 +100,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             >
               <Link href="/listings" className="text-[#9ed0e0] transition-colors hover:text-paper">
                 {t("nav.listings")}
+              </Link>
+              <Link href="/refer" className="text-[#9ed0e0] transition-colors hover:text-paper">
+                {t("nav.refer")}
+              </Link>
+              <Link href="/partners" className="text-[#9ed0e0] transition-colors hover:text-paper">
+                {t("nav.partners")}
               </Link>
               <Link href="/ask" className="text-[#9ed0e0] transition-colors hover:text-paper">
                 Ask

@@ -103,6 +103,22 @@ export function seedDemoDatabase(db: Sql) {
     1,
   )
   user.run("u_luis", "Luis Ortega", "luis@ortegaelectric.example", "service_provider", 5, null, null, "electrician", "Bhiwandi", 1, "+919820011122", null, 1)
+  // Refer & Earn demo identity (public funnel; not on L0–L5 privilege ladder)
+  user.run(
+    "u_asha",
+    "Asha Reddy",
+    "asha.reddy@refer.example",
+    "referrer",
+    5,
+    null,
+    null,
+    null,
+    null,
+    0,
+    "+919800001001",
+    null,
+    1,
+  )
 
   db.prepare("INSERT INTO agent_landlord_access (agent_user_id, tenant_id) VALUES (?, ?)").run(
     "u_riya",
