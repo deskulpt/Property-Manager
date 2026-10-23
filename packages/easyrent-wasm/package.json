@@ -1,0 +1,10 @@
+{
+  "name": "@easyrent/wasm",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Prebuilt WASM bindings for easyrent-core (nodejs + bundler targets)",
+  "files": [
+    "node",
+    "bundler"
+  ]
+}

@@ -226,15 +226,28 @@ npm run build
 npm start
 ```
 
+## Rust core (WASM)
+
+Pure-compute ledger math and unit packing live in `crates/easyrent-core`, exposed through `crates/easyrent-wasm` and prebuilt packages under `packages/easyrent-wasm/` (nodejs + bundler). TypeScript seams in `lib/format.ts`, `lib/market.ts`, and `lib/plan-draft.ts` are thin wrappers with a TS fallback when WASM is unavailable. Canonical PR: Origin [#15](https://cursor.com/codebase/deskulpt/Property-Manager/pull/15) (`cursor/rust-core-wasm`).
+
+```bash
+npm run test:rust      # cargo test --manifest-path crates/Cargo.toml
+npm run build:wasm     # rebuild packages/easyrent-wasm (needs rustup + wasm-pack)
+npm test               # includes test/rust-core-parity.test.ts
+curl -s http://127.0.0.1:43123/api/core/health   # { backend: "wasm"|"fallback" }
+```
+
+Force the TypeScript fallback with `EASYRENT_FORCE_TS_CORE=1`. Install Rust if needed: `rustup` (stable), `rustup target add wasm32-unknown-unknown`, `cargo install wasm-pack`. Committed `.wasm` artifacts mean `npm test` / `npm run build` do not require `rustc`.
+
 ## Tests
 
 ```bash
 npm test
-npm run test  # isolation + shop:e2e
+npm run test  # isolation + shop + rust parity
 ```
 
-- `npm test` runs `test/isolation.test.ts` on a temporary SQLite file. It checks tenant isolation, approving Maya (rent plus GST, and a second approve fails), late-fee idempotence, CMS email redaction, provider area approval, and that public form countries stay India-only until a draft checklist is complete. It does not use `data/deskulpt.sqlite`.
-- `npm run test:watch` runs the same file under Vitest watch.
+- `npm test` runs Vitest suites including isolation, shop, segment expansion, listing import, plan-draft, and **rust-core-parity** (WASM vs prior TS). It checks tenant isolation, approving Maya (rent plus GST, and a second approve fails), late-fee idempotence, CMS email redaction, provider area approval, and that public form countries stay India-only until a draft checklist is complete. It does not use `data/deskulpt.sqlite`.
+- `npm run test:watch` runs the same files under Vitest watch.
 - `npm run test:e2e` runs Playwright (`e2e/leasing-path.spec.ts`) against its own Next process on **port 43124** and a throwaway database. It does not reuse the dev server on 43123. The script loads the home page, switches to Nadia, approves Maya's application, and confirms Maya sees approved status and an INR rent row.
 - `npm run lint` runs ESLint.
 

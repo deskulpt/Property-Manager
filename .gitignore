@@ -56,3 +56,6 @@ next-env.d.ts
 # Generated locale files (English is source)
 locales/*.json
 !locales/en.json
+
+# Rust
+/crates/target/
