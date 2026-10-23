@@ -26,8 +26,19 @@ export type AppointmentStatus =
   | "declined"
   | "no_show"
 export type AppointmentTypeCode = "in_person" | "virtual"
+export type TicketStatus = "open" | "in_progress" | "resolved" | "closed" | "cancelled"
+export type TicketCategory = "maintenance" | "billing" | "noise" | "access" | "other"
+export type EnvelopeStatus = "draft" | "sent" | "completed" | "voided"
 export type Trade = "electrician" | "plumber" | "courier" | "cleaning"
 export type TenantKind = "landlord" | "platform"
+
+export const TICKET_CATEGORIES: TicketCategory[] = [
+  "maintenance",
+  "billing",
+  "noise",
+  "access",
+  "other",
+]
 
 export const TRADES: Trade[] = ["electrician", "plumber", "courier", "cleaning"]
 
@@ -209,6 +220,18 @@ export function statusLabel(status: string) {
   if (status === "confirmed") return "Confirmed"
   if (status === "declined") return "Declined"
   if (status === "no_show") return "No-show"
+  if (status === "in_progress") return "In progress"
+  if (status === "resolved") return "Resolved"
+  if (status === "closed") return "Closed"
+  if (status === "sent") return "Sent"
+  if (status === "draft") return "Draft"
+  if (status === "voided") return "Voided"
+  if (status === "interest") return "Interest"
+  if (status === "maintenance") return "Maintenance"
+  if (status === "billing") return "Billing"
+  if (status === "noise") return "Noise"
+  if (status === "access") return "Access"
+  if (status === "other") return "Other"
   return status
 }
 
