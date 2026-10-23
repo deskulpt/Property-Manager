@@ -35,7 +35,7 @@ import { seedDemoDatabase } from "@/lib/seed-demo"
 import { decryptSecret, encryptSecret, secretLast4 } from "@/lib/shop-crypto"
 import { resolveShopPaymentProvider } from "@/lib/shop-payments"
 
-const SEED_VERSION = "12"
+const SEED_VERSION = "13"
 
 function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
@@ -99,6 +99,8 @@ export type FloorRecord = {
   label: string
   levelIndex: number
   planPath: string | null
+  /** Validated unit-plan creator JSON (see lib/plan-draft.ts). */
+  planDraftJson: string | null
 }
 
 export type UnitRecord = {
@@ -337,6 +339,7 @@ function createSchema(db: Sql) {
       label TEXT NOT NULL,
       level_index INTEGER NOT NULL,
       plan_path TEXT,
+      plan_draft_json TEXT,
       UNIQUE (property_id, level_index)
     );
     CREATE TABLE visit_requests (
@@ -854,6 +857,7 @@ function floorsFor(propertyId: string): FloorRecord[] {
       label: String(row.label),
       levelIndex: Number(row.level_index),
       planPath: str(row, "plan_path"),
+      planDraftJson: str(row, "plan_draft_json"),
     }),
   )
 }
@@ -2048,6 +2052,61 @@ export function saveFloorPlan(tenantId: string, propertyId: string, publicPath: 
     .prepare("UPDATE properties SET floor_plan_path = ? WHERE id = ? AND tenant_id = ?")
     .run(publicPath, propertyId, tenantId)
   return { ok: true as const, slug: property.slug }
+}
+
+/** Persist a validated plan-draft JSON blob on a floor owned by the tenant. */
+export function saveFloorPlanDraft(
+  tenantId: string,
+  propertyId: string,
+  floorId: string,
+  draftJson: string,
+) {
+  const property = propertyForLandlord(tenantId, propertyId)
+  if (!property) return { ok: false as const, error: "Building not found in this organisation." }
+  const floor = property.floors.find((f) => f.id === floorId)
+  if (!floor) return { ok: false as const, error: "Floor not found on this building." }
+  if (draftJson.length > 200_000) {
+    return { ok: false as const, error: "Plan draft is too large." }
+  }
+  getDb()
+    .prepare(
+      "UPDATE floors SET plan_draft_json = ? WHERE id = ? AND property_id = ? AND tenant_id = ?",
+    )
+    .run(draftJson, floorId, propertyId, tenantId)
+  return { ok: true as const, slug: property.slug, floorId }
+}
+
+/**
+ * Add a floor level for the landlord plan creator / stack navigator.
+ * Label is sanitized; level_index is next max+1 (or 0 when empty).
+ */
+export function addFloorLevel(
+  tenantId: string,
+  propertyId: string,
+  labelRaw: string,
+) {
+  const property = propertyForLandlord(tenantId, propertyId)
+  if (!property) return { ok: false as const, error: "Building not found in this organisation." }
+  const label = labelRaw
+    .replace(/[^\w .'#/_-]/g, "")
+    .trim()
+    .slice(0, 40)
+  if (!label) return { ok: false as const, error: "Floor label is required." }
+  if (property.floors.length >= 40) {
+    return { ok: false as const, error: "This building already has the maximum number of floors." }
+  }
+  const nextIndex =
+    property.floors.length === 0
+      ? 0
+      : Math.max(...property.floors.map((f) => f.levelIndex)) + 1
+  const id = `f_${propertyId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 18)}_${nextIndex}_${crypto.randomUUID().slice(0, 6)}`
+  getDb()
+    .prepare(
+      `INSERT INTO floors (id, tenant_id, property_id, label, level_index, plan_path, plan_draft_json)
+       VALUES (?, ?, ?, ?, ?, NULL, NULL)`,
+    )
+    .run(id, tenantId, propertyId, label, nextIndex)
+  return { ok: true as const, slug: property.slug, floorId: id, levelIndex: nextIndex, label }
 }
 
 export function saveLateFeeRule(
