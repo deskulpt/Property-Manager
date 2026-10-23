@@ -33,6 +33,7 @@ import {
   type MarketChecklistKey,
 } from "@/lib/market-checklist"
 import {
+  hardBlocked,
   packageLimits,
   parsePackage,
   type SubscriptionPackage,
