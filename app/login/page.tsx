@@ -1,10 +1,10 @@
 import Link from "next/link"
-import { redirect } from "next/navigation"
+import { AuthShell } from "@/components/auth/auth-shell"
 import { LoginForm } from "@/components/auth/login-form"
-import { PageHeader } from "@/components/product"
 import { SUBSCRIBE_PATH } from "@/lib/plans"
 import { deskPathForLevel, subscriptionAllowsDesk } from "@/lib/role-level"
 import { getSessionUser } from "@/lib/session"
+import { redirect } from "next/navigation"
 
 export const metadata = { title: "Log in" }
 
@@ -25,22 +25,27 @@ export default async function LoginPage() {
   }
 
   return (
-    <div className="mx-auto max-w-lg px-4 py-12 md:px-8">
-      <PageHeader
-        kicker="Account"
-        title="Log in"
-        lede="Sign in with your Easy Rental email and password. All desks require a secure session — public demo role hopping is disabled."
-      />
-      <div className="mt-8 border border-ink/10 bg-card p-5 md:p-6">
-        <LoginForm />
-      </div>
-      <p className="mt-6 text-sm text-ink-soft">
-        Need an account?{" "}
-        <Link href="/signup" className="font-semibold text-terra hover:underline">
-          Create an account
-        </Link>
-        .
-      </p>
-    </div>
+    <AuthShell
+      title="Log in"
+      lede="Sign in with your Easy Rental email and password. Platform L0/L1 staff land on /console; landlords continue to the desk after plan activation. Public demo role hopping is disabled."
+      footer={
+        <>
+          <Link href="/forgot-password" className="font-semibold text-terra hover:underline">
+            Forgot password
+          </Link>
+          <span className="mx-2 text-ink-faint">·</span>
+          Need an account?{" "}
+          <Link href="/signup" className="font-semibold text-terra hover:underline">
+            Sign up
+          </Link>
+          <span className="mx-2 text-ink-faint">·</span>
+          <Link href="/pricing" className="font-semibold text-terra hover:underline">
+            Pricing
+          </Link>
+        </>
+      }
+    >
+      <LoginForm />
+    </AuthShell>
   )
 }

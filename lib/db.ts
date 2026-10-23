@@ -32,8 +32,20 @@ import {
   MARKET_CHECKLIST_LABELS,
   type MarketChecklistKey,
 } from "@/lib/market-checklist"
+import {
+  hardBlocked,
+  packageLimits,
+  parsePackage,
+  type SubscriptionPackage,
+} from "@/lib/auth/packages"
+import { assertHostedAuthPolicy } from "@/lib/auth/mode"
+import { randomToken } from "@/lib/auth/password"
+import {
+  isSeatRole,
+  type SeatRole,
+} from "@/lib/auth/seats"
 import { parsePlanId, type PlanId } from "@/lib/plans"
-import { normalizeRoleLevel, type RoleLevel } from "@/lib/role-level"
+import { normalizeRoleLevel, roleToLevel, type RoleLevel } from "@/lib/role-level"
 import { seedDemoDatabase } from "@/lib/seed-demo"
 import { decryptSecret, encryptSecret, secretLast4 } from "@/lib/shop-crypto"
 import { resolveShopPaymentProvider } from "@/lib/shop-payments"
@@ -52,7 +64,7 @@ import {
   type RewardStatus,
 } from "@/lib/referrals"
 
-const SEED_VERSION = "19"
+const SEED_VERSION = "20"
 
 function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
@@ -114,6 +126,11 @@ export type SessionUser = {
   tenantIsDemo: boolean
   /** False until role (+ L2 subscribe) finishes. */
   onboardingComplete: boolean
+  /** Landlord seat role when user holds a seat on their tenant. */
+  seatRole: SeatRole | null
+  /** Alias of tenantPackage for Slice A AuthProvider. */
+  subscriptionPackage: SubscriptionPackage | null
+  emailVerifiedAt: string | null
 }
 
 export type FloorRecord = {
@@ -210,6 +227,9 @@ function num(row: Record<string, unknown>, key: string) {
 function mapUser(row: Record<string, unknown>): SessionUser {
   const pkg = str(row, "tenant_package")
   const role = String(row.role) as Role
+  const seatRaw = str(row, "seat_role")
+  const seatRole = seatRaw && isSeatRole(seatRaw) ? seatRaw : null
+  const subscriptionPackage = pkg ? parsePackage(pkg) : null
   return {
     id: String(row.id),
     name: String(row.name),
@@ -231,6 +251,11 @@ function mapUser(row: Record<string, unknown>): SessionUser {
     isDemo: Number(row.is_demo) === 1,
     tenantIsDemo: Number(row.tenant_is_demo) === 1,
     onboardingComplete: Number(row.onboarding_complete ?? 1) === 1,
+    seatRole:
+      seatRole ??
+      (role === "landlord_admin" ? ("owner" as SeatRole) : null),
+    subscriptionPackage,
+    emailVerifiedAt: str(row, "email_verified_at"),
   }
 }
 
@@ -276,6 +301,7 @@ function mapUnit(row: Record<string, unknown>, segmentHint?: PropertySegment): U
 const USER_SQL = `
   SELECT u.id, u.name, u.email, u.role, u.tenant_id, u.company, u.trade,
          u.service_area, u.provider_verified, u.phone, u.password_hash,
+         u.email_verified_at,
          COALESCE(u.is_demo, 0) AS is_demo,
          COALESCE(u.role_level, 5) AS role_level,
          COALESCE(u.onboarding_complete, 1) AS onboarding_complete,
@@ -283,9 +309,11 @@ const USER_SQL = `
          COALESCE(t.display_currency, 'INR') AS display_currency,
          COALESCE(t.package, 'starter') AS tenant_package,
          COALESCE(t.status, 'active') AS tenant_status,
-         COALESCE(t.is_demo, 0) AS tenant_is_demo
+         COALESCE(t.is_demo, 0) AS tenant_is_demo,
+         ls.seat_role AS seat_role
   FROM users u
   LEFT JOIN tenants t ON t.id = u.tenant_id
+  LEFT JOIN landlord_seats ls ON ls.user_id = u.id AND ls.tenant_id = u.tenant_id
 `
 
 function createSchema(db: Sql) {
@@ -315,7 +343,36 @@ function createSchema(db: Sql) {
       provider_verified INTEGER NOT NULL DEFAULT 0,
       phone TEXT,
       password_hash TEXT,
-      is_demo INTEGER NOT NULL DEFAULT 0
+      is_demo INTEGER NOT NULL DEFAULT 0,
+      email_verified_at TEXT
+    );
+    CREATE TABLE landlord_seats (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      seat_role TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE (tenant_id, user_id)
+    );
+    CREATE TABLE org_invites (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      email TEXT NOT NULL,
+      seat_role TEXT NOT NULL,
+      token TEXT NOT NULL UNIQUE,
+      invited_by TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      accepted_at TEXT,
+      UNIQUE (tenant_id, email)
+    );
+    CREATE TABLE password_reset_tokens (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      token TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      used_at TEXT
     );
     CREATE TABLE consent_events (
       id TEXT PRIMARY KEY,
@@ -812,6 +869,9 @@ function createSchema(db: Sql) {
     CREATE INDEX idx_indications_referrer ON indications(referrer_id, status);
     CREATE INDEX idx_rewards_referrer ON referral_rewards(referrer_id, status);
     CREATE INDEX idx_attribution_code ON referral_attribution(code);
+    CREATE INDEX idx_seats_tenant ON landlord_seats(tenant_id);
+    CREATE INDEX idx_seats_user ON landlord_seats(user_id);
+    CREATE INDEX idx_invites_token ON org_invites(token);
   `)
 }
 
@@ -852,6 +912,9 @@ function reset(db: Sql) {
     "partner_service_areas",
     "partner_referrals",
     "partner_applications",
+    "password_reset_tokens",
+    "org_invites",
+    "landlord_seats",
     "users",
     "tenants",
     "market_checklist_items",
@@ -870,7 +933,13 @@ function reset(db: Sql) {
 }
 
 function seed(db: Sql) {
+  assertHostedAuthPolicy()
   seedDemoDatabase(db)
+  const now = new Date().toISOString()
+  const seat = db.prepare(
+    "INSERT OR IGNORE INTO landlord_seats (id, tenant_id, user_id, seat_role, created_at) VALUES (?, ?, ?, ?, ?)",
+  )
+  seat.run("seat_nadia", "t_bbm", "u_nadia", "owner", now)
   seedReferEarn(db)
   seedPartnerNetwork(db)
 }
@@ -2070,8 +2139,13 @@ export function latestVerification(userId: string) {
 export function landlordIds(tenantId: string) {
   return asRows(
     getDb()
-      .prepare("SELECT id FROM users WHERE role = 'landlord_admin' AND tenant_id = ?")
-      .all(tenantId),
+      .prepare(
+        `SELECT DISTINCT u.id FROM users u
+         LEFT JOIN landlord_seats ls ON ls.user_id = u.id AND ls.tenant_id = ?
+         WHERE (u.role = 'landlord_admin' AND u.tenant_id = ?)
+            OR ls.tenant_id = ?`,
+      )
+      .all(tenantId, tenantId, tenantId),
   ).map((row) => String(row.id))
 }
 
@@ -2158,11 +2232,12 @@ export function createLandlordAccount(input: {
       `INSERT INTO tenants (id, name, slug, city, kind, display_currency, package, status, is_demo)
        VALUES (?, ?, ?, ?, 'landlord', 'INR', ?, ?, 0)`,
     ).run(tenantId, company, slug, "India", pkg, status)
+    const verifiedAt = status === "active" || status === "trial" ? new Date().toISOString() : null
     tx.prepare(
       `INSERT INTO users (
         id, name, email, role, role_level, onboarding_complete, tenant_id, company, trade,
-        service_area, provider_verified, phone, password_hash, is_demo
-      ) VALUES (?, ?, ?, 'landlord_admin', 2, ?, ?, ?, NULL, NULL, 0, NULL, ?, 0)`,
+        service_area, provider_verified, phone, password_hash, is_demo, email_verified_at
+      ) VALUES (?, ?, ?, 'landlord_admin', 2, ?, ?, ?, NULL, NULL, 0, NULL, ?, 0, ?)`,
     ).run(
       userId,
       input.name.trim(),
@@ -2171,7 +2246,12 @@ export function createLandlordAccount(input: {
       tenantId,
       company,
       input.passwordHash,
+      verifiedAt,
     )
+    const now = new Date().toISOString()
+    tx.prepare(
+      "INSERT INTO landlord_seats (id, tenant_id, user_id, seat_role, created_at) VALUES (?, ?, ?, 'owner', ?)",
+    ).run(`seat_${userId}`, tenantId, userId, now)
     tx.prepare(
       "INSERT INTO late_fee_rules (tenant_id, grace_days, flat_cents, percent_bps) VALUES (?, 5, 1500000, 150)",
     ).run(tenantId)
@@ -2206,6 +2286,10 @@ export function completeLandlordOnboarding(input: { userId: string; company: str
       `UPDATE users SET role = 'landlord_admin', role_level = 2, tenant_id = ?, company = ?,
         onboarding_complete = 0 WHERE id = ?`,
     ).run(tenantId, company, input.userId)
+    const now = new Date().toISOString()
+    tx.prepare(
+      "INSERT INTO landlord_seats (id, tenant_id, user_id, seat_role, created_at) VALUES (?, ?, ?, 'owner', ?)",
+    ).run(`seat_${input.userId}`, tenantId, input.userId, now)
     tx.prepare(
       "INSERT INTO late_fee_rules (tenant_id, grace_days, flat_cents, percent_bps) VALUES (?, 5, 1500000, 150)",
     ).run(tenantId)
@@ -3615,9 +3699,13 @@ export function inviteLandlord(input: {
     "INSERT INTO tenants (id, name, slug, city, kind, status, is_demo) VALUES (?, ?, ?, ?, 'landlord', 'active', 0)",
   ).run(tenantId, input.companyName, slug, input.city)
   db.prepare(
-    `INSERT INTO users (id, name, email, role, role_level, tenant_id, company, trade, service_area, provider_verified, is_demo)
-     VALUES (?, ?, ?, 'landlord_admin', 2, ?, NULL, NULL, NULL, 0, 0)`,
+    `INSERT INTO users (id, name, email, role, role_level, onboarding_complete, tenant_id, company, trade, service_area, provider_verified, is_demo)
+     VALUES (?, ?, ?, 'landlord_admin', 2, 1, ?, NULL, NULL, NULL, 0, 0)`,
   ).run(userId, input.adminName, input.adminEmail, tenantId)
+  const now = new Date().toISOString()
+  db.prepare(
+    "INSERT INTO landlord_seats (id, tenant_id, user_id, seat_role, created_at) VALUES (?, ?, ?, 'owner', ?)",
+  ).run(`seat_${userId}`, tenantId, userId, now)
   db.prepare(
     "INSERT INTO late_fee_rules (tenant_id, grace_days, flat_cents, percent_bps) VALUES (?, 5, 1500000, 150)",
   ).run(tenantId)
@@ -4956,3 +5044,443 @@ export function attachAttributionToLandlord(input: {
     .run(input.landlordUserId, input.tenantId, created.id, referrer.code)
   return { ok: true as const, indicationId: created.id, referrerCode: referrer.code }
 }
+
+/* ─── Slice A SaaS auth (seats, invites, packages) ───────────────── */
+
+export function getSubscriptionPackage(tenantId: string): SubscriptionPackage {
+  return parsePackage(getTenantPackage(tenantId))
+}
+
+
+// —— Slice A: credentials, org create, seats, invites, packages ——
+
+export function findUserByEmail(email: string) {
+  const row = asRow(
+    getDb().prepare(`${USER_SQL} WHERE lower(u.email) = lower(?)`).get(email.trim()),
+  )
+  return row ? mapUser(row) : null
+}
+
+export function getPasswordHash(userId: string) {
+  const row = asRow(
+    getDb().prepare("SELECT password_hash FROM users WHERE id = ?").get(userId),
+  )
+  return str(row ?? {}, "password_hash")
+}
+
+export function setPasswordHash(userId: string, passwordHash: string) {
+  getDb().prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(passwordHash, userId)
+}
+
+export function createUserAccount(input: {
+  name: string
+  email: string
+  passwordHash: string
+  role: Role
+}) {
+  const email = input.email.trim().toLowerCase()
+  if (findUserByEmail(email)) {
+    return { ok: false as const, error: "That email already has an account." }
+  }
+  const userId = `u_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`
+  getDb()
+    .prepare(
+      `INSERT INTO users (id, name, email, role, role_level, tenant_id, company, trade, service_area, provider_verified, phone, password_hash, is_demo, email_verified_at)
+       VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, NULL, ?, 0, NULL)`,
+    )
+    .run(userId, input.name.trim(), email, input.role, roleToLevel(input.role), input.passwordHash)
+  return { ok: true as const, userId }
+}
+
+export function createLandlordOrg(input: {
+  userId: string
+  legalName: string
+  city: string
+  actingAs: string
+  entityType: string
+  contactName: string
+  contactEmail: string
+  packageId: SubscriptionPackage
+}) {
+  const user = getUser(input.userId)
+  if (!user) return { ok: false as const, error: "Sign in before creating an organisation." }
+  if (user.role === "landlord_admin" && user.tenantId) {
+    return { ok: false as const, error: "This account already owns a landlord organisation." }
+  }
+  if (!input.legalName || input.legalName.length < 2) {
+    return { ok: false as const, error: "Enter the organisation legal name." }
+  }
+  if (!input.city || input.city.length < 2) {
+    return { ok: false as const, error: "Enter a city in India." }
+  }
+
+  let slug = slugifyOrg(input.legalName)
+  let n = 1
+  while (asRow(getDb().prepare("SELECT id FROM tenants WHERE slug = ?").get(slug))) {
+    n += 1
+    slug = `${slugifyOrg(input.legalName)}-${n}`
+  }
+  const tenantId = `t_${slug}`.slice(0, 40)
+  const now = new Date().toISOString()
+  const db = getDb()
+  db.prepare(
+    `INSERT INTO tenants (id, name, slug, city, kind, display_currency, package, status, is_demo)
+     VALUES (?, ?, ?, ?, 'landlord', 'INR', ?, 'active', 0)`,
+  ).run(tenantId, input.legalName, slug, input.city, input.packageId)
+  db.prepare(
+    `UPDATE users SET role = 'landlord_admin', role_level = 2, tenant_id = ?, company = ?, name = COALESCE(NULLIF(?, ''), name),
+       email_verified_at = COALESCE(email_verified_at, ?), onboarding_complete = 1
+     WHERE id = ?`,
+  ).run(
+    tenantId,
+    input.actingAs || input.entityType || input.legalName,
+    input.contactName,
+    now,
+    input.userId,
+  )
+  db.prepare(
+    "INSERT INTO landlord_seats (id, tenant_id, user_id, seat_role, created_at) VALUES (?, ?, ?, 'owner', ?)",
+  ).run(`seat_${input.userId}`, tenantId, input.userId, now)
+  db.prepare(
+    "INSERT INTO late_fee_rules (tenant_id, grace_days, flat_cents, percent_bps) VALUES (?, 5, 1500000, 150)",
+  ).run(tenantId)
+
+  // Store entity metadata lightly on a notification for audit (no extra table in Slice A).
+  db.prepare(
+    `INSERT INTO notifications (id, user_id, title, body, href, read_at, created_at, channel)
+     VALUES (?, ?, ?, ?, ?, NULL, ?, 'in_app')`,
+  ).run(
+    `n_org_${tenantId}`,
+    input.userId,
+    "Organisation created",
+    `${input.legalName} is on Easy Rental (${input.entityType || "entity"} · ${input.actingAs || "owner"}). Package: ${input.packageId}.`,
+    "/landlord",
+    now,
+  )
+  return { ok: true as const, userId: input.userId, tenantId }
+}
+
+export function countSeats(tenantId: string) {
+  const row = asRow(
+    getDb().prepare("SELECT COUNT(*) AS c FROM landlord_seats WHERE tenant_id = ?").get(tenantId),
+  )
+  return Number(row?.c ?? 0)
+}
+
+export function countProperties(tenantId: string) {
+  const row = asRow(
+    getDb().prepare("SELECT COUNT(*) AS c FROM properties WHERE tenant_id = ?").get(tenantId),
+  )
+  return Number(row?.c ?? 0)
+}
+
+export function countUnits(tenantId: string) {
+  const row = asRow(
+    getDb().prepare("SELECT COUNT(*) AS c FROM units WHERE tenant_id = ?").get(tenantId),
+  )
+  return Number(row?.c ?? 0)
+}
+
+/** Hard-block new seat when at package seat cap. */
+export function canAttachSeat(tenantId: string) {
+  const limits = packageLimits(getSubscriptionPackage(tenantId))
+  const used = countSeats(tenantId)
+  if (hardBlocked(used, limits.maxSeats)) {
+    return {
+      ok: false as const,
+      error: `${limits.label} allows ${limits.maxSeats} seats. Upgrade the package to invite more teammates.`,
+      used,
+      max: limits.maxSeats,
+    }
+  }
+  return { ok: true as const, used, max: limits.maxSeats }
+}
+
+/** Hard-block new property when at package property cap (publish/create gate). */
+export function canAddProperty(tenantId: string) {
+  const limits = packageLimits(getSubscriptionPackage(tenantId))
+  const used = countProperties(tenantId)
+  if (hardBlocked(used, limits.maxProperties)) {
+    return {
+      ok: false as const,
+      error: `${limits.label} allows ${limits.maxProperties} listed ${limits.maxProperties === 1 ? "property" : "properties"}. Upgrade to add more.`,
+      used,
+      max: limits.maxProperties,
+    }
+  }
+  return { ok: true as const, used, max: limits.maxProperties }
+}
+
+export function listSeats(tenantId: string) {
+  return asRows(
+    getDb()
+      .prepare(
+        `SELECT ls.id, ls.seat_role, ls.created_at, u.id AS user_id, u.name, u.email
+         FROM landlord_seats ls
+         JOIN users u ON u.id = ls.user_id
+         WHERE ls.tenant_id = ?
+         ORDER BY CASE ls.seat_role
+           WHEN 'owner' THEN 0 WHEN 'leasing_manager' THEN 1
+           WHEN 'accountant' THEN 2 ELSE 3 END, u.name`,
+      )
+      .all(tenantId),
+  ).map((row) => ({
+    id: String(row.id),
+    seatRole: String(row.seat_role) as SeatRole,
+    createdAt: String(row.created_at),
+    userId: String(row.user_id),
+    name: String(row.name),
+    email: String(row.email),
+  }))
+}
+
+export function listPendingInvites(tenantId: string) {
+  return asRows(
+    getDb()
+      .prepare(
+        `SELECT id, email, seat_role, token, created_at, expires_at
+         FROM org_invites
+         WHERE tenant_id = ? AND accepted_at IS NULL
+         ORDER BY created_at DESC`,
+      )
+      .all(tenantId),
+  ).map((row) => ({
+    id: String(row.id),
+    email: String(row.email),
+    seatRole: String(row.seat_role) as SeatRole,
+    token: String(row.token),
+    createdAt: String(row.created_at),
+    expiresAt: String(row.expires_at),
+  }))
+}
+
+export function inviteOrgSeat(input: {
+  tenantId: string
+  email: string
+  seatRole: SeatRole
+  invitedByUserId: string
+}) {
+  const email = input.email.trim().toLowerCase()
+  if (!email.includes("@")) return { ok: false as const, error: "Enter a valid email." }
+  if (!isSeatRole(input.seatRole)) return { ok: false as const, error: "Unknown seat role." }
+  if (input.seatRole === "owner") {
+    return { ok: false as const, error: "Owner seats are created with the organisation, not by invite." }
+  }
+  const seatGate = canAttachSeat(input.tenantId)
+  if (!seatGate.ok) return seatGate
+
+  const existingSeat = asRow(
+    getDb()
+      .prepare(
+        `SELECT ls.id FROM landlord_seats ls
+         JOIN users u ON u.id = ls.user_id
+         WHERE ls.tenant_id = ? AND lower(u.email) = ?`,
+      )
+      .get(input.tenantId, email),
+  )
+  if (existingSeat) return { ok: false as const, error: "That email already has a seat on this organisation." }
+
+  const pending = asRow(
+    getDb()
+      .prepare(
+        "SELECT id FROM org_invites WHERE tenant_id = ? AND lower(email) = ? AND accepted_at IS NULL",
+      )
+      .get(input.tenantId, email),
+  )
+  if (pending) return { ok: false as const, error: "An invite is already pending for that email." }
+
+  const inviteId = crypto.randomUUID()
+  const token = randomToken(24)
+  const now = new Date()
+  const expires = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
+  getDb()
+    .prepare(
+      `INSERT INTO org_invites (id, tenant_id, email, seat_role, token, invited_by, created_at, expires_at, accepted_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+    )
+    .run(
+      inviteId,
+      input.tenantId,
+      email,
+      input.seatRole,
+      token,
+      input.invitedByUserId,
+      now.toISOString(),
+      expires.toISOString(),
+    )
+
+  const invitee = findUserByEmail(email)
+  if (invitee) {
+    const tenant = asRow(
+      getDb().prepare("SELECT name FROM tenants WHERE id = ?").get(input.tenantId),
+    )
+    getDb()
+      .prepare(
+        `INSERT INTO notifications (id, user_id, title, body, href, read_at, created_at, channel)
+         VALUES (?, ?, ?, ?, ?, NULL, ?, ?)`,
+      )
+      .run(
+        `n_inv_${inviteId}`,
+        invitee.id,
+        "Organisation invite",
+        `You were invited to join ${String(tenant?.name ?? "an organisation")} as ${input.seatRole.replace("_", " ")}.`,
+        `/invite/${token}`,
+        now.toISOString(),
+        "in_app",
+      )
+    getDb()
+      .prepare(
+        `INSERT INTO notifications (id, user_id, title, body, href, read_at, created_at, channel)
+         VALUES (?, ?, ?, ?, ?, NULL, ?, ?)`,
+      )
+      .run(
+        `n_inv_e_${inviteId}`,
+        invitee.id,
+        "Organisation invite",
+        `Demo email: open /invite/${token} to accept.`,
+        `/invite/${token}`,
+        now.toISOString(),
+        "email_demo",
+      )
+  }
+
+  return { ok: true as const, inviteId, token }
+}
+
+export function getInviteByToken(token: string) {
+  const row = asRow(
+    getDb()
+      .prepare(
+        `SELECT i.*, t.name AS tenant_name
+         FROM org_invites i
+         JOIN tenants t ON t.id = i.tenant_id
+         WHERE i.token = ?`,
+      )
+      .get(token),
+  )
+  if (!row) return null
+  return {
+    id: String(row.id),
+    tenantId: String(row.tenant_id),
+    tenantName: String(row.tenant_name),
+    email: String(row.email),
+    seatRole: String(row.seat_role) as SeatRole,
+    token: String(row.token),
+    expiresAt: String(row.expires_at),
+    acceptedAt: str(row, "accepted_at"),
+  }
+}
+
+export function acceptOrgInvite(token: string, userId: string) {
+  const invite = getInviteByToken(token)
+  if (!invite) return { ok: false as const, error: "Invite not found." }
+  if (invite.acceptedAt) return { ok: false as const, error: "This invite was already accepted." }
+  if (new Date(invite.expiresAt).getTime() < Date.now()) {
+    return { ok: false as const, error: "This invite has expired." }
+  }
+  const user = getUser(userId)
+  if (!user) return { ok: false as const, error: "Sign in to accept the invite." }
+  if (user.email.trim().toLowerCase() !== invite.email.trim().toLowerCase()) {
+    return {
+      ok: false as const,
+      error: `Sign in as ${invite.email} to accept this invite.`,
+    }
+  }
+
+  const seatGate = canAttachSeat(invite.tenantId)
+  if (!seatGate.ok) return seatGate
+
+  const now = new Date().toISOString()
+  const db = getDb()
+  // Same person may work for two landlords later; for Slice A bind primary tenant if unset.
+  if (!user.tenantId || user.role !== "landlord_admin") {
+    db.prepare(
+      `UPDATE users SET role = 'landlord_admin', role_level = 2, tenant_id = ?, onboarding_complete = 1 WHERE id = ?`,
+    ).run(invite.tenantId, userId)
+  } else if (user.tenantId !== invite.tenantId) {
+    // Multi-org seats: keep primary tenant; still attach seat row for isolation tests of invitee.
+    // Primary desk stays on first org; seat still recorded for the invited org.
+  }
+
+  const existing = asRow(
+    db
+      .prepare("SELECT id FROM landlord_seats WHERE tenant_id = ? AND user_id = ?")
+      .get(invite.tenantId, userId),
+  )
+  if (existing) {
+    db.prepare("UPDATE org_invites SET accepted_at = ? WHERE id = ?").run(now, invite.id)
+    return { ok: true as const, userId, tenantId: invite.tenantId }
+  }
+
+  db.prepare(
+    "INSERT INTO landlord_seats (id, tenant_id, user_id, seat_role, created_at) VALUES (?, ?, ?, ?, ?)",
+  ).run(`seat_${crypto.randomUUID().slice(0, 12)}`, invite.tenantId, userId, invite.seatRole, now)
+  db.prepare("UPDATE org_invites SET accepted_at = ? WHERE id = ?").run(now, invite.id)
+
+  // If invitee was already owner elsewhere, switch session tenant to invited org for desk access.
+  if (user.tenantId && user.tenantId !== invite.tenantId) {
+    db.prepare(
+      "UPDATE users SET tenant_id = ?, role = 'landlord_admin', role_level = 2, onboarding_complete = 1 WHERE id = ?",
+    ).run(invite.tenantId, userId)
+  }
+
+  return { ok: true as const, userId, tenantId: invite.tenantId }
+}
+
+export function createPasswordReset(userId: string, token: string) {
+  const now = new Date()
+  const expires = new Date(now.getTime() + 60 * 60 * 1000)
+  getDb()
+    .prepare(
+      `INSERT INTO password_reset_tokens (id, user_id, token, created_at, expires_at, used_at)
+       VALUES (?, ?, ?, ?, ?, NULL)`,
+    )
+    .run(crypto.randomUUID(), userId, token, now.toISOString(), expires.toISOString())
+}
+
+export function enqueuePasswordResetNotice(userId: string, token: string) {
+  const now = new Date().toISOString()
+  getDb()
+    .prepare(
+      `INSERT INTO notifications (id, user_id, title, body, href, read_at, created_at, channel)
+       VALUES (?, ?, ?, ?, ?, NULL, ?, ?)`,
+    )
+    .run(
+      `n_reset_${token.slice(0, 12)}`,
+      userId,
+      "Password reset (demo)",
+      "Demo delivery: use the link to continue. Live SMTP arrives when the mail broker is configured.",
+      `/forgot-password?token=${token}`,
+      now,
+      "email_demo",
+    )
+  getDb()
+    .prepare(
+      `INSERT INTO notifications (id, user_id, title, body, href, read_at, created_at, channel)
+       VALUES (?, ?, ?, ?, ?, NULL, ?, ?)`,
+    )
+    .run(
+      `n_reset_i_${token.slice(0, 12)}`,
+      userId,
+      "Password reset requested",
+      "A password reset was requested for your account (demo).",
+      "/forgot-password",
+      now,
+      "in_app",
+    )
+}
+
+export function packageUsage(tenantId: string) {
+  const pkg = getSubscriptionPackage(tenantId)
+  const limits = packageLimits(pkg)
+  return {
+    packageId: pkg,
+    label: limits.label,
+    properties: { used: countProperties(tenantId), max: limits.maxProperties },
+    units: { used: countUnits(tenantId), max: limits.maxUnitsPerProperty },
+    seats: { used: countSeats(tenantId), max: limits.maxSeats },
+    customDomain: limits.customDomain,
+    askEasy: limits.askEasy,
+  }
+}
+
