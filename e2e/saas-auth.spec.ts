@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test"
+import { setDemoIdentity } from "./helpers"
 
 /**
  * Slice A DoD smoke: visitor can Sign up → Create account → landlord desk
@@ -66,7 +67,7 @@ test.describe("Slice A hosted signup path", () => {
     await page.context().clearCookies()
     await page.goto("/login")
     await expect(page.getByRole("heading", { name: "Log in" })).toBeVisible()
-    await page.getByLabel("Email").fill(email)
+    await page.getByRole("textbox", { name: "Email" }).fill(email)
     await page.getByLabel("Password").fill(password)
     await page.getByRole("button", { name: "Log in" }).click()
     await expect(page).toHaveURL(/\/landlord/, { timeout: 20_000 })
@@ -76,17 +77,8 @@ test.describe("Slice A hosted signup path", () => {
   test("OSS demo switcher still works for seeded Nadia", async ({ page }) => {
     await page.goto("/")
     await expect(page.getByTestId("demo-auth-banner")).toBeVisible()
-    await page.context().addCookies([
-      {
-        name: "deskulpt_user",
-        value: "u_nadia",
-        domain: "127.0.0.1",
-        path: "/",
-        httpOnly: true,
-        sameSite: "Lax",
-      },
-    ])
+    await setDemoIdentity(page, "u_nadia")
     await page.goto("/landlord")
-    await expect(page.getByText("BBM Logistics Parks", { exact: true })).toBeVisible()
+    await expect(page.getByText("DEMO · EasyRent Hyderabad", { exact: true })).toBeVisible()
   })
 })
