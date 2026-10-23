@@ -30,7 +30,7 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "What does pricing look like?",
-    a: "See pricing when published. Planned shape: Free plan with 1 unit, then per-unit paid plans billed in INR + 18% GST. Billing provider is not live yet.",
+    a: "Landlord listing plans (proposed): Basic ₹499 / Growth ₹1,499 / Pro ₹2,999 per active listed property / year (excl. GST). Occupants browse and apply free — No Broker! See /pricing. Live Razorpay Subscriptions billing is not charged yet (demo package activate).",
   },
   {
     q: "Is this the live EasyRent launch?",

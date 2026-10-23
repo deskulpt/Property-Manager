@@ -60,6 +60,13 @@ import {
   setTenantPackage,
 } from "@/lib/db"
 import { TRADES } from "@/lib/format"
+import {
+  isSelfServePlan,
+  packageHasAskEasy,
+  parsePlanId,
+  planLabel,
+  SUBSCRIBE_PATH,
+} from "@/lib/plans"
 import { t } from "@/lib/i18n"
 import {
   isPropertySegment,
@@ -163,10 +170,67 @@ export async function signupLandlord(
   notify({
     userId: result.userId,
     title: "Welcome to Easy Rental",
-    body: `${parsed.data.company} is ready. Add a property from the landlord desk.`,
+    body: `${parsed.data.company} is ready. Choose a listing plan to open the landlord desk.`,
+    href: `${SUBSCRIBE_PATH}?from=onboard`,
+  })
+  refresh(["/", "/landlord", "/landlord/settings", "/inbox", "/pricing", SUBSCRIBE_PATH])
+  // L2 landlord onboard: signup → package select (secure-login may wrap role pick first).
+  redirect(`${SUBSCRIBE_PATH}?from=onboard`)
+}
+
+export type SubscribeFormState = {
+  error?: string | null
+  fieldErrors?: Record<string, string>
+}
+
+const subscribeSchema = z.object({
+  plan: z.string().trim().min(1),
+  seats: z.coerce.number().int().min(1).max(500).optional(),
+})
+
+/**
+ * Demo purchase step for landlord listing plans (L2 onboard + /pricing CTAs).
+ * Sets `tenants.package` — no live Razorpay charge in this slice.
+ */
+export async function activateSubscriptionPlan(
+  _prev: SubscribeFormState,
+  formData: FormData,
+): Promise<SubscribeFormState> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) {
+    return {
+      error: "Sign in as a landlord admin to activate a plan.",
+      fieldErrors: {},
+    }
+  }
+  const parsed = subscribeSchema.safeParse({
+    plan: formData.get("plan"),
+    seats: formData.get("seats") || undefined,
+  })
+  if (!parsed.success) {
+    return { error: "Choose a plan to continue.", fieldErrors: issues(parsed.error) }
+  }
+  const plan = parsePlanId(parsed.data.plan)
+  if (!isSelfServePlan(plan)) {
+    return {
+      error: "Enterprise is sales-led — email hello@easyrental.space.",
+      fieldErrors: { plan: "Not self-serve" },
+    }
+  }
+  const seats = parsed.data.seats ?? 1
+  const result = setTenantPackage(user.tenantId, plan)
+  if (!result.ok) return { error: result.error, fieldErrors: {} }
+  const label = planLabel(result.package)
+  notify({
+    userId: user.id,
+    title: `${label} plan active`,
+    body:
+      seats > 1
+        ? `${label} activated for ${seats} listing seats (demo — billing not charged).`
+        : `${label} activated (demo — proposed INR / year / active listing; billing not charged).`,
     href: "/landlord",
   })
-  refresh(["/", "/landlord", "/landlord/settings", "/inbox"])
+  refresh(["/landlord", "/landlord/settings", "/pricing", SUBSCRIBE_PATH, "/inbox"])
   redirect("/landlord")
 }
 
@@ -296,10 +360,21 @@ export async function consoleSetTenantStatus(formData: FormData) {
 export async function consoleSetTenantPackage(formData: FormData) {
   if (!(await requireConsoleAdmin())) return
   const tenantId = String(formData.get("tenantId") ?? "")
-  const pkg = String(formData.get("package") ?? "")
-  if (pkg !== "starter" && pkg !== "pro") return
+  const raw = String(formData.get("package") ?? "")
+  const pkg = parsePlanId(raw)
+  // Only accept known ladder ids (incl. growth / enterprise for L0 console).
+  if (
+    raw !== "starter" &&
+    raw !== "basic" &&
+    raw !== "growth" &&
+    raw !== "pro" &&
+    raw !== "enterprise" &&
+    raw !== "portfolio"
+  ) {
+    return
+  }
   setTenantPackage(tenantId, pkg)
-  refresh(["/console", "/console/tenants", "/console/pricing"])
+  refresh(["/console", "/console/tenants", "/console/pricing", "/pricing"])
 }
 
 export async function consoleImpersonateTenant(formData: FormData) {
@@ -1496,8 +1571,8 @@ export async function approveAgenticProposal(
   if (!user || user.role !== "landlord_admin" || !user.tenantId) {
     return { ok: false, error: "Switch to a landlord admin to approve proposals." }
   }
-  if ((user.tenantPackage ?? getTenantPackage(user.tenantId)) !== "pro") {
-    return { ok: false, error: "Ask Easy is a PRO feature." }
+  if (!packageHasAskEasy(user.tenantPackage ?? getTenantPackage(user.tenantId))) {
+    return { ok: false, error: "Ask Easy is a Pro feature." }
   }
   const result = decideProposal({
     tenantId: user.tenantId,
@@ -1517,8 +1592,8 @@ export async function rejectAgenticProposal(
   if (!user || user.role !== "landlord_admin" || !user.tenantId) {
     return { ok: false, error: "Switch to a landlord admin to reject proposals." }
   }
-  if ((user.tenantPackage ?? getTenantPackage(user.tenantId)) !== "pro") {
-    return { ok: false, error: "Ask Easy is a PRO feature." }
+  if (!packageHasAskEasy(user.tenantPackage ?? getTenantPackage(user.tenantId))) {
+    return { ok: false, error: "Ask Easy is a Pro feature." }
   }
   const result = decideProposal({
     tenantId: user.tenantId,
@@ -1538,8 +1613,8 @@ export async function runStubListingAutofill(
   if (!user || user.role !== "landlord_admin" || !user.tenantId) {
     return { ok: false, error: "Switch to a landlord admin to run autofill." }
   }
-  if ((user.tenantPackage ?? getTenantPackage(user.tenantId)) !== "pro") {
-    return { ok: false, error: "Ask Easy is a PRO feature." }
+  if (!packageHasAskEasy(user.tenantPackage ?? getTenantPackage(user.tenantId))) {
+    return { ok: false, error: "Ask Easy is a Pro feature." }
   }
   const trimmed = prompt.trim()
   if (trimmed.length < 8) {

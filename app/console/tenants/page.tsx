@@ -7,8 +7,15 @@ import {
 } from "@/lib/actions"
 import { requirePlatformAdmin } from "@/lib/console-gate"
 import { platformLandlordDirectory } from "@/lib/db"
+import { planLabel, type PlanId } from "@/lib/plans"
 
 export const metadata = { title: "Tenants · Console" }
+
+function nextSelfServePlan(current: PlanId): PlanId {
+  if (current === "starter") return "growth"
+  if (current === "growth") return "pro"
+  return "starter"
+}
 
 export default async function ConsoleTenantsPage() {
   await requirePlatformAdmin()
@@ -18,10 +25,12 @@ export default async function ConsoleTenantsPage() {
       <PageHeader
         kicker="Directory"
         title="Landlord tenants"
-        lede="View organisations, change Starter/Pro entitlements, suspend, or switch into a landlord admin via the sticky bar."
+        lede="View organisations, cycle Basic / Growth / Pro entitlements, suspend, or switch into a landlord admin via the sticky bar."
       />
       <div className="grid gap-4">
-        {orgs.map((org) => (
+        {orgs.map((org) => {
+          const next = nextSelfServePlan(org.package)
+          return (
           <article key={org.id} className="grid gap-3 border border-ink/10 bg-card p-4">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
@@ -38,7 +47,7 @@ export default async function ConsoleTenantsPage() {
               <div className="flex flex-wrap gap-2">
                 <StatusBadge status={org.status === "active" ? "verified" : "pending"} />
                 <span className="font-mono text-[11px] uppercase tracking-wider text-terra">
-                  {org.package}
+                  {planLabel(org.package)}
                 </span>
               </div>
             </div>
@@ -56,9 +65,9 @@ export default async function ConsoleTenantsPage() {
               </form>
               <form action={consoleSetTenantPackage}>
                 <input type="hidden" name="tenantId" value={org.id} />
-                <input type="hidden" name="package" value={org.package === "pro" ? "starter" : "pro"} />
+                <input type="hidden" name="package" value={next} />
                 <SubmitButton variant="outline" pendingLabel="Saving…">
-                  Set {org.package === "pro" ? "Starter" : "Pro"}
+                  Set {planLabel(next)}
                 </SubmitButton>
               </form>
               {org.adminId ? (
@@ -69,7 +78,8 @@ export default async function ConsoleTenantsPage() {
               ) : null}
             </div>
           </article>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

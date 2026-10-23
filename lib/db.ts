@@ -32,6 +32,7 @@ import {
   MARKET_CHECKLIST_LABELS,
   type MarketChecklistKey,
 } from "@/lib/market-checklist"
+import { parsePlanId, type PlanId } from "@/lib/plans"
 import { normalizeRoleLevel, type RoleLevel } from "@/lib/role-level"
 import { seedDemoDatabase } from "@/lib/seed-demo"
 import { decryptSecret, encryptSecret, secretLast4 } from "@/lib/shop-crypto"
@@ -71,7 +72,8 @@ function withDbInitLock<T>(fn: () => T): T {
   }
 }
 
-export type PackageTier = "starter" | "pro"
+/** @deprecated Prefer PlanId from lib/plans — re-exported for existing call sites. */
+export type PackageTier = PlanId
 
 export type SessionUser = {
   id: string
@@ -202,7 +204,7 @@ function mapUser(row: Record<string, unknown>): SessionUser {
     providerVerified: Number(row.provider_verified) === 1,
     tenantName: str(row, "tenant_name"),
     tenantKind: (str(row, "tenant_kind") as "landlord" | "platform" | null) ?? null,
-    tenantPackage: pkg === "pro" || pkg === "starter" ? pkg : null,
+    tenantPackage: pkg ? parsePlanId(pkg) : null,
     phone: str(row, "phone"),
     displayCurrency: (str(row, "display_currency") as DisplayCurrency | null) ?? "INR",
     hasPassword: Boolean(str(row, "password_hash")),
@@ -1547,7 +1549,25 @@ export function getTenantPackage(tenantId: string): PackageTier {
   const row = asRow(
     getDb().prepare("SELECT package FROM tenants WHERE id = ?").get(tenantId),
   )
-  return str(row ?? {}, "package") === "pro" ? "pro" : "starter"
+  return parsePlanId(str(row ?? {}, "package"))
+}
+
+/**
+ * Activate / change landlord subscription package (demo purchase path).
+ * Live Razorpay Subscriptions stay out of this slice — flag/manual until billing.
+ */
+export function setTenantPackage(
+  tenantId: string,
+  packageTier: PackageTier,
+): { ok: true; package: PackageTier } | { ok: false; error: string } {
+  const tenant = asRow(getDb().prepare("SELECT id, kind FROM tenants WHERE id = ?").get(tenantId))
+  if (!tenant) return { ok: false, error: "Organisation not found." }
+  if (str(tenant, "kind") !== "landlord") {
+    return { ok: false, error: "Only landlord organisations can subscribe to listing plans." }
+  }
+  const pkg = parsePlanId(packageTier)
+  getDb().prepare("UPDATE tenants SET package = ? WHERE id = ?").run(pkg, tenantId)
+  return { ok: true, package: pkg }
 }
 
 function normalizeHostname(raw: string): string | null {
@@ -1559,8 +1579,9 @@ function normalizeHostname(raw: string): string | null {
 }
 
 export function addCustomDomain(tenantId: string, hostnameRaw: string) {
-  if (getTenantPackage(tenantId) !== "pro") {
-    return { ok: false as const, error: "Custom domains require the PRO package." }
+  const pkg = getTenantPackage(tenantId)
+  if (pkg !== "pro" && pkg !== "enterprise") {
+    return { ok: false as const, error: "Custom domains require the Pro package." }
   }
   const hostname = normalizeHostname(hostnameRaw)
   if (!hostname) return { ok: false as const, error: "Enter a valid hostname such as listings.yourcompany.com." }
@@ -1591,8 +1612,9 @@ export function verifyCustomDomain(
   domainId: string,
   opts?: { demoForce?: boolean; observedTxt?: string | null },
 ) {
-  if (getTenantPackage(tenantId) !== "pro") {
-    return { ok: false as const, error: "Custom domains require the PRO package." }
+  const pkgGate = getTenantPackage(tenantId)
+  if (pkgGate !== "pro" && pkgGate !== "enterprise") {
+    return { ok: false as const, error: "Custom domains require the Pro package." }
   }
   const row = asRow(
     getDb()
@@ -3678,7 +3700,7 @@ export function platformLandlordDirectory(): PlatformTenantRow[] {
     name: String(row.name),
     slug: String(row.slug),
     city: String(row.city),
-    package: (String(row.package) === "pro" ? "pro" : "starter") as PackageTier,
+    package: parsePlanId(String(row.package)),
     status: String(row.status) === "suspended" ? "suspended" : "active",
     propertyCount: Number(row.property_count),
     adminId: str(row, "admin_id"),
@@ -3692,15 +3714,6 @@ export function setTenantStatus(tenantId: string, status: "active" | "suspended"
   )
   if (!row) return { ok: false as const }
   getDb().prepare("UPDATE tenants SET status = ? WHERE id = ?").run(status, tenantId)
-  return { ok: true as const }
-}
-
-export function setTenantPackage(tenantId: string, pkg: PackageTier) {
-  const row = asRow(
-    getDb().prepare("SELECT id FROM tenants WHERE id = ? AND kind = 'landlord'").get(tenantId),
-  )
-  if (!row) return { ok: false as const }
-  getDb().prepare("UPDATE tenants SET package = ? WHERE id = ?").run(pkg, tenantId)
   return { ok: true as const }
 }
 
