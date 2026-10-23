@@ -53,6 +53,9 @@ export default async function LandlordHome() {
         <Link href="/landlord/jobs" className="text-terra hover:underline">
           Concierge jobs
         </Link>
+        <Link href="/landlord/ask" className="text-terra hover:underline">
+          Ask Easy
+        </Link>
         <Link href="/landlord/ledger" className="text-terra hover:underline">
           Ledger and late fees
         </Link>

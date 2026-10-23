@@ -9,6 +9,7 @@ const pin: Record<UnitStatus, string> = {
   available: "bg-avail text-white",
   pending: "bg-pending text-ink",
   leased: "bg-leased text-white",
+  hold: "bg-ink/40 text-white",
 }
 
 export function FloorPlanView({
