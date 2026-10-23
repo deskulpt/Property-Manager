@@ -2,18 +2,20 @@
 
 import Link from "next/link"
 import { useActionState } from "react"
-import { signupLandlord, type AuthFormState } from "@/lib/actions"
+import { signupAccount, type AuthFormState } from "@/lib/actions"
 import { SubmitButton } from "@/components/submit-button"
 
 const initial: AuthFormState = {}
 
 export function SignupForm() {
-  const [state, action] = useActionState(signupLandlord, initial)
+  const [state, action] = useActionState(signupAccount, initial)
 
   return (
-    <form action={action} className="grid gap-4">
+    <form action={action} className="grid gap-4" data-testid="signup-form">
       {state.error ? (
-        <p className="border border-terra/40 bg-terra/10 px-3 py-2 text-sm text-ink">{state.error}</p>
+        <p className="border border-terra/40 bg-terra/10 px-3 py-2 text-sm text-ink" role="alert">
+          {state.error}
+        </p>
       ) : null}
       <label className="grid gap-1 text-sm">
         <span className="font-medium text-ink">Your name</span>
@@ -57,19 +59,6 @@ export function SignupForm() {
           Stored with bcrypt — never plaintext
         </span>
       </label>
-      <label className="grid gap-1 text-sm">
-        <span className="font-medium text-ink">Organisation / company</span>
-        <input
-          name="company"
-          required
-          autoComplete="organization"
-          placeholder="e.g. North Ridge Parks"
-          className="h-10 border border-ink/20 bg-card px-3 outline-none focus-visible:ring-2 focus-visible:ring-terra/40"
-        />
-        {state.fieldErrors?.company ? (
-          <span className="text-xs text-terra">{state.fieldErrors.company}</span>
-        ) : null}
-      </label>
       <label className="flex items-start gap-2 text-sm text-ink-soft">
         <input type="checkbox" name="consent" className="mt-1" required />
         <span>
@@ -81,17 +70,21 @@ export function SignupForm() {
           <Link href="/legal/terms" className="font-semibold text-terra hover:underline">
             Terms
           </Link>
-          . Easy Rental will process my account data to provide the landlord desk (DPDP notice).
+          . Easy Rental will process my account data for the desk I choose next (DPDP notice).
         </span>
       </label>
       {state.fieldErrors?.consent ? (
         <span className="text-xs text-terra">{state.fieldErrors.consent}</span>
       ) : null}
       <p className="text-sm text-ink-soft">
-        Creates a landlord organisation on the Starter package (India). See pricing for plan limits
-        (Free plan includes 1 unit; paid plans are per-unit in INR + 18% GST when billing ships).
+        Next you pick a role (landlord, property manager, applicant, or service provider). Landlords
+        then activate a plan at{" "}
+        <Link href="/pricing" className="font-semibold text-terra hover:underline">
+          Pricing
+        </Link>
+        .
       </p>
-      <SubmitButton className="h-11 bg-terra font-serif text-sm font-bold text-white hover:bg-terra-dark">
+      <SubmitButton className="h-11 bg-brand font-serif text-sm font-bold text-paper hover:bg-brand-deep">
         Create account
       </SubmitButton>
       <p className="text-sm text-ink-soft">
