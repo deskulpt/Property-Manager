@@ -1,0 +1,4 @@
+# Optional — not required to run the Next.js app.
+fastapi>=0.111.0
+uvicorn>=0.30.0
+# google-adk>=1.18.0  # install when experimenting with full Python ADK like adk-okf-grounded-chat

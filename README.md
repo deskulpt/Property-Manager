@@ -246,12 +246,26 @@ npm test
 npm run test  # isolation + shop + rust parity
 ```
 
-- `npm test` runs Vitest suites including isolation, shop, segment expansion, listing import, plan-draft, and **rust-core-parity** (WASM vs prior TS). It checks tenant isolation, approving Maya (rent plus GST, and a second approve fails), late-fee idempotence, CMS email redaction, provider area approval, and that public form countries stay India-only until a draft checklist is complete. It does not use `data/deskulpt.sqlite`.
+- `npm test` runs Vitest suites including isolation, shop, segment expansion, listing import, plan-draft, **rust-core-parity** (WASM vs prior TS), and **Ask Easy** (`ask-easy`, `ask-easy-onboard`, `adk-platform`). It checks tenant isolation, approving Maya (rent plus GST, and a second approve fails), late-fee idempotence, CMS email redaction, provider area approval, and that public form countries stay India-only until a draft checklist is complete. Ask Easy asserts stub draft listings stay unpublished, reject leaves no job, approve runs `createJob`/`assignJob`, and execute without approval fails. It does not use `data/deskulpt.sqlite`.
 - `npm run test:watch` runs the same files under Vitest watch.
 - `npm run test:e2e` runs Playwright (`e2e/leasing-path.spec.ts`) against its own Next process on **port 43124** and a throwaway database. It does not reuse the dev server on 43123. The script loads the home page, switches to Nadia, approves Maya's application, and confirms Maya sees approved status and an INR rent row.
 - `npm run lint` runs ESLint.
 
 Playwright downloads a browser on first use (`npx playwright install` if the run asks for one).
+
+## Ask Easy (Slice L · unified ADK desk)
+
+**Canonical landlord path:** `/landlord/ask` (`/landlord/ask-easy` redirects). Public catalog chat: `/ask` + `POST /api/ask`. Thin ADK-style registries in `lib/agentic` + `lib/adk`. **No** `@cursor/bdk` / `@google/adk` required.
+
+| Path | Behaviour |
+| --- | --- |
+| Onboard chat | Text + browser voice (Web Speech); cites real SQLite attributes (SF, rate, docks, floor plan, apps, ledger). |
+| Listing autofill | Soft-writes an **unpublished** `listing_drafts` row. Publish stays blocked without explicit approve. |
+| Assign trade | **Pending** proposal. Reject → no job / notify. Approve → `createJob` + `assignJob` + provider inbox (once). |
+| Model | Stub retrieval by default. Optional `GEMINI_API_KEY` / `ASK_EASY_MODEL_*`; failures fall back to stub. |
+| Package gate | Soft-open without `subscription_package`. `ASK_EASY_REQUIRE_PRO=1` forces upgrade CTA. |
+
+Hard rules: `test/ask-easy.test.ts` + `test/ask-easy-onboard.test.ts` + `test/adk-platform.test.ts`.
 
 ## Continuous integration
 
@@ -281,6 +295,8 @@ These boundaries are intentional:
 | Branch | What it is |
 | --- | --- |
 | `main` | **Product default.** Full India desk, acceptance tests, and the blueprint-paper UI/UX rework. |
+| `cursor/slice-l0-ask-easy-d789` | Slice L.0 Ask Easy — approval UI + stub autofill (no live LLM). |
+| `cursor/ask-easy-adk-e24c` | Ask Easy ADK increment — tool registry, optional live model + stub fallback, `/landlord/ask`. |
 | `cursor/ui-ux-rework` | UI/UX rework branch (merged into `main`). |
 | `cursor/e2e-acceptance-38da` | Acceptance slice before the UI rework (seed reset, isolation tests, Playwright leasing path). |
 | `feature/property-saas` | Earlier product line without the acceptance/UI follow-ons. |

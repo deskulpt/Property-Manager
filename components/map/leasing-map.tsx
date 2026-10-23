@@ -28,6 +28,7 @@ const tone: Record<UnitStatus, string> = {
   available: "border-avail bg-avail/15 text-[#d7f5e2]",
   pending: "border-pending bg-pending/20 text-[#f0d59a]",
   leased: "border-leased/50 bg-white/5 text-white/45",
+  hold: "border-white/20 bg-white/5 text-white/35",
 }
 
 export function LeasingMap({ properties }: { properties: MapProperty[] }) {

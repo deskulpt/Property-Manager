@@ -36,7 +36,7 @@ import { seedDemoDatabase } from "@/lib/seed-demo"
 import { decryptSecret, encryptSecret, secretLast4 } from "@/lib/shop-crypto"
 import { resolveShopPaymentProvider } from "@/lib/shop-payments"
 
-const SEED_VERSION = "13"
+const SEED_VERSION = "15"
 
 function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
@@ -573,6 +573,84 @@ function createSchema(db: Sql) {
       status TEXT NOT NULL,
       UNIQUE (sku_id, slot_start)
     );
+    CREATE TABLE agent_proposals (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      tool_name TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      status TEXT NOT NULL,
+      prompt_summary TEXT NOT NULL,
+      created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      decided_by TEXT,
+      decided_at TEXT,
+      outcome_json TEXT,
+      error TEXT
+    );
+    CREATE TABLE agent_audit_events (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      proposal_id TEXT,
+      summary TEXT NOT NULL,
+      detail_json TEXT,
+      actor_user_id TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE listing_drafts (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      property_id TEXT NOT NULL,
+      unit_id TEXT,
+      code TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      rate_psf REAL NOT NULL,
+      sqft INTEGER NOT NULL,
+      clear_height TEXT NOT NULL DEFAULT '',
+      docks INTEGER NOT NULL DEFAULT 0,
+      drive_ins INTEGER NOT NULL DEFAULT 0,
+      power TEXT NOT NULL DEFAULT '',
+      published INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      source_proposal_id TEXT
+    );
+
+    CREATE TABLE lease_parties (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      unit_id TEXT NOT NULL,
+      lease_id TEXT,
+      role TEXT NOT NULL,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      phone TEXT NOT NULL DEFAULT '',
+      address_line1 TEXT NOT NULL DEFAULT '',
+      address_line2 TEXT NOT NULL DEFAULT '',
+      city TEXT NOT NULL DEFAULT '',
+      region TEXT NOT NULL DEFAULT '',
+      postal_code TEXT NOT NULL DEFAULT '',
+      country TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE lease_agreements (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      unit_id TEXT NOT NULL,
+      lease_id TEXT,
+      country TEXT NOT NULL,
+      region TEXT NOT NULL,
+      law_notes TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL,
+      document_html TEXT NOT NULL,
+      document_json TEXT NOT NULL DEFAULT '',
+      esign_provider TEXT,
+      esign_envelope_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
     CREATE INDEX idx_units_tenant ON units(tenant_id);
     CREATE INDEX idx_units_property ON units(property_id);
     CREATE INDEX idx_floors_property ON floors(property_id);
@@ -590,12 +668,22 @@ function createSchema(db: Sql) {
     CREATE INDEX idx_shop_orders_tenant ON shop_orders(tenant_id, created_at);
     CREATE INDEX idx_shop_orders_user ON shop_orders(user_id);
     CREATE INDEX idx_shop_rentals_sku ON shop_rental_bookings(sku_id, slot_start);
+    CREATE INDEX idx_agent_proposals_tenant ON agent_proposals(tenant_id, status, created_at);
+    CREATE INDEX idx_agent_audit_tenant ON agent_audit_events(tenant_id, created_at);
+    CREATE INDEX idx_listing_drafts_tenant ON listing_drafts(tenant_id, updated_at);
+    CREATE INDEX idx_lease_parties_tenant ON lease_parties(tenant_id, unit_id);
+    CREATE INDEX idx_lease_agreements_tenant ON lease_agreements(tenant_id, status, updated_at);
   `)
 }
 
 function reset(db: Sql) {
   db.exec("PRAGMA foreign_keys = OFF")
   for (const table of [
+    "agent_audit_events",
+    "agent_proposals",
+    "lease_agreements",
+    "lease_parties",
+    "listing_drafts",
     "notifications",
     "otp_challenges",
     "ledger_entries",

@@ -20,3 +20,6 @@ export function installTempDatabase() {
     delete process.env.DESKULPT_DB_PATH
   })
 }
+
+/** Alias used by Ask Easy / ADK suites (#12/#16). */
+export const useTempDatabase = installTempDatabase
