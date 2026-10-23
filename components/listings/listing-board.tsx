@@ -9,6 +9,7 @@ function SpecLine({ card }: { card: ListingCard }) {
   return (
     <span className="font-mono text-[11px] uppercase tracking-wider text-ink-faint">
       {segmentLabel(card.segment)} · {listingSpecLine(card)}
+      {card.distanceKm != null ? ` · ${card.distanceKm.toFixed(1)} km` : ""}
     </span>
   )
 }
@@ -40,6 +41,7 @@ function RateBlock({ card }: { card: ListingCard }) {
 function MediaTags({ card }: { card: ListingCard }) {
   return (
     <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] uppercase tracking-wider text-ink-faint">
+      {card.featured ? <span className="border-l-2 border-terra pl-2 text-terra">Featured</span> : null}
       {card.floorPlanPath ? (
         <span className="border-l-2 border-terra/50 pl-2">Floor plan</span>
       ) : null}
@@ -69,6 +71,7 @@ function FeaturedCard({ card }: { card: ListingCard }) {
       <div className="flex flex-col p-5">
         <p className="font-mono text-[11px] uppercase tracking-wider text-terra">
           {card.tenantName} · {card.area}
+          {card.pinCode ? ` · PIN ${card.pinCode}` : ""}
         </p>
         <h2 className="mt-1 font-serif text-xl font-semibold tracking-tight">
           <Link
@@ -92,7 +95,7 @@ function FeaturedCard({ card }: { card: ListingCard }) {
               href={`/properties/${card.propertySlug}/units/${card.code}`}
               className="bg-terra px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-terra-dark"
             >
-              Open unit
+              View unit
             </Link>
             <Link
               href={`/properties/${card.propertySlug}/book?unit=${card.code}`}
@@ -146,7 +149,7 @@ function RowCard({ card }: { card: ListingCard }) {
             href={`/properties/${card.propertySlug}/units/${card.code}`}
             className="border border-ink/20 px-3 py-1.5 text-sm font-semibold transition-colors hover:border-terra hover:text-terra"
           >
-            Open
+            View
           </Link>
           <Link
             href={`/properties/${card.propertySlug}/book?unit=${card.code}`}
@@ -160,7 +163,7 @@ function RowCard({ card }: { card: ListingCard }) {
   )
 }
 
-/** Mosaic tile — image-forward square */
+/** Mosaic tile — image-forward */
 function TileCard({ card }: { card: ListingCard }) {
   return (
     <article className="group flex flex-col overflow-hidden border border-ink/10 bg-card">
@@ -183,7 +186,9 @@ function TileCard({ card }: { card: ListingCard }) {
         </span>
       </Link>
       <div className="flex flex-1 flex-col p-4">
-        <p className="font-mono text-[10px] uppercase tracking-wider text-terra">{card.area}</p>
+        <p className="font-mono text-[10px] uppercase tracking-wider text-terra">
+          {segmentLabel(card.segment)} · {card.area}
+        </p>
         <h2 className="mt-1 font-serif text-base font-semibold leading-snug">
           <Link
             href={`/properties/${card.propertySlug}/units/${card.code}`}
@@ -215,30 +220,32 @@ function TileCard({ card }: { card: ListingCard }) {
 }
 
 /**
- * Mix three layout patterns so the directory is not one repeated card shell:
- * featured (image split), compact row, and image mosaic tiles.
+ * Marketplace board: featured rail uses split cards; directory mixes mosaic + rows.
  */
-export function ListingBoard({ results }: { results: ListingCard[] }) {
-  const featured = results.filter((_, i) => i % 5 === 0)
-  const rest = results.filter((_, i) => i % 5 !== 0)
-  const rows = rest.filter((_, i) => i % 3 !== 0)
-  const tiles = rest.filter((_, i) => i % 3 === 0)
+export function ListingBoard({
+  results,
+  mode = "directory",
+}: {
+  results: ListingCard[]
+  mode?: "featured-rail" | "directory"
+}) {
+  if (mode === "featured-rail") {
+    return (
+      <div className="grid gap-4">
+        {results.map((card) => (
+          <FeaturedCard key={card.unitId} card={card} />
+        ))}
+      </div>
+    )
+  }
+
+  const rows = results.filter((_, i) => i % 3 !== 0)
+  const tiles = results.filter((_, i) => i % 3 === 0)
 
   return (
     <div className="grid gap-8">
-      {featured.length ? (
-        <section className="grid gap-4" aria-label="Featured bays">
-          {featured.map((card) => (
-            <FeaturedCard key={card.unitId} card={card} />
-          ))}
-        </section>
-      ) : null}
-
       {tiles.length ? (
-        <section aria-label="Photo grid">
-          <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-ink-faint">
-            Photo grid
-          </p>
+        <section aria-label="Listing grid">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {tiles.map((card) => (
               <TileCard key={card.unitId} card={card} />

@@ -2,12 +2,15 @@ import type { Metadata, Viewport } from "next"
 import { IBM_Plex_Mono, Source_Sans_3, Source_Serif_4 } from "next/font/google"
 import "./globals.css"
 import { AdminSessionBar } from "@/components/admin/admin-session-bar"
+import { JsonLd } from "@/components/seo/json-ld"
 import { SiteFooter } from "@/components/site-footer"
 import { SiteHeader } from "@/components/site-header"
 import { PwaRegister } from "@/components/pwa-register"
 import { Toaster } from "@/components/ui/sonner"
 import { shouldShowDemoSwitcher } from "@/lib/auth/provider"
 import { listSessionUsers, unreadCount } from "@/lib/db"
+import { organizationJsonLd, websiteSearchActionJsonLd } from "@/lib/schema-org"
+import { absoluteUrl, defaultOgImage } from "@/lib/seo"
 import { getAdminSessionUser, getSessionUser } from "@/lib/session"
 
 /** Helvetica-adjacent UI sans — professional, not display/stretched. */
@@ -46,6 +49,24 @@ export const metadata: Metadata = {
     apple: "/apple-touch-icon.png",
   },
   metadataBase: new URL("https://easyrental.space"),
+  openGraph: {
+    type: "website",
+    siteName: "Easy Rental",
+    title: "Easy Rental",
+    description:
+      "Browse available industrial and multi-segment units — warehouse, commercial, retail, residential.",
+    url: absoluteUrl("/"),
+    images: [{ url: defaultOgImage() }],
+  },
+  twitter: {
+    card: "summary",
+    title: "Easy Rental",
+    description: "Available spaces marketplace by DeSkulpt Inc.",
+    images: [defaultOgImage()],
+  },
+  other: {
+    "llms-txt": absoluteUrl("/llms.txt"),
+  },
 }
 
 export const viewport: Viewport = {
@@ -78,6 +99,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body
         className={`flex min-h-full flex-col bg-paper font-sans text-ink ${showAdminBar ? "pb-20" : ""}`}
       >
+        <JsonLd data={[organizationJsonLd(), websiteSearchActionJsonLd()]} />
         {demoOn && !showAdminBar ? (
           <div
             className="border-b border-amber-900/20 bg-amber-50 px-4 py-2 text-center font-mono text-[11px] uppercase tracking-[0.12em] text-amber-950"

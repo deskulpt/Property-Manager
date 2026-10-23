@@ -1,13 +1,35 @@
 import Link from "next/link"
+import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { UnitGallery } from "@/components/gallery/unit-gallery"
 import { UnitSpecRows } from "@/components/listings/unit-specs"
 import { PropertyMap } from "@/components/map/property-map"
 import { StatusBadge } from "@/components/product"
+import { JsonLd } from "@/components/seo/json-ld"
 import { BookVisitForm } from "@/components/visits/book-visit-form"
 import { getUnitPage } from "@/lib/db"
 import { money, rateLabel, unitMonthlyRentCents } from "@/lib/format"
 import { gstAppliesForUnit, leaseProfile, segmentLabel } from "@/lib/listing-schemas"
+import { unitRealEstateListingJsonLd } from "@/lib/schema-org"
+import { absoluteUrl, pageTitle } from "@/lib/seo"
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string; code: string }>
+}): Promise<Metadata> {
+  const { slug, code } = await params
+  const page = getUnitPage(slug, code)
+  if (!page) return { title: "Unit" }
+  const { property, unit } = page
+  return {
+    title: pageTitle(`${property.name} · Unit ${unit.code}`),
+    description: unit.description.slice(0, 160),
+    alternates: {
+      canonical: absoluteUrl(`/properties/${property.slug}/units/${unit.code}`),
+    },
+  }
+}
 
 export default async function UnitPage({
   params,
@@ -27,6 +49,23 @@ export default async function UnitPage({
 
   return (
     <div className="mx-auto grid max-w-[1200px] gap-8 px-4 py-10 md:px-8 lg:grid-cols-[1.3fr_0.7fr]">
+      <JsonLd
+        data={unitRealEstateListingJsonLd({
+          property: {
+            name: property.name,
+            slug: property.slug,
+            address: property.address,
+            area: property.area,
+            cityLine: property.cityLine,
+            pinCode: property.pinCode,
+            latitude: property.latitude,
+            longitude: property.longitude,
+            segment: property.segment,
+            tenantName: property.tenantName,
+          },
+          unit,
+        })}
+      />
       <div>
         <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-terra">
           <Link href={`/properties/${property.slug}`} className="hover:underline">
