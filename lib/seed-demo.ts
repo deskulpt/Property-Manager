@@ -648,4 +648,13 @@ export function seedDemoDatabase(db: Sql) {
     memAt,
     "u_nadia",
   )
+
+  // Marketplace featured pins (Pro demo) + listed_at for newest sort / schema datePosted.
+  const feature = db.prepare(
+    "UPDATE units SET featured_until = ?, listed_at = ? WHERE id = ?",
+  )
+  feature.run("2027-12-31T00:00:00.000Z", "2026-09-20T08:00:00.000Z", "u_waterman_b1")
+  feature.run("2027-06-30T00:00:00.000Z", "2026-08-15T08:00:00.000Z", "u_waterman_a2")
+  feature.run(null, "2026-07-01T08:00:00.000Z", "u_forum_s12")
+  feature.run(null, "2026-06-10T08:00:00.000Z", "u_jubilee_3b")
 }

@@ -1,12 +1,20 @@
+import type { Metadata } from "next"
 import { EmptyState, PageHeader } from "@/components/product"
 import { ListingBoard } from "@/components/listings/listing-board"
 import { ListingsMap } from "@/components/map/listings-map"
 import { ListingsFilterForm } from "@/components/listings/filter-form"
-import { listingFacets, searchListings, type ListingFilters } from "@/lib/db"
+import { JsonLd } from "@/components/seo/json-ld"
+import {
+  isListingAmenity,
+  listingFacets,
+  searchListings,
+  type ListingAmenity,
+  type ListingFilters,
+} from "@/lib/db"
 import type { UnitStatus } from "@/lib/format"
 import { isPropertySegment } from "@/lib/listing-schemas"
-
-export const metadata = { title: "Listings" }
+import { listingsItemListJsonLd } from "@/lib/schema-org"
+import { listingsCanonical, listingsShouldNoIndex, pageTitle } from "@/lib/seo"
 
 function numParam(value: string | string[] | undefined) {
   if (typeof value !== "string" || value.trim() === "") return undefined
@@ -16,6 +24,72 @@ function numParam(value: string | string[] | undefined) {
 
 function boolParam(value: string | string[] | undefined) {
   return value === "1" || value === "true"
+}
+
+function amenityParams(value: string | string[] | undefined): ListingAmenity[] | undefined {
+  const raw = (Array.isArray(value) ? value : value ? [value] : [])
+    .flatMap((item) => String(item).split(","))
+    .map((item) => item.trim())
+    .filter(isListingAmenity)
+  return raw.length ? raw : undefined
+}
+
+const SORTS = new Set([
+  "rate_asc",
+  "rate_desc",
+  "sqft_asc",
+  "sqft_desc",
+  "monthly_asc",
+  "monthly_desc",
+  "name",
+  "featured",
+  "newest",
+  "distance",
+] as const)
+
+type SortValue = ListingFilters["sort"]
+
+function parseSort(value: string | string[] | undefined): SortValue {
+  const raw = typeof value === "string" ? value : undefined
+  if (raw && SORTS.has(raw as never)) return raw as SortValue
+  return "featured"
+}
+
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}): Promise<Metadata> {
+  const params = await searchParams
+  const q = typeof params.q === "string" ? params.q : undefined
+  const segment = typeof params.segment === "string" ? params.segment : undefined
+  const area = typeof params.area === "string" ? params.area : undefined
+  const featured = boolParam(params.featured)
+  const noIndex = listingsShouldNoIndex({
+    q,
+    lat: numParam(params.lat),
+    lng: numParam(params.lng),
+    radiusKm: numParam(params.radiusKm),
+  })
+  const titleBits = [
+    featured ? "Featured" : null,
+    segment && isPropertySegment(segment) ? segment : null,
+    area,
+    "Available spaces",
+  ].filter(Boolean)
+  return {
+    title: pageTitle(titleBits.join(" · ")),
+    description:
+      "Browse available warehouse, commercial, retail, and residential units on Easy Rental — Hyderabad corridors and demo parks across landlord organisations.",
+    alternates: {
+      canonical: listingsCanonical({
+        segment: segment && isPropertySegment(segment) ? segment : undefined,
+        area,
+        featured: featured || undefined,
+      }),
+    },
+    robots: noIndex ? { index: false, follow: true } : { index: true, follow: true },
+  }
 }
 
 export default async function ListingsPage({
@@ -33,13 +107,16 @@ export default async function ListingsPage({
     )
 
   const segmentParam = typeof params.segment === "string" ? params.segment : undefined
+  const statusUnset = !statusRaw || (Array.isArray(statusRaw) && statusRaw.length === 0)
 
   const filters: ListingFilters = {
     q: typeof params.q === "string" ? params.q : undefined,
     tenantId: typeof params.tenantId === "string" ? params.tenantId : undefined,
     area: typeof params.area === "string" ? params.area : undefined,
+    pin: typeof params.pin === "string" ? params.pin : undefined,
     segment: segmentParam && isPropertySegment(segmentParam) ? segmentParam : undefined,
-    statuses: statuses.length ? statuses : undefined,
+    // Default marketplace view: available only (leased hidden unless opted in).
+    statuses: statuses.length ? statuses : statusUnset ? ["available"] : undefined,
     minSqft: numParam(params.minSqft),
     maxSqft: numParam(params.maxSqft),
     minRate: numParam(params.minRate),
@@ -56,29 +133,38 @@ export default async function ListingsPage({
     hasFloorPlan: boolParam(params.hasFloorPlan) || undefined,
     hasMatterport: boolParam(params.hasMatterport) || undefined,
     hasPano: boolParam(params.hasPano) || undefined,
-    sort:
-      params.sort === "rate_asc" ||
-      params.sort === "rate_desc" ||
-      params.sort === "sqft_asc" ||
-      params.sort === "sqft_desc" ||
-      params.sort === "monthly_asc" ||
-      params.sort === "monthly_desc" ||
-      params.sort === "name"
-        ? params.sort
-        : "name",
+    amenities: amenityParams(params.amenity),
+    featured: boolParam(params.featured) || undefined,
+    lat: numParam(params.lat),
+    lng: numParam(params.lng),
+    radiusKm: numParam(params.radiusKm),
+    sort: parseSort(params.sort),
   }
 
-  const [facets, results] = await Promise.all([
+  const [facets, results, featuredRail] = await Promise.all([
     Promise.resolve(listingFacets()),
     Promise.resolve(searchListings(filters)),
+    Promise.resolve(
+      searchListings({
+        statuses: filters.statuses,
+        featured: true,
+        sort: "featured",
+      }),
+    ),
   ])
+
+  const showFeaturedRail = !filters.featured && featuredRail.length > 0
+  const gridResults = filters.featured
+    ? results
+    : results.filter((card) => !featuredRail.some((f) => f.unitId === card.unitId))
 
   return (
     <div className="mx-auto max-w-[1200px] px-4 py-10 md:px-8">
+      <JsonLd data={listingsItemListJsonLd(results)} />
       <PageHeader
-        kicker="Public listings"
-        title="Search warehouse, commercial, and residential units."
-        lede="Filter by segment across landlord organisations. Warehouse docks and clear height stay available; Hyderabad commercial and residential inventory is seeded for Deccan Spaces."
+        kicker="Easy Rental marketplace"
+        title="Available spaces"
+        lede="Public catalog of open units across landlord organisations — warehouse docks and clear height, Hyderabad commercial and residential inventory, Pro featured pins. Operated by DeSkulpt Inc."
       />
       <div className="grid gap-8 lg:grid-cols-[280px_1fr]">
         <ListingsFilterForm facets={facets} filters={filters} />
@@ -101,17 +187,44 @@ export default async function ListingsPage({
               ).values(),
             )}
           />
+          {showFeaturedRail ? (
+            <section className="mb-8" aria-label="Featured listings">
+              <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+                <div>
+                  <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-terra">
+                    Featured
+                  </p>
+                  <h2 className="font-serif text-xl font-semibold tracking-tight">
+                    Pro-pinned spaces
+                  </h2>
+                </div>
+                <a
+                  href="/listings?featured=1"
+                  className="text-sm font-semibold text-terra hover:underline"
+                >
+                  View featured only
+                </a>
+              </div>
+              <ListingBoard results={featuredRail} mode="featured-rail" />
+            </section>
+          ) : null}
           <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.16em] text-ink-faint">
             {results.length} unit{results.length === 1 ? "" : "s"}
+            {filters.statuses?.length === 1 && filters.statuses[0] === "available"
+              ? " · available"
+              : ""}
           </p>
           {results.length === 0 ? (
             <EmptyState
               title="No units match these filters"
-              body="Widen the area, clear the media checkboxes, or reset status. The portfolio map still shows every building."
+              body="Widen the area, clear amenity chips, or reset status. The portfolio map still shows every building with coordinates."
               action={{ href: "/listings", label: "Clear filters" }}
             />
           ) : (
-            <ListingBoard results={results} />
+            <ListingBoard
+              results={showFeaturedRail ? gridResults : results}
+              mode="directory"
+            />
           )}
         </div>
       </div>

@@ -12,23 +12,35 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { ListingFilters } from "@/lib/db"
+import type { ListingAmenity, ListingFilters } from "@/lib/db"
 import { PROPERTY_SEGMENTS, segmentLabel, type PropertySegment } from "@/lib/listing-schemas"
 import { useState } from "react"
+
+const AMENITY_OPTIONS: { value: ListingAmenity; label: string }[] = [
+  { value: "dock", label: "Dock" },
+  { value: "drive_in", label: "Drive-in" },
+  { value: "power", label: "Power listed" },
+  { value: "floor_plan", label: "Floor plan" },
+  { value: "matterport", label: "Walkthrough" },
+  { value: "pano", label: "360 photo" },
+]
 
 export function ListingsFilterForm({
   facets,
   filters,
 }: {
-  facets: { areas: string[]; landlords: { id: string; name: string }[] }
+  facets: { areas: string[]; pins?: string[]; landlords: { id: string; name: string }[] }
   filters: ListingFilters
 }) {
   const router = useRouter()
-  const [statuses, setStatuses] = useState<string[]>(filters.statuses ?? [])
+  const [statuses, setStatuses] = useState<string[]>(filters.statuses ?? ["available"])
   const [tenantId, setTenantId] = useState(filters.tenantId ?? "")
   const [area, setArea] = useState(filters.area ?? "")
+  const [pin, setPin] = useState(filters.pin ?? "")
   const [segment, setSegment] = useState(filters.segment ?? "")
-  const [sort, setSort] = useState(filters.sort ?? "name")
+  const [sort, setSort] = useState(filters.sort ?? "featured")
+  const [amenities, setAmenities] = useState<ListingAmenity[]>(filters.amenities ?? [])
+  const [featuredOnly, setFeaturedOnly] = useState(Boolean(filters.featured))
   const [hasFloorPlan, setHasFloorPlan] = useState(Boolean(filters.hasFloorPlan))
   const [hasMatterport, setHasMatterport] = useState(Boolean(filters.hasMatterport))
   const [hasPano, setHasPano] = useState(Boolean(filters.hasPano))
@@ -41,11 +53,18 @@ export function ListingsFilterForm({
     { value: " ", label: "Any area" },
     ...facets.areas.map((item) => ({ value: item, label: item })),
   ]
+  const pinItems = [
+    { value: " ", label: "Any PIN" },
+    ...(facets.pins ?? []).map((item) => ({ value: item, label: item })),
+  ]
   const segmentItems = [
     { value: " ", label: "All segments" },
     ...PROPERTY_SEGMENTS.map((value) => ({ value, label: segmentLabel(value) })),
   ]
   const sortItems = [
+    { value: "featured", label: "Featured first" },
+    { value: "newest", label: "Newest" },
+    { value: "distance", label: "Distance (needs lat/lng)" },
     { value: "name", label: "Building / unit" },
     { value: "monthly_asc", label: "Monthly rent · low to high" },
     { value: "monthly_desc", label: "Monthly rent · high to low" },
@@ -64,6 +83,10 @@ export function ListingsFilterForm({
     setStatuses((prev) => (on ? [...new Set([...prev, status])] : prev.filter((item) => item !== status)))
   }
 
+  function toggleAmenity(value: ListingAmenity, on: boolean) {
+    setAmenities((prev) => (on ? [...new Set([...prev, value])] : prev.filter((item) => item !== value)))
+  }
+
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
@@ -72,8 +95,11 @@ export function ListingsFilterForm({
     if (q) next.set("q", q)
     if (tenantId.trim()) next.set("tenantId", tenantId.trim())
     if (area.trim()) next.set("area", area.trim())
+    if (pin.trim()) next.set("pin", pin.trim())
     if (segment.trim()) next.set("segment", segment.trim())
     for (const status of statuses) next.append("status", status)
+    for (const amenity of amenities) next.append("amenity", amenity)
+    if (featuredOnly) next.set("featured", "1")
     for (const key of [
       "minSqft",
       "maxSqft",
@@ -88,6 +114,9 @@ export function ListingsFilterForm({
       "bhk",
       "furnishing",
       "fitOut",
+      "lat",
+      "lng",
+      "radiusKm",
     ] as const) {
       const value = String(form.get(key) ?? "").trim()
       if (value) next.set(key, value)
@@ -95,7 +124,7 @@ export function ListingsFilterForm({
     if (hasFloorPlan) next.set("hasFloorPlan", "1")
     if (hasMatterport) next.set("hasMatterport", "1")
     if (hasPano) next.set("hasPano", "1")
-    if (sort && sort !== "name") next.set("sort", sort)
+    if (sort && sort !== "featured") next.set("sort", sort)
     router.push(next.toString() ? `/listings?${next}` : "/listings")
   }
 
@@ -177,6 +206,27 @@ export function ListingsFilterForm({
           </SelectContent>
         </Select>
       </div>
+      {pinItems.length > 1 ? (
+        <div className="grid gap-1.5">
+          <Label className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint">PIN</Label>
+          <Select
+            items={pinItems}
+            value={pin || " "}
+            onValueChange={(value) => setPin(value && value !== " " ? String(value) : "")}
+          >
+            <SelectTrigger className="w-full rounded-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {pinItems.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
       <fieldset className="grid gap-2.5">
         <legend className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint">
           Status
@@ -191,6 +241,27 @@ export function ListingsFilterForm({
           </label>
         ))}
       </fieldset>
+      <fieldset className="grid gap-2.5">
+        <legend className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint">
+          Amenities
+        </legend>
+        {AMENITY_OPTIONS.map((option) => (
+          <label key={option.value} className="flex items-center gap-2 text-sm">
+            <Checkbox
+              checked={amenities.includes(option.value)}
+              onCheckedChange={(checked) => toggleAmenity(option.value, checked === true)}
+            />
+            {option.label}
+          </label>
+        ))}
+      </fieldset>
+      <label className="flex items-center gap-2 text-sm">
+        <Checkbox
+          checked={featuredOnly}
+          onCheckedChange={(checked) => setFeaturedOnly(checked === true)}
+        />
+        Featured only
+      </label>
       <div className="grid grid-cols-2 gap-3">
         <div className="grid gap-1.5">
           <Label
@@ -426,6 +497,61 @@ export function ListingsFilterForm({
           />
           Walkthrough URL
         </label>
+      </fieldset>
+      <fieldset className="grid gap-2.5 border-t border-ink/10 pt-4">
+        <legend className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint">
+          Near me (optional)
+        </legend>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-1.5">
+            <Label
+              htmlFor="lat"
+              className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint"
+            >
+              Lat
+            </Label>
+            <Input
+              id="lat"
+              name="lat"
+              inputMode="decimal"
+              defaultValue={filters.lat ?? ""}
+              placeholder="19.28"
+              className="rounded-sm"
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label
+              htmlFor="lng"
+              className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint"
+            >
+              Lng
+            </Label>
+            <Input
+              id="lng"
+              name="lng"
+              inputMode="decimal"
+              defaultValue={filters.lng ?? ""}
+              placeholder="73.06"
+              className="rounded-sm"
+            />
+          </div>
+        </div>
+        <div className="grid gap-1.5">
+          <Label
+            htmlFor="radiusKm"
+            className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint"
+          >
+            Radius km
+          </Label>
+          <Input
+            id="radiusKm"
+            name="radiusKm"
+            inputMode="numeric"
+            defaultValue={filters.radiusKm ?? ""}
+            placeholder="25"
+            className="rounded-sm"
+          />
+        </div>
       </fieldset>
       <div className="grid gap-1.5">
         <Label className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint">Sort</Label>

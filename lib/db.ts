@@ -46,6 +46,7 @@ import {
 } from "@/lib/auth/seats"
 import { parsePlanId, type PlanId } from "@/lib/plans"
 import { normalizeRoleLevel, roleToLevel, type RoleLevel } from "@/lib/role-level"
+import { haversineKm } from "@/lib/partners/geo"
 import { seedDemoDatabase } from "@/lib/seed-demo"
 import { seedRoleCmsExtras } from "@/lib/seed-role-cms"
 import { seedVisitsAndPortal } from "@/lib/seed-visits-portal"
@@ -66,7 +67,7 @@ import {
   type RewardStatus,
 } from "@/lib/referrals"
 
-const SEED_VERSION = "22"
+const SEED_VERSION = "23"
 
 function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
@@ -185,6 +186,10 @@ export type UnitRecord = {
   hotspotY: number | null
   matterportUrl: string | null
   description: string
+  /** ISO timestamp; featured while now < featuredUntil */
+  featuredUntil: string | null
+  /** ISO timestamp for newest sort / schema datePosted */
+  listedAt: string | null
 }
 
 export type MediaRecord = {
@@ -317,7 +322,28 @@ function mapUnit(row: Record<string, unknown>, segmentHint?: PropertySegment): U
     hotspotY: num(row, "hotspot_y"),
     matterportUrl: str(row, "matterport_url"),
     description: String(row.description),
+    featuredUntil: str(row, "featured_until"),
+    listedAt: str(row, "listed_at"),
   }
+}
+
+export type ListingAmenity = "dock" | "drive_in" | "power" | "floor_plan" | "matterport" | "pano"
+
+export function isListingAmenity(value: string): value is ListingAmenity {
+  return (
+    value === "dock" ||
+    value === "drive_in" ||
+    value === "power" ||
+    value === "floor_plan" ||
+    value === "matterport" ||
+    value === "pano"
+  )
+}
+
+function unitIsFeatured(featuredUntil: string | null | undefined, now = Date.now()): boolean {
+  if (!featuredUntil) return false
+  const ts = Date.parse(featuredUntil)
+  return Number.isFinite(ts) && ts > now
 }
 
 const USER_SQL = `
@@ -512,6 +538,8 @@ function createSchema(db: Sql) {
       hotspot_y REAL,
       matterport_url TEXT,
       description TEXT NOT NULL,
+      featured_until TEXT,
+      listed_at TEXT,
       UNIQUE (property_id, code)
     );
     CREATE TABLE unit_media (
@@ -1154,6 +1182,10 @@ function seed(db: Sql) {
   seedRoleCmsExtras(db)
   seedVisitCalendar(db)
   seedVisitsAndPortal(db)
+  // Partner-network units land after demo seed — stamp listed_at for newest sort.
+  db.prepare(
+    "UPDATE units SET listed_at = COALESCE(listed_at, ?) WHERE id = ?",
+  ).run("2026-09-01T08:00:00.000Z", "u_pune_p1")
 }
 
 /** Slice F residual: appointment types, Waterman windows, Maya sample request. */
@@ -3756,6 +3788,7 @@ export type ListingFilters = {
   q?: string
   tenantId?: string
   area?: string
+  pin?: string
   segment?: PropertySegment
   statuses?: UnitStatus[]
   minSqft?: number
@@ -3774,7 +3807,23 @@ export type ListingFilters = {
   hasFloorPlan?: boolean
   hasMatterport?: boolean
   hasPano?: boolean
-  sort?: "rate_asc" | "rate_desc" | "sqft_asc" | "sqft_desc" | "name" | "monthly_asc" | "monthly_desc"
+  /** Amenity chips (dock, drive_in, power, floor_plan, matterport, pano) */
+  amenities?: ListingAmenity[]
+  featured?: boolean
+  lat?: number
+  lng?: number
+  radiusKm?: number
+  sort?:
+    | "rate_asc"
+    | "rate_desc"
+    | "sqft_asc"
+    | "sqft_desc"
+    | "name"
+    | "monthly_asc"
+    | "monthly_desc"
+    | "featured"
+    | "newest"
+    | "distance"
 }
 
 export type ListingCard = {
@@ -3806,11 +3855,17 @@ export type ListingCard = {
   address: string
   area: string
   cityLine: string
+  pinCode: string | null
   floorPlanPath: string | null
   latitude: number | null
   longitude: number | null
   tenantId: string
   tenantName: string
+  featured: boolean
+  featuredUntil: string | null
+  listedAt: string | null
+  /** Present when lat/lng filter origin is set and unit has coords */
+  distanceKm: number | null
 }
 
 export function listingFacets() {
@@ -3818,6 +3873,15 @@ export function listingFacets() {
   const areas = asRows(
     db.prepare("SELECT DISTINCT area FROM properties ORDER BY area").all(),
   ).map((row) => String(row.area))
+  const pins = asRows(
+    db
+      .prepare(
+        `SELECT DISTINCT pin_code AS pin FROM properties
+         WHERE pin_code IS NOT NULL AND pin_code != ''
+         ORDER BY pin_code`,
+      )
+      .all(),
+  ).map((row) => String(row.pin))
   const landlords = asRows(
     db
       .prepare(
@@ -3825,7 +3889,7 @@ export function listingFacets() {
       )
       .all(),
   ).map((row) => ({ id: String(row.id), name: String(row.name) }))
-  return { areas, landlords }
+  return { areas, pins, landlords }
 }
 
 /**
@@ -3838,9 +3902,9 @@ export function searchListings(filters: ListingFilters = {}): ListingCard[] {
         `SELECT
            u.id AS unit_id, u.code, u.status, u.sqft, u.clear_height, u.docks, u.drive_ins,
            u.power, u.rate_psf, u.rate_basis, u.rent_amount_minor, u.attributes, u.bhk, u.carpet_sqft,
-           u.description, u.matterport_url,
+           u.description, u.matterport_url, u.featured_until, u.listed_at,
            p.id AS property_id, p.name AS property_name, p.slug AS property_slug,
-           p.address, p.area, p.city_line, p.floor_plan_path, p.latitude, p.longitude,
+           p.address, p.area, p.city_line, p.floor_plan_path, p.latitude, p.longitude, p.pin_code,
            p.segment, p.subtype,
            t.id AS tenant_id, t.name AS tenant_name,
            EXISTS(SELECT 1 FROM unit_media m WHERE m.unit_id = u.id AND m.kind = 'pano') AS has_pano,
@@ -3858,6 +3922,13 @@ export function searchListings(filters: ListingFilters = {}): ListingCard[] {
 
   const q = filters.q?.trim().toLowerCase() ?? ""
   const statuses = filters.statuses?.length ? new Set(filters.statuses) : null
+  const originLat = filters.lat
+  const originLng = filters.lng
+  const hasOrigin =
+    originLat != null &&
+    originLng != null &&
+    Number.isFinite(originLat) &&
+    Number.isFinite(originLng)
 
   let cards = rows.map((row): ListingCard => {
     const segmentRaw = String(row.segment ?? "warehouse")
@@ -3885,12 +3956,20 @@ export function searchListings(filters: ListingFilters = {}): ListingCard[] {
         hotspot_y: null,
         matterport_url: row.matterport_url,
         description: row.description,
+        featured_until: row.featured_until,
+        listed_at: row.listed_at,
       },
       segment,
     )
     const clearHeight = unit.clearHeight
     const feet = Number((clearHeight.match(/(\d+(?:\.\d+)?)/) ?? [0, "0"])[1])
     const attrs = unit.attributes as Record<string, unknown>
+    const lat = num(row, "latitude")
+    const lng = num(row, "longitude")
+    const distanceKm =
+      hasOrigin && lat != null && lng != null
+        ? haversineKm(originLat as number, originLng as number, lat, lng)
+        : null
     return {
       unitId: unit.id,
       code: unit.code,
@@ -3920,11 +3999,16 @@ export function searchListings(filters: ListingFilters = {}): ListingCard[] {
       address: String(row.address),
       area: String(row.area),
       cityLine: String(row.city_line),
+      pinCode: str(row, "pin_code"),
       floorPlanPath: str(row, "floor_plan_path"),
-      latitude: num(row, "latitude"),
-      longitude: num(row, "longitude"),
+      latitude: lat,
+      longitude: lng,
       tenantId: String(row.tenant_id),
       tenantName: String(row.tenant_name),
+      featured: unitIsFeatured(unit.featuredUntil),
+      featuredUntil: unit.featuredUntil,
+      listedAt: unit.listedAt,
+      distanceKm,
     }
   })
 
@@ -3933,6 +4017,11 @@ export function searchListings(filters: ListingFilters = {}): ListingCard[] {
     if (filters.segment && card.segment !== filters.segment) return false
     if (filters.tenantId && card.tenantId !== filters.tenantId) return false
     if (filters.area && card.area !== filters.area) return false
+    if (filters.pin) {
+      const needle = filters.pin.trim()
+      if (needle && !(card.pinCode ?? "").startsWith(needle)) return false
+    }
+    if (filters.featured && !card.featured) return false
     if (filters.minSqft != null && card.sqft < filters.minSqft) return false
     if (filters.maxSqft != null && card.sqft > filters.maxSqft) return false
     if (filters.minRate != null && card.rateBasis === "per_sqft_month" && card.ratePsf < filters.minRate)
@@ -3954,12 +4043,26 @@ export function searchListings(filters: ListingFilters = {}): ListingCard[] {
     if (filters.hasFloorPlan && !card.floorPlanPath) return false
     if (filters.hasMatterport && !card.matterportUrl) return false
     if (filters.hasPano && !card.hasPano) return false
+    if (filters.amenities?.length) {
+      for (const amenity of filters.amenities) {
+        if (amenity === "dock" && card.docks <= 0) return false
+        if (amenity === "drive_in" && card.driveIns <= 0) return false
+        if (amenity === "power" && !card.power.trim()) return false
+        if (amenity === "floor_plan" && !card.floorPlanPath) return false
+        if (amenity === "matterport" && !card.matterportUrl) return false
+        if (amenity === "pano" && !card.hasPano) return false
+      }
+    }
+    if (filters.radiusKm != null && hasOrigin) {
+      if (card.distanceKm == null || card.distanceKm > filters.radiusKm) return false
+    }
     if (q) {
       const hay = [
         card.propertyName,
         card.address,
         card.area,
         card.cityLine,
+        card.pinCode,
         card.code,
         card.description,
         card.tenantName,
@@ -3974,8 +4077,22 @@ export function searchListings(filters: ListingFilters = {}): ListingCard[] {
     return true
   })
 
-  const sort = filters.sort ?? "name"
+  const sort = filters.sort ?? "featured"
   cards.sort((a, b) => {
+    if (sort === "featured") {
+      if (a.featured !== b.featured) return a.featured ? -1 : 1
+      return `${a.propertyName} ${a.code}`.localeCompare(`${b.propertyName} ${b.code}`)
+    }
+    if (sort === "newest") {
+      const aTs = a.listedAt ? Date.parse(a.listedAt) : 0
+      const bTs = b.listedAt ? Date.parse(b.listedAt) : 0
+      return bTs - aTs
+    }
+    if (sort === "distance") {
+      const aD = a.distanceKm ?? Number.POSITIVE_INFINITY
+      const bD = b.distanceKm ?? Number.POSITIVE_INFINITY
+      return aD - bD
+    }
     if (sort === "rate_asc") return a.ratePsf - b.ratePsf
     if (sort === "rate_desc") return b.ratePsf - a.ratePsf
     if (sort === "monthly_asc") return a.monthlyCents - b.monthlyCents
