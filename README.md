@@ -267,6 +267,21 @@ Playwright downloads a browser on first use (`npx playwright install` if the run
 
 Hard rules: `test/ask-easy.test.ts` + `test/ask-easy-onboard.test.ts` + `test/adk-platform.test.ts`.
 
+## MCP M0 (read-only)
+
+Personal assistants connect via **Easy Rental MCP** — Phase **M0** is read-only tools scoped by session `tenant_id` + `role_level` (OAuth/PAT stub). No mutations; M1 will add proposals.
+
+| Surface | How |
+| --- | --- |
+| Core | `lib/mcp/` — tool pack + PAT stub (`demo:u_nadia`) |
+| stdio | `npm run mcp:stdio` or `packages/easyrental-mcp` |
+| HTTP | `POST /api/mcp` with `Authorization: Bearer demo:<userId>` |
+| Tests | `test/mcp-m0.test.ts` (isolation + role gates) |
+
+```bash
+EASYRENTAL_MCP_DEFAULT_TOKEN=demo:u_nadia npm run mcp:stdio
+```
+
 ## Continuous integration
 
 GitHub Actions (`.github/workflows/ci.yml`) runs on every pull request and every push to `main`:
