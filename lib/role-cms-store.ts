@@ -91,7 +91,7 @@ function mapTicket(row: Record<string, unknown>): TicketRecord {
     tenantName: String(row.tenant_name),
     propertyName: String(row.property_name),
     unitCode: str(row, "unit_code"),
-    userId: String(row.user_id),
+    userId: String(row.user_id ?? row.occupant_id),
     subject: String(row.subject),
     body: String(row.body),
     status: String(row.status) as TicketStatus,
@@ -101,11 +101,13 @@ function mapTicket(row: Record<string, unknown>): TicketRecord {
 }
 
 const TICKET_SQL = `
-  SELECT tk.*, t.name AS tenant_name, p.name AS property_name, u.code AS unit_code
+  SELECT tk.*, t.name AS tenant_name,
+         COALESCE(p.name, p2.name) AS property_name, u.code AS unit_code
   FROM tickets tk
   JOIN tenants t ON t.id = tk.tenant_id
-  JOIN properties p ON p.id = tk.property_id
+  LEFT JOIN properties p ON p.id = tk.property_id
   LEFT JOIN units u ON u.id = tk.unit_id
+  LEFT JOIN properties p2 ON p2.id = u.property_id
 `
 
 export function ticketsForUser(userId: string) {
@@ -136,14 +138,17 @@ export function createTicket(input: {
   const now = new Date().toISOString()
   getDb()
     .prepare(
-      `INSERT INTO tickets (id, tenant_id, property_id, unit_id, user_id, subject, body, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)`,
+      `INSERT INTO tickets (
+        id, tenant_id, property_id, lease_id, unit_id, user_id, occupant_id, category,
+        subject, body, photo_name, status, created_at, updated_at
+      ) VALUES (?, ?, ?, NULL, ?, ?, ?, 'other', ?, ?, NULL, 'open', ?, ?)`,
     )
     .run(
       id,
       input.tenantId,
       input.propertyId,
       input.unitId,
+      input.userId,
       input.userId,
       input.subject,
       input.body,

@@ -5,14 +5,17 @@ type Sql = InstanceType<typeof DatabaseSync>
 /** Demo tickets + notification prefs for role CMS desks. */
 export function seedRoleCmsExtras(db: Sql) {
   const ticketIns = db.prepare(
-    `INSERT INTO tickets (id, tenant_id, property_id, unit_id, user_id, subject, body, status, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO tickets (
+      id, tenant_id, property_id, lease_id, unit_id, user_id, occupant_id, category,
+      subject, body, photo_name, status, created_at, updated_at
+    ) VALUES (?, ?, ?, NULL, ?, ?, ?, 'maintenance', ?, ?, NULL, ?, ?, ?)`,
   )
   ticketIns.run(
     "tk_devon_1",
     "t_bbm",
     "p_waterman",
     "u_waterman_a1",
+    "u_devon",
     "u_devon",
     "Dock seal dripping after monsoon",
     "Water seeps at the north dock when it rains. Please send cleaning or weather-seal trade.",

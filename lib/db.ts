@@ -48,6 +48,7 @@ import { parsePlanId, type PlanId } from "@/lib/plans"
 import { normalizeRoleLevel, roleToLevel, type RoleLevel } from "@/lib/role-level"
 import { seedDemoDatabase } from "@/lib/seed-demo"
 import { seedRoleCmsExtras } from "@/lib/seed-role-cms"
+import { seedVisitsAndPortal } from "@/lib/seed-visits-portal"
 import { decryptSecret, encryptSecret, secretLast4 } from "@/lib/shop-crypto"
 import { resolveShopPaymentProvider } from "@/lib/shop-payments"
 import {
@@ -551,7 +552,8 @@ function createSchema(db: Sql) {
       tenant_id TEXT PRIMARY KEY,
       grace_days INTEGER NOT NULL,
       flat_cents INTEGER NOT NULL,
-      percent_bps INTEGER NOT NULL
+      percent_bps INTEGER NOT NULL,
+      interest_rate_apr REAL NOT NULL DEFAULT 18
     );
     CREATE TABLE payment_methods (
       id TEXT PRIMARY KEY,
@@ -932,12 +934,60 @@ function createSchema(db: Sql) {
     CREATE TABLE tickets (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
-      property_id TEXT NOT NULL,
+      property_id TEXT,
+      lease_id TEXT,
       unit_id TEXT,
-      user_id TEXT NOT NULL,
+      user_id TEXT,
+      occupant_id TEXT,
+      category TEXT,
       subject TEXT NOT NULL,
       body TEXT NOT NULL,
+      photo_name TEXT,
       status TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE leases (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      unit_id TEXT NOT NULL,
+      occupant_id TEXT NOT NULL,
+      application_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      started_on TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE (application_id)
+    );
+    CREATE TABLE occupant_invites (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      lease_id TEXT NOT NULL,
+      occupant_id TEXT NOT NULL,
+      token TEXT NOT NULL UNIQUE,
+      email TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      accepted_at TEXT
+    );
+    CREATE TABLE reminder_log (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      line_id TEXT NOT NULL,
+      reminder_kind TEXT NOT NULL,
+      scheduled_date TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE (line_id, reminder_kind, scheduled_date)
+    );
+    CREATE TABLE esign_envelopes (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      lease_id TEXT NOT NULL,
+      unit_id TEXT NOT NULL,
+      occupant_id TEXT NOT NULL,
+      document_name TEXT NOT NULL,
+      status TEXT NOT NULL,
+      signatory_name TEXT NOT NULL,
+      signatory_email TEXT NOT NULL,
+      signed_path TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -975,6 +1025,15 @@ function createSchema(db: Sql) {
     );
     CREATE INDEX idx_tickets_user ON tickets(user_id, status);
     CREATE INDEX idx_tickets_tenant ON tickets(tenant_id, status);
+    CREATE INDEX idx_tickets_occupant ON tickets(occupant_id);
+    CREATE INDEX idx_leases_occupant ON leases(occupant_id, status);
+    CREATE INDEX idx_leases_tenant ON leases(tenant_id);
+    CREATE INDEX idx_esign_occupant ON esign_envelopes(occupant_id);
+    CREATE INDEX idx_esign_tenant ON esign_envelopes(tenant_id);
+    CREATE INDEX idx_notes_source ON notifications(source_id);
+    CREATE INDEX idx_appt_tenant ON appointments(tenant_id, status);
+    CREATE INDEX idx_appt_property ON appointments(property_id, starts_at);
+    CREATE INDEX idx_windows_property ON availability_windows(property_id, weekday);
     CREATE INDEX idx_rental_agreements_tenant ON rental_agreements(tenant_id, status);
     CREATE INDEX idx_partner_apps_status ON partner_applications(status, track);
     CREATE INDEX idx_partner_areas_app ON partner_service_areas(application_id);
@@ -990,10 +1049,6 @@ function createSchema(db: Sql) {
     CREATE INDEX idx_ledger_tenant ON ledger_entries(tenant_id);
     CREATE INDEX idx_ledger_user ON ledger_entries(user_id);
     CREATE INDEX idx_notes_user ON notifications(user_id, created_at);
-    CREATE INDEX idx_notes_source ON notifications(source_id);
-    CREATE INDEX idx_appt_tenant ON appointments(tenant_id, status);
-    CREATE INDEX idx_appt_property ON appointments(property_id, starts_at);
-    CREATE INDEX idx_windows_property ON availability_windows(property_id, weekday);
     CREATE INDEX idx_properties_tenant ON properties(tenant_id);
     CREATE INDEX idx_media_unit ON unit_media(unit_id, sort_order);
     CREATE INDEX idx_shop_skus_tenant ON shop_skus(tenant_id);
@@ -1022,7 +1077,14 @@ function reset(db: Sql) {
   for (const table of [
     "user_notification_prefs",
     "rental_agreements",
+    "esign_envelopes",
+    "reminder_log",
     "tickets",
+    "occupant_invites",
+    "leases",
+    "appointments",
+    "availability_windows",
+    "appointment_types",
     "agent_audit_events",
     "agent_memory",
     "agent_proposals",
@@ -1037,9 +1099,6 @@ function reset(db: Sql) {
     "jobs",
     "verifications",
     "applications",
-    "appointments",
-    "availability_windows",
-    "appointment_types",
     "visit_requests",
     "custom_domains",
     "shop_rental_bookings",
@@ -1094,6 +1153,7 @@ function seed(db: Sql) {
   seedPartnerNetwork(db)
   seedRoleCmsExtras(db)
   seedVisitCalendar(db)
+  seedVisitsAndPortal(db)
 }
 
 /** Slice F residual: appointment types, Waterman windows, Maya sample request. */
@@ -2286,7 +2346,7 @@ export type LedgerRecord = {
   propertyName: string
   userId: string
   payerName: string
-  kind: "rent" | "late_fee" | "payment" | "gst" | "deposit" | "maintenance"
+  kind: "rent" | "late_fee" | "payment" | "gst" | "deposit" | "maintenance" | "interest"
   description: string
   amountCents: number
   status: "due" | "paid" | "waived"
@@ -2369,20 +2429,24 @@ export type LateFeeRule = {
   graceDays: number
   flatCents: number
   percentBps: number
+  interestRateApr: number
 }
 
 export function ruleForTenant(tenantId: string): LateFeeRule {
   const row = asRow(
     getDb()
-      .prepare("SELECT tenant_id, grace_days, flat_cents, percent_bps FROM late_fee_rules WHERE tenant_id = ?")
+      .prepare(
+        "SELECT tenant_id, grace_days, flat_cents, percent_bps, interest_rate_apr FROM late_fee_rules WHERE tenant_id = ?",
+      )
       .get(tenantId),
   )
-  if (!row) return { tenantId, graceDays: 5, flatCents: 0, percentBps: 0 }
+  if (!row) return { tenantId, graceDays: 5, flatCents: 0, percentBps: 0, interestRateApr: 18 }
   return {
     tenantId: String(row.tenant_id),
     graceDays: Number(row.grace_days),
     flatCents: Number(row.flat_cents),
     percentBps: Number(row.percent_bps),
+    interestRateApr: Number(row.interest_rate_apr ?? 18),
   }
 }
 
@@ -2908,6 +2972,8 @@ export function decideApplication(
     return { ok: false as const, error: "That application is already decided." }
   }
   const deniedIds: string[] = []
+  let inviteToken: string | null = null
+  let leaseId: string | null = null
   transaction((tx) => {
     tx.prepare("UPDATE applications SET status = ? WHERE id = ? AND tenant_id = ?").run(
       decision,
@@ -2939,6 +3005,32 @@ export function decideApplication(
       const amount = unitMonthlyRentCents(unit)
       const rentId = crypto.randomUUID()
       const now = new Date().toISOString()
+      leaseId = crypto.randomUUID()
+      inviteToken = crypto.randomUUID().replace(/-/g, "")
+      tx.prepare(
+        `INSERT INTO leases (id, tenant_id, unit_id, occupant_id, application_id, status, started_on, created_at)
+         VALUES (?, ?, ?, ?, ?, 'active', ?, ?)`,
+      ).run(
+        leaseId,
+        tenantId,
+        application.unitId,
+        application.applicantId,
+        application.id,
+        todayISO(),
+        now,
+      )
+      tx.prepare(
+        `INSERT INTO occupant_invites (id, tenant_id, lease_id, occupant_id, token, email, created_at, accepted_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
+      ).run(
+        crypto.randomUUID(),
+        tenantId,
+        leaseId,
+        application.applicantId,
+        inviteToken,
+        application.email,
+        now,
+      )
       tx.prepare(
         `INSERT INTO ledger_entries (
           id, tenant_id, unit_id, user_id, kind, description, amount_cents, status, due_on, created_at, source_id
@@ -3026,7 +3118,7 @@ export function decideApplication(
       }
     }
   })
-  return { ok: true as const, application, deniedIds }
+  return { ok: true as const, application, deniedIds, inviteToken, leaseId }
 }
 
 export function setProviderApproval(tenantId: string, providerId: string, status: "approved" | "rejected") {
@@ -3486,14 +3578,19 @@ export function unbindUnitMesh(
 
 export function saveLateFeeRule(
   tenantId: string,
-  rule: { graceDays: number; flatCents: number; percentBps: number },
+  rule: { graceDays: number; flatCents: number; percentBps: number; interestRateApr?: number },
 ) {
+  const interest = rule.interestRateApr ?? 18
   getDb()
     .prepare(
-      `INSERT INTO late_fee_rules (tenant_id, grace_days, flat_cents, percent_bps) VALUES (?, ?, ?, ?)
-       ON CONFLICT(tenant_id) DO UPDATE SET grace_days = excluded.grace_days, flat_cents = excluded.flat_cents, percent_bps = excluded.percent_bps`,
+      `INSERT INTO late_fee_rules (tenant_id, grace_days, flat_cents, percent_bps, interest_rate_apr) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(tenant_id) DO UPDATE SET
+         grace_days = excluded.grace_days,
+         flat_cents = excluded.flat_cents,
+         percent_bps = excluded.percent_bps,
+         interest_rate_apr = excluded.interest_rate_apr`,
     )
-    .run(tenantId, rule.graceDays, rule.flatCents, rule.percentBps)
+    .run(tenantId, rule.graceDays, rule.flatCents, rule.percentBps, interest)
 }
 
 export function assessLateFees(tenantId: string) {
@@ -4352,7 +4449,9 @@ export type ShopOrderStatus =
   | "cancelled"
   | "refunded"
 
+/** @deprecated Prefer LeaseRecord from occupant-portal; kept as shop-shaped alias. */
 export type OccupantLease = {
+  id?: string
   tenantId: string
   tenantName: string
   propertyId: string
@@ -4421,8 +4520,34 @@ export type ShopOrderRecord = {
   }[]
 }
 
-/** Active leases = approved applications (occupant portal gate for /shop). */
+/** Active leases from the leases table (Slice C). Falls back to approved applications. */
 export function leasesForOccupant(userId: string): OccupantLease[] {
+  const fromLeases = asRows(
+    getDb()
+      .prepare(
+        `SELECT l.id, l.application_id, l.tenant_id, t.name AS tenant_name,
+                p.id AS property_id, p.name AS property_name, p.slug AS property_slug,
+                u.id AS unit_id, u.code AS unit_code
+         FROM leases l
+         JOIN tenants t ON t.id = l.tenant_id
+         JOIN units u ON u.id = l.unit_id
+         JOIN properties p ON p.id = u.property_id
+         WHERE l.occupant_id = ? AND l.status = 'active'
+         ORDER BY l.started_on DESC`,
+      )
+      .all(userId),
+  ).map((row) => ({
+    id: String(row.id),
+    tenantId: String(row.tenant_id),
+    tenantName: String(row.tenant_name),
+    propertyId: String(row.property_id),
+    propertyName: String(row.property_name),
+    propertySlug: String(row.property_slug),
+    unitId: String(row.unit_id),
+    unitCode: String(row.unit_code),
+    applicationId: String(row.application_id),
+  }))
+  if (fromLeases.length > 0) return fromLeases
   return asRows(
     getDb()
       .prepare(
@@ -5906,3 +6031,25 @@ export function packageUsage(tenantId: string) {
   }
 }
 
+
+/* ─── Slice C occupant portal (domain helpers) ─────────────────────────── */
+export {
+  acceptOccupantInvite,
+  acknowledgeReminder,
+  accrueInterest,
+  completeDemoEnvelope,
+  createAndSendEnvelope,
+  createTicket,
+  enqueueRentReminders,
+  envelopesForOccupant,
+  envelopesForTenant,
+  hasActiveLease,
+  inviteByToken,
+  leasesForTenant,
+  ticketsForOccupant,
+  ticketsForTenant,
+  transitionTicket,
+  type EnvelopeRow,
+  type LeaseRecord,
+  type PortalTicketRecord,
+} from "@/lib/occupant-portal"
