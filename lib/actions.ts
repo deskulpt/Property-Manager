@@ -32,15 +32,24 @@ import {
   verifyCustomDomain,
   createJob,
   createMarketDraft,
+  acceptOccupantInvite,
+  acknowledgeReminder,
+  accrueInterest,
+  completeDemoEnvelope,
+  createAndSendEnvelope,
+  createTicket,
   decideApplication,
+  enqueueRentReminders,
   getInviteByToken,
   getUser,
+  hasActiveLease,
   inviteLandlord,
   isPublicFormCountry,
   landlordIds,
   openApplicationTenants,
   payDue,
   publicFormCountries,
+  transitionTicket,
   addFloorLevel,
   bindUnitMesh,
   saveBuildingModel,
@@ -76,7 +85,7 @@ import {
   getReferrerByUserId,
   recordReferralAttribution,
 } from "@/lib/db"
-import { TRADES } from "@/lib/format"
+import { TRADES, type TicketCategory, type TicketStatus } from "@/lib/format"
 import {
   isSelfServePlan,
   packageHasAskEasy,
@@ -959,8 +968,16 @@ export async function reviewApplication(formData: FormData) {
   notify({
     userId: result.application.applicantId,
     title: `Application ${verb}`,
-    body: `${user.tenantName ?? "Your landlord"} ${verb} the application for Unit ${result.application.unitCode}.`,
-    href: decision === "approved" ? "/account/payments" : "/account",
+    body:
+      decision === "approved" && result.inviteToken
+        ? `${user.tenantName ?? "Your landlord"} approved Unit ${result.application.unitCode}. Open your portal invite to unlock dues and tickets.`
+        : `${user.tenantName ?? "Your landlord"} ${verb} the application for Unit ${result.application.unitCode}.`,
+    href:
+      decision === "approved" && result.inviteToken
+        ? `/portal/invite/${result.inviteToken}`
+        : decision === "approved"
+          ? "/account/payments"
+          : "/account",
   })
   for (const applicantId of result.deniedIds) {
     notify({
@@ -980,6 +997,9 @@ export async function reviewApplication(formData: FormData) {
     "/landlord",
     "/landlord/applications",
     "/landlord/ledger",
+    "/landlord/tickets",
+    "/landlord/esign",
+    "/portal",
     "/inbox",
   ])
 }
@@ -2717,4 +2737,191 @@ export async function acceptInviteAction(token: string) {
 
 export async function previewInvite(token: string) {
   return getInviteByToken(token)
+}
+
+/* ─── Slice C portal ───────────────────────────────────────────────────── */
+
+export async function acceptPortalInvite(token: string) {
+  const user = await getSessionUser()
+  if (!user || user.role !== "applicant") {
+    return { error: "Switch to the invited applicant identity first." }
+  }
+  const result = acceptOccupantInvite(token, user.id)
+  if (!result.ok) return { error: result.error }
+  notify({
+    userId: user.id,
+    title: result.already ? "Portal already open" : "Occupant portal opened",
+    body: result.already
+      ? "Your lease portal was already accepted. Dues, tickets, and documents are ready."
+      : "Welcome to your occupant portal. Review dues, file tickets, and complete demo e-sign.",
+    href: "/portal",
+  })
+  refresh(["/portal", "/portal/ledger", "/portal/tickets", "/portal/documents", "/account", "/inbox"])
+  redirect("/portal?notice=Portal+ready.+Your+active+lease+is+on+this+desk.")
+}
+
+export async function submitTicket(_prev: ApplyState, formData: FormData): Promise<ApplyState> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "applicant" || !hasActiveLease(user.id)) {
+    return { error: "An active lease is required to file a ticket.", fieldErrors: {} }
+  }
+  const parsed = z
+    .object({
+      leaseId: z.string().min(1),
+      category: z.enum(["maintenance", "billing", "noise", "access", "other"]),
+      subject: z.string().trim().min(3, "Give the ticket a short subject"),
+      body: z.string().trim().min(5, "Describe the issue"),
+      photoName: z.string().trim().optional(),
+    })
+    .safeParse({
+      leaseId: formData.get("leaseId"),
+      category: formData.get("category"),
+      subject: formData.get("subject"),
+      body: formData.get("body"),
+      photoName: formData.get("photoName") || undefined,
+    })
+  if (!parsed.success) {
+    return { error: "Check the ticket fields.", fieldErrors: issues(parsed.error) }
+  }
+  const result = createTicket({
+    occupantId: user.id,
+    leaseId: parsed.data.leaseId,
+    category: parsed.data.category as TicketCategory,
+    subject: parsed.data.subject,
+    body: parsed.data.body,
+    photoName: parsed.data.photoName || null,
+  })
+  if (!result.ok) return { error: result.error, fieldErrors: {} }
+  notify({
+    userId: user.id,
+    title: "Ticket filed",
+    body: `${parsed.data.subject} is open with your landlord.`,
+    href: "/portal/tickets",
+  })
+  notifyMany(
+    landlordIds(result.tenantId).map((id) => ({
+      userId: id,
+      title: "New ticket",
+      body: `${user.name} filed: ${parsed.data.subject}.`,
+      href: "/landlord/tickets",
+    })),
+  )
+  refresh(["/portal", "/portal/tickets", "/landlord/tickets", "/inbox"])
+  return { error: null, fieldErrors: {} }
+}
+
+export async function submitTicketTransition(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user) return
+  const next = String(formData.get("next") ?? "") as TicketStatus
+  const ticketId = String(formData.get("ticketId") ?? "")
+  const result = transitionTicket({
+    ticketId,
+    actorId: user.id,
+    actorRole: user.role,
+    tenantId: user.tenantId,
+    next,
+  })
+  if (!result.ok) return
+  const recipient =
+    user.role === "landlord_admin" ? result.ticket.occupantId : landlordIds(result.ticket.tenantId)[0]
+  if (recipient) {
+    notify({
+      userId: recipient,
+      title: `Ticket ${next.replace("_", " ")}`,
+      body: `${result.ticket.subject} is now ${next.replace("_", " ")}.`,
+      href: user.role === "landlord_admin" ? "/portal/tickets" : "/landlord/tickets",
+    })
+  }
+  refresh(["/portal/tickets", "/landlord/tickets", "/inbox"])
+}
+
+export async function submitInterestAccrual() {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) return
+  const touched = accrueInterest(user.tenantId)
+  if (touched > 0) {
+    notify({
+      userId: user.id,
+      title: "Interest accrued",
+      body: `Updated interest on ${touched} overdue rent line${touched === 1 ? "" : "s"} (simple daily after grace).`,
+      href: "/landlord/ledger",
+    })
+  }
+  refresh(["/landlord/ledger", "/portal", "/portal/ledger", "/account/payments", "/inbox"])
+}
+
+export async function submitRentReminders() {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) return
+  const { created, notices } = enqueueRentReminders(user.tenantId)
+  if (notices.length > 0) notifyMany(notices)
+  if (created > 0) {
+    notify({
+      userId: user.id,
+      title: "Reminders queued",
+      body: `${created} rent reminder${created === 1 ? "" : "s"} enqueued for today (T−3 / T+1). Demo channels only.`,
+      href: "/landlord/reminders",
+    })
+  }
+  refresh(["/landlord/reminders", "/portal", "/inbox"])
+}
+
+export async function submitReminderAck(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user || user.role !== "applicant") return
+  const lineId = String(formData.get("lineId") ?? "")
+  const result = acknowledgeReminder(user.id, lineId)
+  if (!result.ok) return
+  refresh(["/portal", "/inbox"])
+}
+
+export async function submitSendEnvelope(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) return
+  const leaseId = String(formData.get("leaseId") ?? "")
+  const documentName = String(formData.get("documentName") ?? "").trim()
+  if (!leaseId || documentName.length < 3) return
+  const result = createAndSendEnvelope({
+    tenantId: user.tenantId,
+    leaseId,
+    documentName,
+  })
+  if (!result.ok) return
+  notify({
+    userId: result.occupantId,
+    title: "Document ready to sign",
+    body: `${documentName} awaits your demo signature.`,
+    href: "/portal/documents",
+  })
+  notify({
+    userId: user.id,
+    title: "E-sign packet sent",
+    body: `${documentName} sent via demoESign (no DocuSign network call).`,
+    href: "/landlord/esign",
+  })
+  refresh(["/landlord/esign", "/portal/documents", "/inbox"])
+}
+
+export async function submitDemoSign(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user || user.role !== "applicant") return
+  const envelopeId = String(formData.get("envelopeId") ?? "")
+  const result = completeDemoEnvelope(envelopeId, user.id)
+  if (!result.ok) return
+  notify({
+    userId: user.id,
+    title: "Document signed (demo)",
+    body: "Local stamp written. No DocuSign network call was made.",
+    href: "/portal/documents",
+  })
+  notifyMany(
+    landlordIds(result.tenantId).map((id) => ({
+      userId: id,
+      title: "E-sign completed",
+      body: `${user.name} completed a demo signature.`,
+      href: "/landlord/esign",
+    })),
+  )
+  refresh(["/portal/documents", "/landlord/esign", "/inbox"])
 }
