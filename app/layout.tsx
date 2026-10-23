@@ -94,7 +94,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           unread={unread}
           role={session?.role ?? null}
           signedIn={Boolean(session)}
-          demoSwitcher={false}
+          demoSwitcher={demoOn && !showAdminBar}
         />
         <div className="flex-1">{children}</div>
         <footer className="border-t border-white/10 bg-brand-deep px-4 py-12 text-paper/65 md:px-8">
