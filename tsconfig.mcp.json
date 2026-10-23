@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "paths": {
+      "@/*": ["./*"],
+      "server-only": ["./test/stubs/server-only.ts"]
+    },
+    "plugins": []
+  },
+  "include": [
+    "lib/mcp/**/*.ts",
+    "lib/db.ts",
+    "lib/**/*.ts",
+    "packages/easyrental-mcp/src/**/*.ts",
+    "scripts/mcp-stdio.ts"
+  ],
+  "exclude": ["node_modules", ".next", "agents"]
+}

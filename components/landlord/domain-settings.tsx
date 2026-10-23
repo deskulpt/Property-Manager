@@ -9,7 +9,9 @@ import {
 } from "@/lib/actions"
 import type { CustomDomainRecord } from "@/lib/db"
 import type { PackageTier } from "@/lib/db"
+import { packageHasCustomDomain, subscribeHref } from "@/lib/plans"
 import { SubmitButton } from "@/components/submit-button"
+import Link from "next/link"
 
 export function DomainSettings({
   packageTier,
@@ -25,19 +27,22 @@ export function DomainSettings({
   const [activeId, setActiveId] = useState<string | null>(domains[0]?.id ?? null)
   const active = domains.find((d) => d.id === activeId) ?? domains[0] ?? null
 
-  if (packageTier !== "pro") {
+  if (!packageHasCustomDomain(packageTier)) {
     return (
       <div className="border border-ink/10 bg-paper-2 p-4">
-        <p className="font-sans text-lg font-extrabold">Custom domain (PRO)</p>
+        <p className="font-sans text-lg font-extrabold">Custom domain (Pro)</p>
         <p className="mt-2 text-sm text-ink-soft">
           Serve public listings on your own hostname (for example{" "}
-          <span className="font-mono text-ink">listings.yourcompany.com</span>). Starter organisations
-          see this upgrade path; switch to Nadia (BBM · PRO) in the Demo identity menu to try the
-          full connect flow, or ask platform staff to move you to PRO.
+          <span className="font-mono text-ink">listings.yourcompany.com</span>). Basic and Growth
+          organisations see this upgrade path — switch to Nadia (BBM · Pro) in the Demo identity menu
+          to try the full connect flow, or upgrade below.
         </p>
-        <p className="mt-4 inline-block border border-terra/40 bg-terra/10 px-3 py-2 text-sm font-semibold text-terra">
-          Upgrade to PRO to unlock custom domains
-        </p>
+        <Link
+          href={subscribeHref("pro", { from: "settings-domain" })}
+          className="mt-4 inline-block border border-terra/40 bg-terra/10 px-3 py-2 text-sm font-semibold text-terra hover:bg-terra/20"
+        >
+          Upgrade to Pro for custom domains
+        </Link>
       </div>
     )
   }

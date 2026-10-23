@@ -97,20 +97,34 @@ test.describe("Easy Rental critical paths (India demo)", () => {
     }
   })
 
-  test("demo role switcher smoke", async ({ page }) => {
+  test("public header has no demo switcher (L0/L1 sticky bar only)", async ({ page }) => {
     await page.goto("/", { waitUntil: "domcontentloaded" })
     await expectPageOk(page)
+    await expect(page.getByTestId("demo-identity")).toHaveCount(0)
+    await expect(page.getByTestId("admin-session-bar")).toHaveCount(0)
+  })
 
-    const switcher = page.getByTestId("demo-identity")
-    test.skip((await switcher.count()) === 0, "demo identity switcher not present")
-
-    await expect(switcher).toBeVisible()
-    // Smoke only: options exist; do not assert brittle option labels.
-    const options = switcher.locator("option")
-    expect(await options.count()).toBeGreaterThan(1)
+  test("pricing page + demo subscribe (Growth)", async ({ page }) => {
+    await page.goto("/pricing", { waitUntil: "domcontentloaded" })
+    await expectPageOk(page)
+    await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible()
+    await expect(page.locator("body")).toContainText(/No Broker/i)
+    await expect(page.getByTestId("pricing-occupant-strip")).toBeVisible()
+    await expect(page.getByTestId("plan-card-starter")).toContainText(/₹499|499/)
+    await expect(page.getByTestId("plan-card-growth")).toContainText(/₹1,499|1,499|1499/)
+    await expect(page.getByTestId("plan-card-pro")).toContainText(/₹2,999|2,999|2999/)
+    await expect(page.getByTestId("pricing-gst-note")).toBeVisible()
 
     await setDemoIdentity(page, "u_nadia")
-    await page.goto("/", { waitUntil: "domcontentloaded" })
-    await expect(page.getByTestId("demo-identity")).toHaveValue("u_nadia")
+    await page.goto("/pricing/subscribe?plan=growth&from=e2e", {
+      waitUntil: "domcontentloaded",
+    })
+    await expectPageOk(page)
+    await expect(page.getByTestId("subscribe-form")).toBeVisible()
+    await expect(page.getByTestId("subscribe-seats")).toBeVisible()
+    await page.getByRole("button", { name: /activate growth/i }).click()
+    await page.waitForURL(/\/landlord/, { timeout: 20_000 })
+    await expectPageOk(page)
   })
 })
+

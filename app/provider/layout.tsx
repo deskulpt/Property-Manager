@@ -7,8 +7,8 @@ export default async function ProviderLayout({ children }: { children: React.Rea
   if (!user || user.role !== "service_provider") {
     return (
       <RoleGate
-        title="This desk is for a service provider"
-        body="Use the Demo identity switcher and pick Luis Ortega (electrician, Bhiwandi) for the seeded weather-seal job. Real provider accounts are not seeded."
+        title="L5 service provider desk"
+        body="This is the L5 Service Provider desk. Demo: Luis Ortega (Bhiwandi) or Vikram Deshmukh (Hinjewadi / partner network). Public partner apply stays on /partners — activated trades land here."
       />
     )
   }

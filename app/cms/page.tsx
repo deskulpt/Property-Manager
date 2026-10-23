@@ -25,6 +25,13 @@ export default async function CmsHomePage() {
     caps.personas.includes("providers")
       ? { href: "/cms/providers", title: "Providers", body: "Verify trades and approve them for a landlord’s area." }
       : null,
+    caps.personas.includes("providers")
+      ? {
+          href: "/cms/partners",
+          title: "Partner network",
+          body: "Vet affiliates and service providers (docs → ID → area → active). L5 desk is /provider after activate.",
+        }
+      : null,
     caps.personas.includes("listings")
       ? { href: "/cms/listings", title: "Listings readiness", body: "Floor plans, 360, and walkthrough coverage across the catalog." }
       : null,
@@ -33,6 +40,13 @@ export default async function CmsHomePage() {
       : null,
     caps.personas.includes("languages")
       ? { href: "/cms/languages", title: "Languages", body: "English source files. Add a language; translation waits without an API key." }
+      : null,
+    caps.personas.includes("referrals")
+      ? {
+          href: "/cms/referrals",
+          title: "Refer & Earn",
+          body: "Advance indication statuses and review consent timestamps. Demo ledger only.",
+        }
       : null,
   ].filter(Boolean) as { href: string; title: string; body: string }[]
 

@@ -32,11 +32,27 @@ import {
   MARKET_CHECKLIST_LABELS,
   type MarketChecklistKey,
 } from "@/lib/market-checklist"
+import { parsePlanId, type PlanId } from "@/lib/plans"
+import { normalizeRoleLevel, type RoleLevel } from "@/lib/role-level"
 import { seedDemoDatabase } from "@/lib/seed-demo"
 import { decryptSecret, encryptSecret, secretLast4 } from "@/lib/shop-crypto"
 import { resolveShopPaymentProvider } from "@/lib/shop-payments"
+import {
+  PUBLISH_REWARD_PAISE,
+  addAttributionDays,
+  canTransition,
+  fifteenthOfNextMonth,
+  leaseRewardPaise,
+  normalizePhone,
+  phonesEqual,
+  type IndicationPath,
+  type IndicationStatus,
+  type PropertyType,
+  type RewardKind,
+  type RewardStatus,
+} from "@/lib/referrals"
 
-const SEED_VERSION = "15"
+const SEED_VERSION = "18"
 
 function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
@@ -70,13 +86,16 @@ function withDbInitLock<T>(fn: () => T): T {
   }
 }
 
-export type PackageTier = "starter" | "pro"
+/** @deprecated Prefer PlanId from lib/plans — re-exported for existing call sites. */
+export type PackageTier = PlanId
 
 export type SessionUser = {
   id: string
   name: string
   email: string
   role: Role
+  /** L0–L5 privilege ladder (see lib/role-level.ts). */
+  roleLevel: RoleLevel
   tenantId: string | null
   company: string | null
   trade: string | null
@@ -88,7 +107,7 @@ export type SessionUser = {
   phone: string | null
   displayCurrency: DisplayCurrency
   hasPassword: boolean
-  /** Fixture identity; only these appear in the demo switcher. */
+  /** Fixture identity; only these appear in the staff impersonation switcher. */
   isDemo: boolean
   tenantIsDemo: boolean
 }
@@ -156,6 +175,7 @@ export type PropertyRecord = {
   modelPath: string | null
   latitude: number | null
   longitude: number | null
+  pinCode: string | null
   floors: FloorRecord[]
   units: UnitRecord[]
 }
@@ -185,11 +205,13 @@ function num(row: Record<string, unknown>, key: string) {
 
 function mapUser(row: Record<string, unknown>): SessionUser {
   const pkg = str(row, "tenant_package")
+  const role = String(row.role) as Role
   return {
     id: String(row.id),
     name: String(row.name),
     email: String(row.email),
-    role: String(row.role) as Role,
+    role,
+    roleLevel: normalizeRoleLevel(row.role_level, role),
     tenantId: str(row, "tenant_id"),
     company: str(row, "company"),
     trade: str(row, "trade"),
@@ -197,7 +219,7 @@ function mapUser(row: Record<string, unknown>): SessionUser {
     providerVerified: Number(row.provider_verified) === 1,
     tenantName: str(row, "tenant_name"),
     tenantKind: (str(row, "tenant_kind") as "landlord" | "platform" | null) ?? null,
-    tenantPackage: pkg === "pro" || pkg === "starter" ? pkg : null,
+    tenantPackage: pkg ? parsePlanId(pkg) : null,
     phone: str(row, "phone"),
     displayCurrency: (str(row, "display_currency") as DisplayCurrency | null) ?? "INR",
     hasPassword: Boolean(str(row, "password_hash")),
@@ -249,9 +271,11 @@ const USER_SQL = `
   SELECT u.id, u.name, u.email, u.role, u.tenant_id, u.company, u.trade,
          u.service_area, u.provider_verified, u.phone, u.password_hash,
          COALESCE(u.is_demo, 0) AS is_demo,
+         COALESCE(u.role_level, 5) AS role_level,
          t.name AS tenant_name, t.kind AS tenant_kind,
          COALESCE(t.display_currency, 'INR') AS display_currency,
          COALESCE(t.package, 'starter') AS tenant_package,
+         COALESCE(t.status, 'active') AS tenant_status,
          COALESCE(t.is_demo, 0) AS tenant_is_demo
   FROM users u
   LEFT JOIN tenants t ON t.id = u.tenant_id
@@ -267,6 +291,7 @@ function createSchema(db: Sql) {
       kind TEXT NOT NULL DEFAULT 'landlord',
       display_currency TEXT NOT NULL DEFAULT 'INR',
       package TEXT NOT NULL DEFAULT 'starter',
+      status TEXT NOT NULL DEFAULT 'active',
       is_demo INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE users (
@@ -274,6 +299,7 @@ function createSchema(db: Sql) {
       name TEXT NOT NULL,
       email TEXT NOT NULL UNIQUE,
       role TEXT NOT NULL,
+      role_level INTEGER NOT NULL DEFAULT 5,
       tenant_id TEXT,
       company TEXT,
       trade TEXT,
@@ -331,7 +357,8 @@ function createSchema(db: Sql) {
       floor_plan_path TEXT,
       model_path TEXT,
       latitude REAL,
-      longitude REAL
+      longitude REAL,
+      pin_code TEXT
     );
     CREATE TABLE floors (
       id TEXT PRIMARY KEY,
@@ -651,6 +678,107 @@ function createSchema(db: Sql) {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE referrers (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      name TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      email TEXT NOT NULL,
+      code TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE indications (
+      id TEXT PRIMARY KEY,
+      referrer_id TEXT NOT NULL,
+      path TEXT NOT NULL,
+      status TEXT NOT NULL,
+      property_address TEXT NOT NULL,
+      property_city TEXT NOT NULL,
+      property_pin TEXT NOT NULL,
+      property_type TEXT NOT NULL,
+      approx_sqft INTEGER,
+      asking_rent_paise INTEGER,
+      landlord_name TEXT NOT NULL,
+      landlord_phone TEXT NOT NULL,
+      landlord_email TEXT,
+      consent_at TEXT,
+      attribution_expires_at TEXT NOT NULL,
+      listing_unit_id TEXT,
+      leased_rent_paise INTEGER,
+      deactivated_reason TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE referral_rewards (
+      id TEXT PRIMARY KEY,
+      indication_id TEXT NOT NULL,
+      referrer_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      amount_paise INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      available_on TEXT NOT NULL,
+      paid_at TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE referral_attribution (
+      id TEXT PRIMARY KEY,
+      code TEXT NOT NULL,
+      first_touch_at TEXT NOT NULL,
+      landlord_user_id TEXT,
+      tenant_id TEXT,
+      indication_id TEXT,
+      expires_at TEXT NOT NULL
+    );
+    CREATE TABLE partner_applications (
+      id TEXT PRIMARY KEY,
+      track TEXT NOT NULL,
+      subtype TEXT NOT NULL,
+      status TEXT NOT NULL,
+      name TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      email TEXT NOT NULL,
+      pan TEXT,
+      aadhaar_last4 TEXT,
+      aadhaar_consent_at TEXT,
+      gstin TEXT,
+      licence_ref TEXT,
+      docs_json TEXT NOT NULL DEFAULT '[]',
+      notes_staff TEXT NOT NULL DEFAULT '',
+      id_check_result TEXT NOT NULL DEFAULT 'pending',
+      demand_ok INTEGER NOT NULL DEFAULT 0,
+      user_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE partner_service_areas (
+      id TEXT PRIMARY KEY,
+      application_id TEXT NOT NULL,
+      city_slug TEXT,
+      pin_prefix TEXT,
+      radius_km REAL,
+      home_lat REAL,
+      home_lng REAL,
+      active INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE partner_referrals (
+      id TEXT PRIMARY KEY,
+      referrer_name TEXT NOT NULL,
+      referrer_phone TEXT NOT NULL,
+      referrer_email TEXT NOT NULL,
+      referred_name TEXT NOT NULL,
+      referred_phone TEXT NOT NULL,
+      referred_email TEXT NOT NULL,
+      track TEXT NOT NULL,
+      subtype TEXT NOT NULL,
+      city TEXT NOT NULL,
+      pin TEXT NOT NULL,
+      status TEXT NOT NULL,
+      converted_application_id TEXT,
+      consent_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX idx_partner_apps_status ON partner_applications(status, track);
+    CREATE INDEX idx_partner_areas_app ON partner_service_areas(application_id);
     CREATE INDEX idx_units_tenant ON units(tenant_id);
     CREATE INDEX idx_units_property ON units(property_id);
     CREATE INDEX idx_floors_property ON floors(property_id);
@@ -673,6 +801,9 @@ function createSchema(db: Sql) {
     CREATE INDEX idx_listing_drafts_tenant ON listing_drafts(tenant_id, updated_at);
     CREATE INDEX idx_lease_parties_tenant ON lease_parties(tenant_id, unit_id);
     CREATE INDEX idx_lease_agreements_tenant ON lease_agreements(tenant_id, status, updated_at);
+    CREATE INDEX idx_indications_referrer ON indications(referrer_id, status);
+    CREATE INDEX idx_rewards_referrer ON referral_rewards(referrer_id, status);
+    CREATE INDEX idx_attribution_code ON referral_attribution(code);
   `)
 }
 
@@ -706,6 +837,13 @@ function reset(db: Sql) {
     "properties",
     "provider_approvals",
     "consent_events",
+    "referral_rewards",
+    "referral_attribution",
+    "indications",
+    "referrers",
+    "partner_service_areas",
+    "partner_referrals",
+    "partner_applications",
     "users",
     "tenants",
     "market_checklist_items",
@@ -725,6 +863,425 @@ function reset(db: Sql) {
 
 function seed(db: Sql) {
   seedDemoDatabase(db)
+  seedReferEarn(db)
+  seedPartnerNetwork(db)
+}
+
+function seedReferEarn(db: Sql) {
+  const now = "2026-10-01T10:00:00.000Z"
+  db.prepare(
+    `INSERT INTO referrers (id, user_id, name, phone, email, code, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    "r_asha",
+    "u_asha",
+    "Asha Reddy",
+    "+919800001001",
+    "asha.reddy@refer.example",
+    "EASY-ASHA",
+    now,
+  )
+
+  const indication = db.prepare(
+    `INSERT INTO indications (
+      id, referrer_id, path, status, property_address, property_city, property_pin,
+      property_type, approx_sqft, asking_rent_paise, landlord_name, landlord_phone,
+      landlord_email, consent_at, attribution_expires_at, listing_unit_id,
+      leased_rent_paise, deactivated_reason, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+
+  // Pune warehouse — published + publish reward payable
+  indication.run(
+    "ind_pune",
+    "r_asha",
+    "submit",
+    "published",
+    "Plot 12, Chakan MIDC Phase II",
+    "Pune",
+    "410501",
+    "warehouse",
+    48000,
+    2_880_000_00,
+    "Kiran Deshmukh",
+    "+919811110001",
+    "kiran@deshmukhparks.example",
+    "2026-07-15T08:00:00.000Z",
+    "2026-10-13",
+    null,
+    null,
+    null,
+    "2026-07-15T08:00:00.000Z",
+    "2026-09-20T12:00:00.000Z",
+  )
+
+  // Chennai shed — awaiting media
+  indication.run(
+    "ind_chennai",
+    "r_asha",
+    "submit",
+    "awaiting_media",
+    "41 SIPCOT Ambattur Industrial Estate",
+    "Chennai",
+    "600058",
+    "warehouse",
+    22000,
+    1_320_000_00,
+    "Lakshmi Iyer",
+    "+919444220011",
+    null,
+    "2026-09-10T09:00:00.000Z",
+    "2026-12-09",
+    null,
+    null,
+    null,
+    "2026-09-10T09:00:00.000Z",
+    "2026-09-28T11:00:00.000Z",
+  )
+
+  // Bengaluru office — prospecting
+  indication.run(
+    "ind_blr",
+    "r_asha",
+    "link",
+    "prospecting",
+    "7th floor, Embassy TechZone, Whitefield",
+    "Bengaluru",
+    "560066",
+    "office",
+    12500,
+    1_875_000_00,
+    "Arjun Mehta",
+    "+919900334455",
+    "arjun@mehtacap.example",
+    "2026-09-22T07:30:00.000Z",
+    "2026-12-21",
+    null,
+    null,
+    null,
+    "2026-09-22T07:30:00.000Z",
+    "2026-09-25T10:00:00.000Z",
+  )
+
+  // Hyderabad yard — leased + publish paid_demo + lease accrued
+  indication.run(
+    "ind_hyd",
+    "r_asha",
+    "submit",
+    "leased",
+    "Yard B, Jeedimetla Industrial Area",
+    "Hyderabad",
+    "500055",
+    "industrial_park",
+    36000,
+    1_800_000_00,
+    "Sneha Rao",
+    "+919848887766",
+    "sneha@raoyards.example",
+    "2026-05-01T06:00:00.000Z",
+    "2026-07-30",
+    null,
+    1_800_000_00,
+    null,
+    "2026-05-01T06:00:00.000Z",
+    "2026-08-18T14:00:00.000Z",
+  )
+
+  // Discarded dud
+  indication.run(
+    "ind_dud",
+    "r_asha",
+    "submit",
+    "discarded",
+    "Unverified plot near NH-48",
+    "Nashik",
+    "422001",
+    "other",
+    null,
+    null,
+    "Unknown Owner",
+    "+919700009999",
+    null,
+    "2026-08-01T12:00:00.000Z",
+    "2026-10-30",
+    null,
+    null,
+    null,
+    "2026-08-01T12:00:00.000Z",
+    "2026-08-12T09:00:00.000Z",
+  )
+
+  const reward = db.prepare(
+    `INSERT INTO referral_rewards (
+      id, indication_id, referrer_id, kind, amount_paise, status, available_on, paid_at, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+  // Pune publish → payable (event Sep → payable 15 Oct)
+  reward.run(
+    "rr_pune_pub",
+    "ind_pune",
+    "r_asha",
+    "publish",
+    200_000,
+    "payable",
+    "2026-10-15",
+    null,
+    "2026-09-20T12:00:00.000Z",
+  )
+  // Hyd publish → paid_demo
+  reward.run(
+    "rr_hyd_pub",
+    "ind_hyd",
+    "r_asha",
+    "publish",
+    200_000,
+    "paid_demo",
+    "2026-07-15",
+    "2026-07-15T10:00:00.000Z",
+    "2026-06-10T12:00:00.000Z",
+  )
+  // Hyd lease → accrued (5% of ₹18,00,000 = ₹90,000)
+  reward.run(
+    "rr_hyd_lease",
+    "ind_hyd",
+    "r_asha",
+    "lease",
+    9_000_000,
+    "accrued",
+    "2026-09-15",
+    null,
+    "2026-08-18T14:00:00.000Z",
+  )
+
+  db.prepare(
+    `INSERT INTO referral_attribution (id, code, first_touch_at, landlord_user_id, tenant_id, indication_id, expires_at)
+     VALUES (?, ?, ?, NULL, NULL, NULL, ?)`,
+  ).run("attr_demo", "EASY-ASHA", "2026-09-22T07:00:00.000Z", "2026-12-21")
+}
+
+
+
+function seedPartnerNetwork(db: Sql) {
+  const nowSeed = "2026-10-01T10:00:00.000Z"
+
+  const pinUpdates: [string, string][] = [
+    ["p_waterman", "421302"],
+    ["p_powai", "400076"],
+    ["p_commissioners", "602105"],
+  ]
+  const pinStmt = db.prepare("UPDATE properties SET pin_code = ? WHERE id = ? AND (pin_code IS NULL OR pin_code = '')")
+  for (const [id, pin] of pinUpdates) pinStmt.run(pin, id)
+
+  const existing = db.prepare("SELECT id FROM properties WHERE id = ?").get("p_pune")
+  if (!existing) {
+    db.prepare(
+      `INSERT INTO properties (
+        id, tenant_id, name, slug, address, area, city_line, total_sqft, segment, subtype,
+        floor_plan_path, model_path, latitude, longitude, pin_code
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      "p_pune",
+      "t_bbm",
+      "BBM Hinjewadi Park",
+      "hinjewadi",
+      "Phase 2, Rajiv Gandhi Infotech Park, Hinjewadi, Pune, Maharashtra 411057",
+      "Hinjewadi",
+      "PUNE · PIN 411057 · 120,000 SF",
+      120000,
+      "warehouse",
+      "logistics_park",
+      "/floorplans/bartley.svg",
+      null,
+      18.5912,
+      73.7389,
+      "411057",
+    )
+    db.prepare(
+      `INSERT INTO floors (id, tenant_id, property_id, label, level_index, plan_path)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run("f_pune_g", "t_bbm", "p_pune", "Ground", 0, "/floorplans/bartley.svg")
+    db.prepare(
+      `INSERT INTO units (
+        id, tenant_id, property_id, floor_id, code, sqft, clear_height, docks, drive_ins, power,
+        rate_psf, rate_basis, rent_amount_minor, attributes, bhk, carpet_sqft,
+        security_deposit_months, maintenance_minor, gst_applicable,
+        status, hotspot_x, hotspot_y, matterport_url, description
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      "u_pune_p1",
+      "t_bbm",
+      "p_pune",
+      "f_pune_g",
+      "P1",
+      24000,
+      "32'",
+      4,
+      2,
+      "400A / 415V",
+      42,
+      "per_sqft_month",
+      null,
+      "{}",
+      null,
+      null,
+      null,
+      null,
+      null,
+      "available",
+      40,
+      45,
+      null,
+      "Demo unit inside Pune 4110* partner catchment.",
+    )
+  }
+
+  const partnerApp = db.prepare(
+    `INSERT INTO partner_applications (
+      id, track, subtype, status, name, phone, email, pan, aadhaar_last4, aadhaar_consent_at,
+      gstin, licence_ref, docs_json, notes_staff, id_check_result, demand_ok, user_id,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+  const partnerArea = db.prepare(
+    `INSERT INTO partner_service_areas (
+      id, application_id, city_slug, pin_prefix, radius_km, home_lat, home_lng, active
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+  )
+
+  partnerApp.run(
+    "pa_elec_pune",
+    "service",
+    "electrician",
+    "active",
+    "Vikram Deshmukh",
+    "+919822334455",
+    "vikram@puneelectric.example",
+    "ABCDE1234F",
+    "4321",
+    nowSeed,
+    null,
+    null,
+    '[{"name":"trade-cert-stub.pdf","kind":"upload_stub"}]',
+    "Seed active — matches Hinjewadi / PIN 4110*",
+    "demo_verified",
+    1,
+    "u_vikram_pune",
+    nowSeed,
+    nowSeed,
+  )
+  partnerArea.run("psa_pune_1", "pa_elec_pune", "Hinjewadi", "4110", 20, 18.5204, 73.8567)
+
+  db.prepare(
+    `INSERT INTO users (id, name, email, role, tenant_id, company, trade, service_area, provider_verified, phone, password_hash, is_demo)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)`,
+  ).run(
+    "u_vikram_pune",
+    "Vikram Deshmukh",
+    "vikram@puneelectric.example",
+    "service_provider",
+    null,
+    "Pune Electric Co",
+    "electrician",
+    "Hinjewadi",
+    1,
+    "+919822334455",
+  )
+  db.prepare("INSERT INTO provider_approvals (tenant_id, user_id, status) VALUES (?, ?, ?)").run(
+    "t_bbm",
+    "u_vikram_pune",
+    "approved",
+  )
+
+  partnerApp.run(
+    "pa_plumb_chennai",
+    "service",
+    "plumber",
+    "area_approval",
+    "Lakshmi Iyer",
+    "+919840012345",
+    "lakshmi@chennaiplumb.example",
+    "FGHIJ5678K",
+    "9988",
+    nowSeed,
+    "33AAAAA0000A1Z5",
+    null,
+    "[]",
+    "Waiting on demand_ok for Chennai PINs",
+    "demo_verified",
+    0,
+    null,
+    nowSeed,
+    nowSeed,
+  )
+  partnerArea.run("psa_chennai_1", "pa_plumb_chennai", "Sriperumbudur", "6021", 25, 12.9675, 79.9473)
+
+  partnerApp.run(
+    "pa_aff_blr",
+    "affiliate",
+    "realtor",
+    "docs_review",
+    "Ananya Rao",
+    "+919900112200",
+    "ananya@raoestates.example",
+    "KLMNO9012P",
+    "1122",
+    nowSeed,
+    null,
+    "KA-RERA-P1234",
+    "[]",
+    "RERA field collected; docs pending",
+    "pending",
+    0,
+    null,
+    nowSeed,
+    nowSeed,
+  )
+  partnerArea.run("psa_blr_1", "pa_aff_blr", "Whitefield", "5600", null, 12.9698, 77.75)
+
+  partnerApp.run(
+    "pa_clean_hyd",
+    "service",
+    "cleaning",
+    "suspended",
+    "Suresh Reddy",
+    "+919848877665",
+    "suresh@hydclean.example",
+    "QRSTU3456V",
+    "5566",
+    nowSeed,
+    null,
+    null,
+    "[]",
+    "Suspended for demo quality flag",
+    "demo_verified",
+    1,
+    null,
+    nowSeed,
+    nowSeed,
+  )
+  partnerArea.run("psa_hyd_1", "pa_clean_hyd", "Hyderabad", "5000", 30, 17.385, 78.4867)
+
+  db.prepare(
+    `INSERT INTO partner_referrals (
+      id, referrer_name, referrer_phone, referrer_email,
+      referred_name, referred_phone, referred_email,
+      track, subtype, city, pin, status, converted_application_id, consent_at, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', NULL, ?, ?)`,
+  ).run(
+    "pr_ncr_elec",
+    "Meera Kapoor",
+    "+919811223344",
+    "meera@kapoor.example",
+    "Rohit Malhotra",
+    "+919811998877",
+    "rohit@ncrelectric.example",
+    "service",
+    "electrician",
+    "Noida",
+    "201301",
+    nowSeed,
+    nowSeed,
+  )
 }
 
 function openDatabase() {
@@ -858,7 +1415,8 @@ export function listSessionUsers() {
            WHEN u.role = 'applicant' THEN 1
            WHEN u.role = 'landlord_admin' THEN 2
            WHEN u.role = 'managing_agent' THEN 3
-           ELSE 4
+           WHEN u.role = 'referrer' THEN 4
+           ELSE 5
          END, u.name`,
       )
       .all(),
@@ -971,6 +1529,7 @@ function mapProperty(row: Record<string, unknown>): PropertyRecord {
     modelPath: str(row, "model_path"),
     latitude: num(row, "latitude"),
     longitude: num(row, "longitude"),
+    pinCode: str(row, "pin_code"),
     floors: floorsFor(id),
     units: unitsFor(id, segment),
   }
@@ -1275,6 +1834,100 @@ export function eligibleProviders(tenantId: string, area: string, trade: string)
   )
 }
 
+/**
+ * Slice M geo gate: partner-network active+demand_ok providers whose catchment
+ * covers the property, unioned with legacy area-matched approved providers.
+ */
+export function eligibleProvidersForProperty(
+  tenantId: string,
+  propertyId: string,
+  trade: Trade,
+): ProviderRecord[] {
+  const property = asRow(
+    getDb()
+      .prepare(
+        `SELECT id, area, pin_code, latitude, longitude, address, city_line
+         FROM properties WHERE id = ? AND tenant_id = ?`,
+      )
+      .get(propertyId, tenantId),
+  )
+  if (!property) return []
+
+  const pin =
+    str(property, "pin_code") ||
+    (String(property.address).match(/\b([1-9][0-9]{5})\b/) || [])[1] ||
+    null
+  const plat = num(property, "latitude")
+  const plng = num(property, "longitude")
+  const areaName = String(property.area)
+
+  const partnerRows = asRows(
+    getDb()
+      .prepare(
+        `SELECT a.id AS app_id, a.user_id, a.name, a.email, a.subtype AS trade,
+                s.city_slug, s.pin_prefix, s.radius_km, s.home_lat, s.home_lng
+         FROM partner_applications a
+         JOIN partner_service_areas s ON s.application_id = a.id AND s.active = 1
+         WHERE a.track = 'service'
+           AND a.status = 'active'
+           AND a.demand_ok = 1
+           AND a.subtype = ?
+           AND a.user_id IS NOT NULL`,
+      )
+      .all(trade),
+  )
+
+  const matchedIds = new Set<string>()
+  const fromPartners: ProviderRecord[] = []
+  for (const row of partnerRows) {
+    const userId = str(row, "user_id")
+    if (!userId || matchedIds.has(userId)) continue
+    const prefix = str(row, "pin_prefix")
+    const city = str(row, "city_slug")?.toLowerCase()
+    const radius = num(row, "radius_km")
+    const hLat = num(row, "home_lat")
+    const hLng = num(row, "home_lng")
+    let covers = false
+    if (prefix && pin && pin.startsWith(prefix)) covers = true
+    if (!covers && city && areaName.toLowerCase() === city) covers = true
+    if (
+      !covers &&
+      radius != null &&
+      radius > 0 &&
+      hLat != null &&
+      hLng != null &&
+      plat != null &&
+      plng != null
+    ) {
+      const toRad = (d: number) => (d * Math.PI) / 180
+      const dLat = toRad(plat - hLat)
+      const dLng = toRad(plng - hLng)
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(hLat)) * Math.cos(toRad(plat)) * Math.sin(dLng / 2) ** 2
+      const km = 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(a)))
+      covers = km <= radius
+    }
+    if (!covers) continue
+    matchedIds.add(userId)
+    fromPartners.push({
+      id: userId,
+      name: String(row.name),
+      email: String(row.email),
+      trade: String(row.trade) as Trade,
+      serviceArea: [city, prefix ? `PIN ${prefix}*` : null].filter(Boolean).join(" · ") || areaName,
+      verified: true,
+      approval: "approved",
+    })
+  }
+
+  const legacy = eligibleProviders(tenantId, areaName, trade).filter((p) => !matchedIds.has(p.id))
+  return [...fromPartners, ...legacy]
+}
+
+
+
+
 export type LedgerRecord = {
   id: string
   tenantId: string
@@ -1471,13 +2124,13 @@ export function createLandlordAccount(input: {
   const pkg: PackageTier = input.packageTier ?? "starter"
   transaction((tx) => {
     tx.prepare(
-      `INSERT INTO tenants (id, name, slug, city, kind, display_currency, package, is_demo)
-       VALUES (?, ?, ?, ?, 'landlord', 'INR', ?, 0)`,
+      `INSERT INTO tenants (id, name, slug, city, kind, display_currency, package, status, is_demo)
+       VALUES (?, ?, ?, ?, 'landlord', 'INR', ?, 'active', 0)`,
     ).run(tenantId, company, slug, "India", pkg)
     tx.prepare(
       `INSERT INTO users (
-        id, name, email, role, tenant_id, company, trade, service_area, provider_verified, phone, password_hash, is_demo
-      ) VALUES (?, ?, ?, 'landlord_admin', ?, ?, NULL, NULL, 0, NULL, ?, 0)`,
+        id, name, email, role, role_level, tenant_id, company, trade, service_area, provider_verified, phone, password_hash, is_demo
+      ) VALUES (?, ?, ?, 'landlord_admin', 2, ?, ?, NULL, NULL, 0, NULL, ?, 0)`,
     ).run(userId, input.name.trim(), email, tenantId, company, input.passwordHash)
     tx.prepare(
       "INSERT INTO late_fee_rules (tenant_id, grace_days, flat_cents, percent_bps) VALUES (?, 5, 1500000, 150)",
@@ -1538,7 +2191,25 @@ export function getTenantPackage(tenantId: string): PackageTier {
   const row = asRow(
     getDb().prepare("SELECT package FROM tenants WHERE id = ?").get(tenantId),
   )
-  return str(row ?? {}, "package") === "pro" ? "pro" : "starter"
+  return parsePlanId(str(row ?? {}, "package"))
+}
+
+/**
+ * Activate / change landlord subscription package (demo purchase path).
+ * Live Razorpay Subscriptions stay out of this slice — flag/manual until billing.
+ */
+export function setTenantPackage(
+  tenantId: string,
+  packageTier: PackageTier,
+): { ok: true; package: PackageTier } | { ok: false; error: string } {
+  const tenant = asRow(getDb().prepare("SELECT id, kind FROM tenants WHERE id = ?").get(tenantId))
+  if (!tenant) return { ok: false, error: "Organisation not found." }
+  if (str(tenant, "kind") !== "landlord") {
+    return { ok: false, error: "Only landlord organisations can subscribe to listing plans." }
+  }
+  const pkg = parsePlanId(packageTier)
+  getDb().prepare("UPDATE tenants SET package = ? WHERE id = ?").run(pkg, tenantId)
+  return { ok: true, package: pkg }
 }
 
 function normalizeHostname(raw: string): string | null {
@@ -1550,8 +2221,9 @@ function normalizeHostname(raw: string): string | null {
 }
 
 export function addCustomDomain(tenantId: string, hostnameRaw: string) {
-  if (getTenantPackage(tenantId) !== "pro") {
-    return { ok: false as const, error: "Custom domains require the PRO package." }
+  const pkg = getTenantPackage(tenantId)
+  if (pkg !== "pro" && pkg !== "enterprise") {
+    return { ok: false as const, error: "Custom domains require the Pro package." }
   }
   const hostname = normalizeHostname(hostnameRaw)
   if (!hostname) return { ok: false as const, error: "Enter a valid hostname such as listings.yourcompany.com." }
@@ -1582,8 +2254,9 @@ export function verifyCustomDomain(
   domainId: string,
   opts?: { demoForce?: boolean; observedTxt?: string | null },
 ) {
-  if (getTenantPackage(tenantId) !== "pro") {
-    return { ok: false as const, error: "Custom domains require the PRO package." }
+  const pkgGate = getTenantPackage(tenantId)
+  if (pkgGate !== "pro" && pkgGate !== "enterprise") {
+    return { ok: false as const, error: "Custom domains require the Pro package." }
   }
   const row = asRow(
     getDb()
@@ -2827,11 +3500,11 @@ export function inviteLandlord(input: {
   const tenantId = `t_${slug}`.slice(0, 40)
   const userId = crypto.randomUUID()
   db.prepare(
-    "INSERT INTO tenants (id, name, slug, city, kind, is_demo) VALUES (?, ?, ?, ?, 'landlord', 0)",
+    "INSERT INTO tenants (id, name, slug, city, kind, status, is_demo) VALUES (?, ?, ?, ?, 'landlord', 'active', 0)",
   ).run(tenantId, input.companyName, slug, input.city)
   db.prepare(
-    `INSERT INTO users (id, name, email, role, tenant_id, company, trade, service_area, provider_verified, is_demo)
-     VALUES (?, ?, ?, 'landlord_admin', ?, NULL, NULL, NULL, 0, 0)`,
+    `INSERT INTO users (id, name, email, role, role_level, tenant_id, company, trade, service_area, provider_verified, is_demo)
+     VALUES (?, ?, ?, 'landlord_admin', 2, ?, NULL, NULL, NULL, 0, 0)`,
   ).run(userId, input.adminName, input.adminEmail, tenantId)
   db.prepare(
     "INSERT INTO late_fee_rules (tenant_id, grace_days, flat_cents, percent_bps) VALUES (?, 5, 1500000, 150)",
@@ -3600,3 +4273,574 @@ export function forceBookRentalSlot(input: {
     )
 }
 
+/** Platform console — L0/L1 analytics across all landlord tenants. */
+export function platformAnalytics() {
+  const db = getDb()
+  const count = (sql: string) => Number(asRow(db.prepare(sql).get())?.c ?? 0)
+  const listings = count("SELECT COUNT(*) AS c FROM units")
+  const available = count("SELECT COUNT(*) AS c FROM units WHERE status = 'available'")
+  const applications = count("SELECT COUNT(*) AS c FROM applications")
+  const visits = count("SELECT COUNT(*) AS c FROM visit_requests")
+  const landlords = count("SELECT COUNT(*) AS c FROM tenants WHERE kind = 'landlord'")
+  const providers = count("SELECT COUNT(*) AS c FROM users WHERE role = 'service_provider'")
+  const gmvRow = asRow(
+    db
+      .prepare(
+        `SELECT COALESCE(SUM(amount_cents), 0) AS c FROM ledger_entries WHERE kind = 'payment' AND status = 'paid'`,
+      )
+      .get(),
+  )
+  const shopGmvRow = asRow(
+    db
+      .prepare(
+        `SELECT COALESCE(SUM(amount_cents), 0) AS c FROM shop_orders WHERE status IN ('paid', 'fulfilled')`,
+      )
+      .get(),
+  )
+  return {
+    landlords,
+    listings,
+    available,
+    applications,
+    visits,
+    providers,
+    ledgerGmvCents: Number(gmvRow?.c ?? 0),
+    shopGmvCents: Number(shopGmvRow?.c ?? 0),
+  }
+}
+
+export type PlatformTenantRow = {
+  id: string
+  name: string
+  slug: string
+  city: string
+  package: PackageTier
+  status: "active" | "suspended"
+  propertyCount: number
+  adminId: string | null
+  adminName: string | null
+}
+
+export function platformLandlordDirectory(): PlatformTenantRow[] {
+  const db = getDb()
+  return asRows(
+    db
+      .prepare(
+        `SELECT t.id, t.name, t.slug, t.city,
+                COALESCE(t.package, 'starter') AS package,
+                COALESCE(t.status, 'active') AS status,
+                (SELECT COUNT(*) FROM properties p WHERE p.tenant_id = t.id) AS property_count,
+                (SELECT u.id FROM users u WHERE u.tenant_id = t.id AND u.role = 'landlord_admin' ORDER BY u.name LIMIT 1) AS admin_id,
+                (SELECT u.name FROM users u WHERE u.tenant_id = t.id AND u.role = 'landlord_admin' ORDER BY u.name LIMIT 1) AS admin_name
+         FROM tenants t
+         WHERE t.kind = 'landlord'
+         ORDER BY t.name`,
+      )
+      .all(),
+  ).map((row) => ({
+    id: String(row.id),
+    name: String(row.name),
+    slug: String(row.slug),
+    city: String(row.city),
+    package: parsePlanId(String(row.package)),
+    status: String(row.status) === "suspended" ? "suspended" : "active",
+    propertyCount: Number(row.property_count),
+    adminId: str(row, "admin_id"),
+    adminName: str(row, "admin_name"),
+  }))
+}
+
+export function setTenantStatus(tenantId: string, status: "active" | "suspended") {
+  const row = asRow(
+    getDb().prepare("SELECT id FROM tenants WHERE id = ? AND kind = 'landlord'").get(tenantId),
+  )
+  if (!row) return { ok: false as const }
+  getDb().prepare("UPDATE tenants SET status = ? WHERE id = ?").run(status, tenantId)
+  return { ok: true as const }
+}
+
+export function platformShopCatalog() {
+  return asRows(
+    getDb()
+      .prepare(
+        `SELECT s.id, s.tenant_id, s.name, s.kind, s.price_cents, s.enabled, t.name AS tenant_name
+         FROM shop_skus s
+         JOIN tenants t ON t.id = s.tenant_id
+         ORDER BY t.name, s.name`,
+      )
+      .all(),
+  ).map((row) => ({
+    id: String(row.id),
+    tenantId: String(row.tenant_id),
+    tenantName: String(row.tenant_name),
+    name: String(row.name),
+    kind: String(row.kind),
+    priceCents: Number(row.price_cents),
+    enabled: Number(row.enabled) === 1,
+  }))
+}
+
+/* ─── Refer & Earn (§19A) ─────────────────────────────────────────────── */
+
+export type ReferrerRecord = {
+  id: string
+  userId: string | null
+  name: string
+  phone: string
+  email: string
+  code: string
+  createdAt: string
+}
+
+export type IndicationRecord = {
+  id: string
+  referrerId: string
+  referrerCode?: string
+  referrerName?: string
+  path: IndicationPath
+  status: IndicationStatus
+  propertyAddress: string
+  propertyCity: string
+  propertyPin: string
+  propertyType: PropertyType
+  approxSqft: number | null
+  askingRentPaise: number | null
+  landlordName: string
+  landlordPhone: string
+  landlordEmail: string | null
+  consentAt: string | null
+  attributionExpiresAt: string
+  listingUnitId: string | null
+  leasedRentPaise: number | null
+  deactivatedReason: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type ReferralRewardRecord = {
+  id: string
+  indicationId: string
+  referrerId: string
+  kind: RewardKind
+  amountPaise: number
+  status: RewardStatus
+  availableOn: string
+  paidAt: string | null
+  createdAt: string
+  propertyCity?: string
+  propertyAddress?: string
+}
+
+function mapReferrer(row: Record<string, unknown>): ReferrerRecord {
+  return {
+    id: String(row.id),
+    userId: str(row, "user_id"),
+    name: String(row.name),
+    phone: String(row.phone),
+    email: String(row.email),
+    code: String(row.code),
+    createdAt: String(row.created_at),
+  }
+}
+
+function mapIndication(row: Record<string, unknown>): IndicationRecord {
+  return {
+    id: String(row.id),
+    referrerId: String(row.referrer_id),
+    referrerCode: str(row, "referrer_code") ?? undefined,
+    referrerName: str(row, "referrer_name") ?? undefined,
+    path: String(row.path) as IndicationPath,
+    status: String(row.status) as IndicationStatus,
+    propertyAddress: String(row.property_address),
+    propertyCity: String(row.property_city),
+    propertyPin: String(row.property_pin),
+    propertyType: String(row.property_type) as PropertyType,
+    approxSqft: num(row, "approx_sqft"),
+    askingRentPaise: num(row, "asking_rent_paise"),
+    landlordName: String(row.landlord_name),
+    landlordPhone: String(row.landlord_phone),
+    landlordEmail: str(row, "landlord_email"),
+    consentAt: str(row, "consent_at"),
+    attributionExpiresAt: String(row.attribution_expires_at),
+    listingUnitId: str(row, "listing_unit_id"),
+    leasedRentPaise: num(row, "leased_rent_paise"),
+    deactivatedReason: str(row, "deactivated_reason"),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  }
+}
+
+function mapReward(row: Record<string, unknown>): ReferralRewardRecord {
+  return {
+    id: String(row.id),
+    indicationId: String(row.indication_id),
+    referrerId: String(row.referrer_id),
+    kind: String(row.kind) as RewardKind,
+    amountPaise: Number(row.amount_paise),
+    status: String(row.status) as RewardStatus,
+    availableOn: String(row.available_on),
+    paidAt: str(row, "paid_at"),
+    createdAt: String(row.created_at),
+    propertyCity: str(row, "property_city") ?? undefined,
+    propertyAddress: str(row, "property_address") ?? undefined,
+  }
+}
+
+export function getReferrerByUserId(userId: string) {
+  const row = asRow(getDb().prepare("SELECT * FROM referrers WHERE user_id = ?").get(userId))
+  return row ? mapReferrer(row) : null
+}
+
+export function getReferrerByCode(code: string) {
+  const row = asRow(
+    getDb()
+      .prepare("SELECT * FROM referrers WHERE upper(code) = upper(?)")
+      .get(code.trim()),
+  )
+  return row ? mapReferrer(row) : null
+}
+
+export function getReferrerById(id: string) {
+  const row = asRow(getDb().prepare("SELECT * FROM referrers WHERE id = ?").get(id))
+  return row ? mapReferrer(row) : null
+}
+
+export function ensureReferrerForUser(user: SessionUser): ReferrerRecord {
+  const existing = getReferrerByUserId(user.id)
+  if (existing) return existing
+  const codeBase = user.name
+    .toUpperCase()
+    .replace(/[^A-Z]/g, "")
+    .slice(0, 8)
+  let code = `EASY-${codeBase || "REF"}`
+  let n = 1
+  while (getReferrerByCode(code)) {
+    code = `EASY-${codeBase || "REF"}${n}`
+    n += 1
+  }
+  const id = `r_${crypto.randomUUID().slice(0, 8)}`
+  const now = new Date().toISOString()
+  getDb()
+    .prepare(
+      `INSERT INTO referrers (id, user_id, name, phone, email, code, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(id, user.id, user.name, user.phone ?? "", user.email, code, now)
+  return getReferrerById(id)!
+}
+
+export function createReferrerFromSubmit(input: {
+  name: string
+  phone: string
+  email: string
+  userId?: string | null
+}): ReferrerRecord {
+  const phone = normalizePhone(input.phone)
+  const byPhone = asRow(
+    getDb().prepare("SELECT * FROM referrers WHERE phone = ? OR phone = ?").get(phone, input.phone),
+  )
+  if (byPhone) return mapReferrer(byPhone)
+  if (input.userId) {
+    const byUser = getReferrerByUserId(input.userId)
+    if (byUser) return byUser
+  }
+  const parts = input.name.toUpperCase().replace(/[^A-Z\s]/g, "").trim().split(/\s+/)
+  const tag = (parts[0] ?? "REF").slice(0, 6)
+  let code = `EASY-${tag}`
+  let n = 1
+  while (getReferrerByCode(code)) {
+    code = `EASY-${tag}${n}`
+    n += 1
+  }
+  const id = `r_${crypto.randomUUID().slice(0, 8)}`
+  const now = new Date().toISOString()
+  getDb()
+    .prepare(
+      `INSERT INTO referrers (id, user_id, name, phone, email, code, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(id, input.userId ?? null, input.name.trim(), phone, input.email.trim(), code, now)
+  return getReferrerById(id)!
+}
+
+export function createIndication(input: {
+  referrerId: string
+  path: IndicationPath
+  propertyAddress: string
+  propertyCity: string
+  propertyPin: string
+  propertyType: PropertyType
+  approxSqft: number | null
+  askingRentPaise: number | null
+  landlordName: string
+  landlordPhone: string
+  landlordEmail: string | null
+  consentAt: string
+}): { ok: true; id: string } | { ok: false; error: string } {
+  const referrer = getReferrerById(input.referrerId)
+  if (!referrer) return { ok: false, error: "Referrer not found." }
+  if (phonesEqual(referrer.phone, input.landlordPhone)) {
+    return { ok: false, error: "Self-referral is not allowed — landlord phone matches yours." }
+  }
+  if (
+    input.landlordEmail &&
+    referrer.email &&
+    input.landlordEmail.trim().toLowerCase() === referrer.email.trim().toLowerCase()
+  ) {
+    return { ok: false, error: "Self-referral is not allowed — landlord email matches yours." }
+  }
+  const now = new Date().toISOString()
+  const id = `ind_${crypto.randomUUID().slice(0, 10)}`
+  getDb()
+    .prepare(
+      `INSERT INTO indications (
+        id, referrer_id, path, status, property_address, property_city, property_pin,
+        property_type, approx_sqft, asking_rent_paise, landlord_name, landlord_phone,
+        landlord_email, consent_at, attribution_expires_at, listing_unit_id,
+        leased_rent_paise, deactivated_reason, created_at, updated_at
+      ) VALUES (?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?)`,
+    )
+    .run(
+      id,
+      input.referrerId,
+      input.path,
+      input.propertyAddress.trim(),
+      input.propertyCity.trim(),
+      input.propertyPin.trim(),
+      input.propertyType,
+      input.approxSqft,
+      input.askingRentPaise,
+      input.landlordName.trim(),
+      normalizePhone(input.landlordPhone),
+      input.landlordEmail?.trim() || null,
+      input.consentAt,
+      addAttributionDays(now.slice(0, 10)),
+      now,
+      now,
+    )
+  return { ok: true, id }
+}
+
+export function indicationsForReferrer(referrerId: string) {
+  expireStaleIndications()
+  return asRows(
+    getDb()
+      .prepare(
+        `SELECT i.*, r.code AS referrer_code, r.name AS referrer_name
+         FROM indications i
+         JOIN referrers r ON r.id = i.referrer_id
+         WHERE i.referrer_id = ?
+         ORDER BY i.created_at DESC`,
+      )
+      .all(referrerId),
+  ).map(mapIndication)
+}
+
+export function listAllIndications() {
+  expireStaleIndications()
+  return asRows(
+    getDb()
+      .prepare(
+        `SELECT i.*, r.code AS referrer_code, r.name AS referrer_name
+         FROM indications i
+         JOIN referrers r ON r.id = i.referrer_id
+         ORDER BY i.updated_at DESC`,
+      )
+      .all(),
+  ).map(mapIndication)
+}
+
+export function getIndication(id: string) {
+  const row = asRow(
+    getDb()
+      .prepare(
+        `SELECT i.*, r.code AS referrer_code, r.name AS referrer_name
+         FROM indications i
+         JOIN referrers r ON r.id = i.referrer_id
+         WHERE i.id = ?`,
+      )
+      .get(id),
+  )
+  return row ? mapIndication(row) : null
+}
+
+export function rewardsForReferrer(referrerId: string) {
+  return asRows(
+    getDb()
+      .prepare(
+        `SELECT rw.*, i.property_city, i.property_address
+         FROM referral_rewards rw
+         JOIN indications i ON i.id = rw.indication_id
+         WHERE rw.referrer_id = ?
+         ORDER BY rw.created_at DESC`,
+      )
+      .all(referrerId),
+  ).map(mapReward)
+}
+
+function insertReward(input: {
+  indicationId: string
+  referrerId: string
+  kind: RewardKind
+  amountPaise: number
+  status: RewardStatus
+  eventAt: string
+}) {
+  const existing = asRow(
+    getDb()
+      .prepare(
+        "SELECT id FROM referral_rewards WHERE indication_id = ? AND kind = ?",
+      )
+      .get(input.indicationId, input.kind),
+  )
+  if (existing) return null
+  const id = `rr_${crypto.randomUUID().slice(0, 10)}`
+  const now = new Date().toISOString()
+  getDb()
+    .prepare(
+      `INSERT INTO referral_rewards (
+        id, indication_id, referrer_id, kind, amount_paise, status, available_on, paid_at, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
+    )
+    .run(
+      id,
+      input.indicationId,
+      input.referrerId,
+      input.kind,
+      input.amountPaise,
+      input.status,
+      fifteenthOfNextMonth(input.eventAt),
+      now,
+    )
+  return id
+}
+
+export function advanceIndicationStatus(
+  indicationId: string,
+  to: IndicationStatus,
+  opts?: { leasedRentPaise?: number; reason?: string },
+): { ok: true } | { ok: false; error: string } {
+  const ind = getIndication(indicationId)
+  if (!ind) return { ok: false, error: "Indication not found." }
+  if (!canTransition(ind.status, to)) {
+    return { ok: false, error: `Cannot move from ${ind.status} to ${to}.` }
+  }
+  const now = new Date().toISOString()
+  getDb()
+    .prepare(
+      `UPDATE indications SET status = ?, updated_at = ?, deactivated_reason = COALESCE(?, deactivated_reason),
+       leased_rent_paise = COALESCE(?, leased_rent_paise) WHERE id = ?`,
+    )
+    .run(to, now, opts?.reason ?? null, opts?.leasedRentPaise ?? null, indicationId)
+
+  if (to === "published") {
+    insertReward({
+      indicationId,
+      referrerId: ind.referrerId,
+      kind: "publish",
+      amountPaise: PUBLISH_REWARD_PAISE,
+      status: "accrued",
+      eventAt: now,
+    })
+  }
+  if (to === "leased") {
+    const rent =
+      opts?.leasedRentPaise ??
+      ind.leasedRentPaise ??
+      ind.askingRentPaise ??
+      0
+    if (rent > 0) {
+      getDb()
+        .prepare("UPDATE indications SET leased_rent_paise = ? WHERE id = ?")
+        .run(rent, indicationId)
+      insertReward({
+        indicationId,
+        referrerId: ind.referrerId,
+        kind: "lease",
+        amountPaise: leaseRewardPaise(rent),
+        status: "accrued",
+        eventAt: now,
+      })
+    }
+  }
+  return { ok: true }
+}
+
+export function expireStaleIndications(asOf = todayISO()) {
+  const rows = asRows(
+    getDb()
+      .prepare(
+        `SELECT id, status FROM indications
+         WHERE attribution_expires_at < ?
+           AND status NOT IN ('published','in_negotiation','leased','discarded','deactivated')`,
+      )
+      .all(asOf),
+  )
+  const now = new Date().toISOString()
+  const upd = getDb().prepare(
+    `UPDATE indications SET status = 'deactivated', deactivated_reason = 'expired', updated_at = ?
+     WHERE id = ?`,
+  )
+  for (const row of rows) {
+    upd.run(now, String(row.id))
+  }
+  return rows.length
+}
+
+export function recordReferralAttribution(code: string) {
+  const referrer = getReferrerByCode(code)
+  if (!referrer) return { ok: false as const, error: "Unknown referral code." }
+  const now = new Date().toISOString()
+  const id = `attr_${crypto.randomUUID().slice(0, 10)}`
+  getDb()
+    .prepare(
+      `INSERT INTO referral_attribution (id, code, first_touch_at, landlord_user_id, tenant_id, indication_id, expires_at)
+       VALUES (?, ?, ?, NULL, NULL, NULL, ?)`,
+    )
+    .run(id, referrer.code, now, addAttributionDays(now.slice(0, 10)))
+  return { ok: true as const, code: referrer.code, referrerName: referrer.name, expiresAt: addAttributionDays(now.slice(0, 10)) }
+}
+
+export function attachAttributionToLandlord(input: {
+  code: string
+  landlordUserId: string
+  tenantId: string | null
+  propertyAddress: string
+  propertyCity: string
+  propertyPin: string
+  propertyType: PropertyType
+  approxSqft: number | null
+  askingRentPaise: number | null
+  landlordName: string
+  landlordPhone: string
+  landlordEmail: string | null
+}) {
+  const referrer = getReferrerByCode(input.code)
+  if (!referrer) return { ok: false as const, error: "Unknown referral code." }
+  if (phonesEqual(referrer.phone, input.landlordPhone)) {
+    return { ok: false as const, error: "Self-referral is not allowed." }
+  }
+  const consentAt = new Date().toISOString()
+  const created = createIndication({
+    referrerId: referrer.id,
+    path: "link",
+    propertyAddress: input.propertyAddress,
+    propertyCity: input.propertyCity,
+    propertyPin: input.propertyPin,
+    propertyType: input.propertyType,
+    approxSqft: input.approxSqft,
+    askingRentPaise: input.askingRentPaise,
+    landlordName: input.landlordName,
+    landlordPhone: input.landlordPhone,
+    landlordEmail: input.landlordEmail,
+    consentAt,
+  })
+  if (!created.ok) return created
+  getDb()
+    .prepare(
+      `UPDATE referral_attribution SET landlord_user_id = ?, tenant_id = ?, indication_id = ?
+       WHERE code = ? AND indication_id IS NULL`,
+    )
+    .run(input.landlordUserId, input.tenantId, created.id, referrer.code)
+  return { ok: true as const, indicationId: created.id, referrerCode: referrer.code }
+}

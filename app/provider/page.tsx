@@ -11,9 +11,9 @@ export default async function ProviderPage() {
   return (
     <div>
       <PageHeader
-        kicker={user.providerVerified ? "Verified" : "Unverified"}
+        kicker={user.providerVerified ? "L5 · Verified" : "L5 · Unverified"}
         title="Assigned work"
-        lede="You do not see a public job board. A landlord assigns you after they approve you, and only for buildings in your service area."
+        lede="L5 Service Provider desk — not a public job board. After partner vetting activates your trade, landlords approve and assign jobs only inside your catchment."
       />
       <ProviderBoard jobs={jobsForProvider(user.id)} />
     </div>

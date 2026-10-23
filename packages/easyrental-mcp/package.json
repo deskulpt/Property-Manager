@@ -1,0 +1,18 @@
+{
+  "name": "@easyrental/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "description": "Easy Rental MCP M0 — read-only stdio server (tenant_id + role_level scoped)",
+  "type": "module",
+  "bin": {
+    "easyrental-mcp": "./bin/easyrental-mcp.mjs"
+  },
+  "scripts": {
+    "start": "node ./bin/easyrental-mcp.mjs",
+    "stdio": "node ./bin/easyrental-mcp.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

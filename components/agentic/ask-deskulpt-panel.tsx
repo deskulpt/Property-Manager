@@ -9,6 +9,8 @@ import {
 } from "@/lib/actions"
 import type { AgenticProposal, AuditEntry, ListingDraft } from "@/lib/agentic/queue"
 import type { PackageTier } from "@/lib/db"
+import { packageHasAskEasy, subscribeHref } from "@/lib/plans"
+import Link from "next/link"
 
 export function AskDeskulptPanel({
   packageTier,
@@ -29,18 +31,21 @@ export function AskDeskulptPanel({
     "12,000 SF clear-span bay near Powai with 2 docks — draft a listing for P3",
   )
 
-  if (packageTier !== "pro") {
+  if (!packageHasAskEasy(packageTier)) {
     return (
       <div className="border border-ink/10 bg-paper-2 p-4">
-        <p className="font-sans text-lg font-extrabold">Ask Easy (PRO)</p>
+        <p className="font-sans text-lg font-extrabold">Ask Easy (Pro)</p>
         <p className="mt-2 text-sm text-ink-soft">
-          Draft listings and propose desk actions with a human approval gate. Starter organisations
-          see this upgrade path — switch to Nadia (BBM · PRO) in the Demo identity menu to try the
-          stub agent.
+          Draft listings and propose desk actions with a human approval gate. Basic and Growth
+          organisations see this upgrade path — switch to Nadia (BBM · Pro) in the Demo identity menu
+          to try the stub agent, or upgrade below.
         </p>
-        <p className="mt-4 inline-block border border-terra/40 bg-terra/10 px-3 py-2 text-sm font-semibold text-terra">
-          Upgrade to PRO to unlock Ask Easy
-        </p>
+        <Link
+          href={subscribeHref("pro", { from: "ask-easy" })}
+          className="mt-4 inline-block border border-terra/40 bg-terra/10 px-3 py-2 text-sm font-semibold text-terra hover:bg-terra/20"
+        >
+          Upgrade to Pro to unlock Ask Easy
+        </Link>
       </div>
     )
   }
