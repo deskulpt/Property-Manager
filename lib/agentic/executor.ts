@@ -7,7 +7,7 @@ import {
   markProposal,
   publishListingDraft,
 } from "@/lib/agentic/proposals"
-import { getESignProvider } from "@/lib/agentic/esign"
+import { getESignProvider, withESignEnvDefaults } from "@/lib/agentic/esign"
 import {
   executeListUnit,
   executeUnlistUnit,
@@ -271,29 +271,22 @@ function executeEsignSend(
     role: p.role,
     name: p.name,
     email: p.email,
+    phone: p.phone || undefined,
   }))
 
-  // Mark ready then send via adapter (demo)
+  // Mark ready then send via env-selected adapter (demo | digio | emudhra)
   markAgreementStatus(tenantId, agreement.id, { status: "ready_for_esign" })
   const provider = getESignProvider()
-  const sent = provider.send({
-    agreementId: agreement.id,
-    tenantId,
-    signers,
-    documentHtml: agreement.documentHtml,
-    country: agreement.country,
-    region: agreement.region,
-  })
-  // Adapter may be sync or Promise — handle sync DemoESignAdapter
-  if (sent instanceof Promise) {
-    // Sync path only in demo; refuse async in executor for OSS predictability
-    markProposal(tenantId, proposalId, {
-      status: "failed",
-      decidedBy: actorUserId,
-      error: "Async eSign providers are not wired in this demo executor.",
-    })
-    return { ok: false, error: "Async eSign not supported in demo.", code: "tool_error" }
-  }
+  const sent = provider.send(
+    withESignEnvDefaults({
+      agreementId: agreement.id,
+      tenantId,
+      signers,
+      documentHtml: agreement.documentHtml,
+      country: agreement.country,
+      region: agreement.region,
+    }),
+  )
   if (!sent.ok) {
     markProposal(tenantId, proposalId, {
       status: "failed",

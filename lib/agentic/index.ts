@@ -69,4 +69,20 @@ export {
   executeUnlistUnit,
   executeUpsertOccupantLedger,
 } from "@/lib/agentic/lease-onboard"
-export { getESignProvider, DemoESignAdapter, type ESignProvider } from "@/lib/agentic/esign"
+export {
+  getESignProvider,
+  setESignProvider,
+  resolveESignProviderFromEnv,
+  resolveESignProviderId,
+  readDigioCredentials,
+  readEmudhraCredentials,
+  buildDigioCreateRequest,
+  buildEmudhraCreateRequest,
+  DemoESignAdapter,
+  DigioESignAdapter,
+  EmudhraESignAdapter,
+  type ESignProvider,
+  type ESignProviderId,
+  type ESignSendRequest,
+  type ESignSigner,
+} from "@/lib/agentic/esign"
