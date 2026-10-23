@@ -31,6 +31,7 @@ export {
   createProposal,
   getProposal,
   markProposal,
+  updateProposalPayload,
   pendingProposals,
   proposalsForTenant,
   listingDraftsForTenant,

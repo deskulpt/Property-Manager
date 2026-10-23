@@ -291,16 +291,16 @@ Playwright downloads a browser on first use (`npx playwright install` if the run
 
 Hard rules: `test/ask-easy.test.ts` + `test/ask-easy-onboard.test.ts` + `test/ask-easy-memory.test.ts` + `test/adk-platform.test.ts`.
 
-## MCP M0 (read-only)
+## MCP M0 + M1 (read + propose/approvals)
 
-Personal assistants connect via **Easy Rental MCP** — Phase **M0** is read-only tools scoped by session `tenant_id` + `role_level` (OAuth/PAT stub). No mutations; M1 will add proposals.
+Personal assistants connect via **Easy Rental MCP** — session `tenant_id` + `role_level` (OAuth/PAT stub). **M0** = reads. **M1** = mutating tools return `proposal_id`; `approvals.resolve` is the only never-auto execute path (money / lease send / notify / publish stay blocked without Approve).
 
 | Surface | How |
 | --- | --- |
-| Core | `lib/mcp/` — tool pack + PAT stub (`demo:u_nadia`) |
+| Core | `lib/mcp/` — reads + propose + approvals + never-auto policy |
 | stdio | `npm run mcp:stdio` or `packages/easyrental-mcp` |
 | HTTP | `POST /api/mcp` with `Authorization: Bearer demo:<userId>` |
-| Tests | `test/mcp-m0.test.ts` (isolation + role gates) |
+| Tests | `test/mcp-m0.test.ts` · `test/mcp-m1.test.ts` · `e2e/mcp-m1.spec.ts` |
 
 ```bash
 EASYRENTAL_MCP_DEFAULT_TOKEN=demo:u_nadia npm run mcp:stdio

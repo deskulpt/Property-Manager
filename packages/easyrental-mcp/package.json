@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
-  "description": "Easy Rental MCP M0 — read-only stdio server (tenant_id + role_level scoped)",
+  "description": "Easy Rental MCP M1 — read + propose/approvals stdio server (tenant_id + role_level scoped)",
   "type": "module",
   "bin": {
     "easyrental-mcp": "./bin/easyrental-mcp.mjs"
