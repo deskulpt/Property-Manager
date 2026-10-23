@@ -38,9 +38,20 @@ export {
   publishListingDraft,
 } from "@/lib/agentic/proposals"
 export { auditEventsForTenant, writeAuditEvent } from "@/lib/agentic/audit"
+export {
+  listAgentMemory,
+  upsertAgentMemory,
+  purgeAgentMemory,
+  purgeExpiredAgentMemory,
+  assertMemoryContentAllowed,
+  MEMORY_KINDS,
+  MEMORY_RETENTION_MS,
+} from "@/lib/agentic/memory"
 export type {
   AgentProposal,
   AgentAuditEvent,
+  AgentMemoryEntry,
+  AgentMemoryKind,
   ListingDraft,
   AgentToolName,
   ProposalStatus,

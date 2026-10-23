@@ -579,4 +579,56 @@ export function seedDemoDatabase(db: Sql) {
     `INSERT INTO languages (code, name, status, waiting_reason, created_at, updated_at)
      VALUES (?, ?, ?, NULL, ?, ?)`,
   ).run("en", "English", "ready", "2026-09-01T00:00:00.000Z", "2026-09-01T00:00:00.000Z")
+
+  // Ask Easy L.1 — demo memory (no KYC / Aadhaar). Landlord-scoped + property-scoped.
+  const mem = db.prepare(
+    `INSERT INTO agent_memory
+      (id, tenant_id, property_id, kind, title, body, created_at, updated_at, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+  const memAt = "2026-09-15T10:00:00.000Z"
+  mem.run(
+    "amem_bbm_tone",
+    "t_bbm",
+    null,
+    "tone_pref",
+    "Tone preference",
+    "Prefer concise, formal English replies; INR and SF units.",
+    memAt,
+    memAt,
+    "u_nadia",
+  )
+  mem.run(
+    "amem_bbm_vendor",
+    "t_bbm",
+    null,
+    "preferred_vendor",
+    "Preferred electrician",
+    "Prefer Vikram Deshmukh (Pune Electric) for weather-seal and dock lighting jobs when available.",
+    memAt,
+    memAt,
+    "u_nadia",
+  )
+  mem.run(
+    "amem_waterman_issue",
+    "t_bbm",
+    "p_waterman",
+    "issue",
+    "Recurring weather seal",
+    "North drive-in bay weather seal loosens each monsoon; schedule inspect before June.",
+    memAt,
+    memAt,
+    "u_nadia",
+  )
+  mem.run(
+    "amem_waterman_complaint",
+    "t_bbm",
+    "p_waterman",
+    "complaint_theme",
+    "Complaint theme · yard staging",
+    "Occupants complain about trailer staging blocking dock approach after 6pm.",
+    memAt,
+    memAt,
+    "u_nadia",
+  )
 }

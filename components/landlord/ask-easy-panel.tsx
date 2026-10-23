@@ -7,11 +7,14 @@ import { Textarea } from "@/components/ui/textarea"
 import { EmptyState } from "@/components/product"
 import {
   decideAskEasyProposal,
+  purgeAskEasyMemory,
   submitAskEasyPrompt,
+  type AskEasyMemoryState,
   type AskEasyState,
 } from "@/lib/actions"
 import type {
   AgentAuditEvent,
+  AgentMemoryEntry,
   AgentProposal,
   AttributeCitation,
   LeaseAgreement,
@@ -40,6 +43,11 @@ const decideInitial: AskEasyState = {
   toolName: null,
   reply: null,
 }
+const memoryInitial: AskEasyMemoryState = {
+  error: null,
+  message: null,
+  deleted: null,
+}
 
 type ChatRow = {
   id: string
@@ -67,6 +75,9 @@ const STARTERS = [
   "Add primary lease holder named Priya Sharma priya.sharma@example.com +91 98765 43210",
   "Draft rental agreement for Maharashtra India (MH)",
   "Propose eSign send for the draft agreement",
+  "What do you remember about this building?",
+  "Remember preferred electrician Vikram for dock lighting",
+  "Remember complaint theme: yard staging blocks docks after 6pm",
 ]
 
 export function AskEasyPanel({
@@ -76,6 +87,7 @@ export function AskEasyPanel({
   drafts,
   agreements = [],
   parties = [],
+  memory = [],
   audit,
   modelMode,
   onboardSeed,
@@ -86,6 +98,7 @@ export function AskEasyPanel({
   drafts: ListingDraft[]
   agreements?: LeaseAgreement[]
   parties?: LeaseParty[]
+  memory?: AgentMemoryEntry[]
   audit: AgentAuditEvent[]
   modelMode: "stub" | "live-ready"
   onboardSeed?: { reply: string; citations: AttributeCitation[]; toolName?: string | null }
@@ -129,6 +142,7 @@ export function AskEasyPanel({
   const transcriptRef = useRef<HTMLDivElement>(null)
   const [pendingChat, startChat] = useTransition()
   const [decideState, decideAction] = useActionState(decideAskEasyProposal, decideInitial)
+  const [memoryState, memoryAction] = useActionState(purgeAskEasyMemory, memoryInitial)
 
   useEffect(() => {
     transcriptRef.current?.scrollTo({ top: transcriptRef.current.scrollHeight, behavior: "smooth" })
@@ -555,6 +569,105 @@ export function AskEasyPanel({
               ))}
             </ul>
           )}
+        </section>
+
+        <section className="grid gap-3" data-testid="ask-easy-memory" aria-label="Ask Easy memory">
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <div>
+              <h2 className="font-heading text-xl font-extrabold">Memory</h2>
+              <p className="mt-1 text-sm text-ink-soft">
+                Per-org and per-building notes (issues, complaint themes, preferred vendors). Never
+                Aadhaar images or raw ID numbers (DPDP).
+              </p>
+            </div>
+            <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--color-brand-3)]">
+              {memory.length} saved
+            </span>
+          </div>
+          {memory.length === 0 ? (
+            <EmptyState
+              title="No memory yet"
+              body='Say “Remember preferred electrician…” or “Remember complaint theme…” in chat. Purge anytime.'
+            />
+          ) : (
+            <ul className="grid gap-3">
+              {memory.map((entry) => {
+                const building =
+                  entry.propertyId == null
+                    ? "Org-wide"
+                    : (properties.find((p) => p.id === entry.propertyId)?.name ?? entry.propertyId)
+                return (
+                  <li
+                    key={entry.id}
+                    className="border border-brand/10 border-l-4 border-l-[var(--color-brand-2)] bg-card p-4"
+                    data-memory-id={entry.id}
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="inline-flex bg-[var(--color-brand-2)]/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-[var(--color-brand-2)]">
+                        {entry.kind}
+                      </span>
+                      <span className="font-mono text-[10px] uppercase tracking-wider text-ink-faint">
+                        {building}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm font-bold">{entry.title}</p>
+                    <p className="mt-1 text-sm text-ink-soft">{entry.body}</p>
+                    <form action={memoryAction} className="mt-3">
+                      <input type="hidden" name="mode" value="id" />
+                      <input type="hidden" name="id" value={entry.id} />
+                      <button
+                        type="submit"
+                        className="h-8 border border-ink/20 bg-background px-3 text-sm font-bold transition-colors hover:bg-muted"
+                      >
+                        Purge this note
+                      </button>
+                    </form>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+          <div className="flex flex-wrap gap-2 border border-brand/10 bg-paper-2/50 p-3">
+            <form action={memoryAction}>
+              <input type="hidden" name="mode" value="property" />
+              <input type="hidden" name="propertyId" value={propertyId} />
+              <button
+                type="submit"
+                className="h-8 border border-ink/20 bg-background px-3 text-sm font-bold transition-colors hover:bg-muted"
+                disabled={!propertyId}
+              >
+                Purge this building
+              </button>
+            </form>
+            <form action={memoryAction}>
+              <input type="hidden" name="mode" value="landlord" />
+              <button
+                type="submit"
+                className="h-8 border border-ink/20 bg-background px-3 text-sm font-bold transition-colors hover:bg-muted"
+              >
+                Purge org-wide only
+              </button>
+            </form>
+            <form action={memoryAction}>
+              <input type="hidden" name="mode" value="all" />
+              <button
+                type="submit"
+                className="h-8 border border-destructive/30 bg-background px-3 text-sm font-bold text-destructive transition-colors hover:bg-destructive/5"
+              >
+                Purge all memory
+              </button>
+            </form>
+          </div>
+          {memoryState.error ? (
+            <p className="text-sm text-destructive" role="alert">
+              {memoryState.error}
+            </p>
+          ) : null}
+          {memoryState.message ? (
+            <p className="text-sm text-[var(--color-brand-2)]" role="status">
+              {memoryState.message}
+            </p>
+          ) : null}
         </section>
       </div>
 

@@ -1766,6 +1766,65 @@ export async function decideAskEasyProposal(
   return { ...askEasyInitial, error: "Choose Approve or Reject." }
 }
 
+export type AskEasyMemoryState = {
+  error: string | null
+  message: string | null
+  deleted: number | null
+}
+
+const askEasyMemoryInitial: AskEasyMemoryState = {
+  error: null,
+  message: null,
+  deleted: null,
+}
+
+/** L.1 — landlord self-service purge (DPDP erasure). */
+export async function purgeAskEasyMemory(
+  _prev: AskEasyMemoryState,
+  formData: FormData,
+): Promise<AskEasyMemoryState> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) {
+    return { ...askEasyMemoryInitial, error: "Switch to a landlord admin to purge memory." }
+  }
+  const { askEasyGateReason, purgeAgentMemory, writeAuditEvent } = await import("@/lib/agentic")
+  if (askEasyGateReason(user.tenantId) === "upgrade") {
+    return { ...askEasyMemoryInitial, error: "Ask Easy requires Pro or higher." }
+  }
+  const mode = String(formData.get("mode") ?? "")
+  const id = String(formData.get("id") ?? "")
+  const propertyId = String(formData.get("propertyId") ?? "")
+  let scope:
+    | { mode: "id"; id: string }
+    | { mode: "property"; propertyId: string }
+    | { mode: "landlord" }
+    | { mode: "all" }
+  if (mode === "id" && id) scope = { mode: "id", id }
+  else if (mode === "property" && propertyId) scope = { mode: "property", propertyId }
+  else if (mode === "landlord") scope = { mode: "landlord" }
+  else if (mode === "all") scope = { mode: "all" }
+  else return { ...askEasyMemoryInitial, error: "Choose what to purge." }
+
+  const result = purgeAgentMemory(user.tenantId, scope)
+  if (!result.ok) return { ...askEasyMemoryInitial, error: result.error }
+  writeAuditEvent({
+    tenantId: user.tenantId,
+    kind: "memory_purge",
+    summary: `UI purge · ${scope.mode} · deleted ${result.deleted}`,
+    detail: { scope, deleted: result.deleted },
+    actorUserId: user.id,
+  })
+  refresh(["/landlord/ask", "/landlord/ask-easy"])
+  return {
+    ...askEasyMemoryInitial,
+    deleted: result.deleted,
+    message:
+      result.deleted === 0
+        ? "Nothing to purge."
+        : `Purged ${result.deleted} memory row(s).`,
+  }
+}
+
 /* ── Ask Easy · Slice L.0 in-memory queue (kept for main stubs) ─ */
 
 export async function approveAgenticProposal(

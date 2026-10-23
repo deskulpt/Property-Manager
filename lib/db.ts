@@ -770,6 +770,17 @@ function createSchema(db: Sql) {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE agent_memory (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      property_id TEXT,
+      kind TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      created_by TEXT
+    );
     CREATE TABLE referrers (
       id TEXT PRIMARY KEY,
       user_id TEXT,
@@ -942,6 +953,8 @@ function createSchema(db: Sql) {
     CREATE INDEX idx_listing_drafts_tenant ON listing_drafts(tenant_id, updated_at);
     CREATE INDEX idx_lease_parties_tenant ON lease_parties(tenant_id, unit_id);
     CREATE INDEX idx_lease_agreements_tenant ON lease_agreements(tenant_id, status, updated_at);
+    CREATE INDEX idx_agent_memory_tenant ON agent_memory(tenant_id, updated_at);
+    CREATE INDEX idx_agent_memory_property ON agent_memory(tenant_id, property_id, kind);
     CREATE INDEX idx_indications_referrer ON indications(referrer_id, status);
     CREATE INDEX idx_rewards_referrer ON referral_rewards(referrer_id, status);
     CREATE INDEX idx_attribution_code ON referral_attribution(code);
@@ -958,6 +971,7 @@ function reset(db: Sql) {
     "rental_agreements",
     "tickets",
     "agent_audit_events",
+    "agent_memory",
     "agent_proposals",
     "lease_agreements",
     "lease_parties",

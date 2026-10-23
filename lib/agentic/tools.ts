@@ -14,6 +14,7 @@ import {
   type ReadToolResult,
 } from "@/lib/agentic/reads"
 import type {
+  AgentMemoryEntry,
   AgentProposal,
   AgentToolName,
   AttributeCitation,
@@ -37,6 +38,13 @@ import {
   leasePartiesForUnit,
 } from "@/lib/agentic/lease-onboard"
 import { resolveLawNotes, type JurisdictionCountry } from "@/lib/agentic/jurisdictions"
+import {
+  extractMemoryFromPrompt,
+  listAgentMemory,
+  purgeAgentMemory,
+  upsertAgentMemory,
+} from "@/lib/agentic/memory"
+import { writeAuditEvent } from "@/lib/agentic/audit"
 
 /**
  * ADK-style thin tool registry — wrappers around Easy Rental commands only.
@@ -115,6 +123,24 @@ export type ToolDispatchResult =
   | {
       kind: "propose_esign_send"
       proposal: AgentProposal
+      reply: string
+      citations?: AttributeCitation[]
+    }
+  | {
+      kind: "memory_list"
+      entries: AgentMemoryEntry[]
+      reply: string
+      citations?: AttributeCitation[]
+    }
+  | {
+      kind: "memory_remember"
+      entry: AgentMemoryEntry
+      reply: string
+      citations?: AttributeCitation[]
+    }
+  | {
+      kind: "memory_purge"
+      deleted: number
       reply: string
       citations?: AttributeCitation[]
     }
@@ -224,6 +250,27 @@ export const ASK_EASY_TOOLS: readonly ToolDefinition[] = [
     mutating: true,
     requiresApproval: true,
   },
+  {
+    name: "memory_list",
+    description:
+      "List durable Ask Easy memory for this landlord (issues, complaint themes, preferred vendors). No KYC.",
+    mutating: false,
+    requiresApproval: false,
+  },
+  {
+    name: "memory_remember",
+    description:
+      "Soft-write a landlord or property memory note (issues, vendors, tone). Refuses Aadhaar images/numbers.",
+    mutating: false,
+    requiresApproval: false,
+  },
+  {
+    name: "memory_purge",
+    description:
+      "Purge Ask Easy memory for a property or the whole org (DPDP erasure). Landlord self-service.",
+    mutating: true,
+    requiresApproval: false,
+  },
 ] as const
 
 export function getTool(name: AgentToolName): ToolDefinition | undefined {
@@ -322,6 +369,127 @@ export function dispatchTool(
   }
   if (toolName === "get_unit") {
     return readGetUnit(ctx.tenantId, ctx.propertyId, ctx.unitId, ctx.prompt)
+  }
+
+  if (toolName === "memory_list") {
+    const entries = listAgentMemory(ctx.tenantId, {
+      propertyId: ctx.propertyId ?? null,
+      includeLandlordScope: true,
+    })
+    const reply =
+      entries.length === 0
+        ? "No Ask Easy memory yet. Say “remember …” to store issues, complaint themes, or preferred vendors (never Aadhaar)."
+        : `Memory (${entries.length}): ${entries
+            .slice(0, 8)
+            .map((e) => `${e.kind}${e.propertyId ? "" : " · org"} — ${e.title}`)
+            .join("; ")}${entries.length > 8 ? "…" : ""}`
+    return {
+      kind: "memory_list",
+      entries,
+      reply,
+      citations: entries.slice(0, 6).map((e) => ({
+        entity: "portfolio" as const,
+        entityId: e.propertyId ?? e.tenantId,
+        field: e.kind,
+        label: e.title,
+        value: e.body.slice(0, 120),
+      })),
+    }
+  }
+
+  if (toolName === "memory_remember") {
+    const extracted =
+      typeof overrides?.title === "string" && typeof overrides?.body === "string"
+        ? {
+            kind: String(overrides.kind ?? "other"),
+            title: String(overrides.title),
+            body: String(overrides.body),
+          }
+        : extractMemoryFromPrompt(ctx.prompt)
+    if (!extracted) {
+      return {
+        kind: "error",
+        error: "Could not parse a memory note. Try: “Remember preferred electrician Vikram for dock lighting.”",
+      }
+    }
+    const scopeProperty =
+      overrides?.scope === "landlord"
+        ? null
+        : typeof overrides?.propertyId === "string"
+          ? overrides.propertyId
+          : ctx.propertyId ?? null
+    const saved = upsertAgentMemory({
+      tenantId: ctx.tenantId,
+      propertyId: scopeProperty,
+      kind: extracted.kind,
+      title: extracted.title,
+      body: extracted.body,
+      createdBy: ctx.userId,
+    })
+    if (!saved.ok) return { kind: "error", error: saved.error }
+    writeAuditEvent({
+      tenantId: ctx.tenantId,
+      kind: "memory_write",
+      summary: `memory_remember: ${saved.entry.kind} · ${saved.entry.title}`,
+      detail: { memoryId: saved.entry.id, propertyId: saved.entry.propertyId },
+      actorUserId: ctx.userId,
+    })
+    return {
+      kind: "memory_remember",
+      entry: saved.entry,
+      reply: `Saved ${saved.entry.kind} memory${saved.entry.propertyId ? " for this building" : " (org-wide)"}. Purge anytime from Ask Easy · Memory. No Aadhaar or ID images stored.`,
+      citations: [
+        {
+          entity: "portfolio",
+          entityId: saved.entry.propertyId ?? saved.entry.tenantId,
+          field: saved.entry.kind,
+          label: saved.entry.title,
+          value: saved.entry.body.slice(0, 120),
+        },
+      ],
+    }
+  }
+
+  if (toolName === "memory_purge") {
+    const modeRaw = String(overrides?.mode ?? "").toLowerCase()
+    const lower = ctx.prompt.toLowerCase()
+    let scope:
+      | { mode: "all" }
+      | { mode: "landlord" }
+      | { mode: "property"; propertyId: string }
+      | { mode: "id"; id: string }
+    if (typeof overrides?.id === "string" && overrides.id) {
+      scope = { mode: "id", id: overrides.id }
+    } else if (modeRaw === "all" || /\b(all memory|purge all|erase all|forget everything)\b/.test(lower)) {
+      scope = { mode: "all" }
+    } else if (modeRaw === "landlord" || /\b(org|landlord|organisation|organization).*\b(memory|purge)\b/.test(lower)) {
+      scope = { mode: "landlord" }
+    } else if (ctx.propertyId || typeof overrides?.propertyId === "string") {
+      scope = {
+        mode: "property",
+        propertyId: String(overrides?.propertyId ?? ctx.propertyId),
+      }
+    } else {
+      scope = { mode: "all" }
+    }
+    const purged = purgeAgentMemory(ctx.tenantId, scope)
+    if (!purged.ok) return { kind: "error", error: purged.error }
+    writeAuditEvent({
+      tenantId: ctx.tenantId,
+      kind: "memory_purge",
+      summary: `memory_purge: ${scope.mode} · deleted ${purged.deleted}`,
+      detail: { scope, deleted: purged.deleted },
+      actorUserId: ctx.userId,
+    })
+    return {
+      kind: "memory_purge",
+      deleted: purged.deleted,
+      reply:
+        purged.deleted === 0
+          ? "No memory rows matched that purge."
+          : `Purged ${purged.deleted} memory row(s) (${scope.mode}). DPDP erasure recorded in audit.`,
+      citations: [],
+    }
   }
 
   const property = resolveProperty(ctx)
