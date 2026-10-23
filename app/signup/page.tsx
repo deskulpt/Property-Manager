@@ -5,7 +5,9 @@ import { SignupForm } from "@/components/auth/signup-form"
 import { PageHeader } from "@/components/product"
 import { ReferralClaimForm } from "@/components/refer/claim-form"
 import { getReferrerByCode } from "@/lib/db"
+import { SUBSCRIBE_PATH } from "@/lib/plans"
 import { REF_COOKIE } from "@/lib/referrals"
+import { deskPathForLevel, subscriptionAllowsDesk } from "@/lib/role-level"
 import { getSessionUser } from "@/lib/session"
 
 export const metadata = { title: "Sign up" }
@@ -16,7 +18,19 @@ export default async function SignupPage({
   searchParams: Promise<{ ref?: string }>
 }) {
   const session = await getSessionUser()
-  if (session?.role === "landlord_admin") redirect("/landlord")
+  if (session) {
+    if (!session.onboardingComplete || session.role === "pending") {
+      redirect("/onboarding/role")
+    }
+    if (
+      session.roleLevel === 2 &&
+      !session.tenantIsDemo &&
+      !subscriptionAllowsDesk(session.tenantStatus)
+    ) {
+      redirect(`${SUBSCRIBE_PATH}?from=onboard`)
+    }
+    redirect(deskPathForLevel(session.roleLevel))
+  }
 
   const sp = await searchParams
   const jar = await cookies()
@@ -26,9 +40,9 @@ export default async function SignupPage({
   return (
     <div className="mx-auto max-w-lg px-4 py-12 md:px-8">
       <PageHeader
-        kicker="Landlord account · L2"
-        title="Create your organisation"
-        lede="Self-serve signup for Indian landlords. Next step is choosing a listing plan (Basic / Growth / Pro) — demo purchase, no live charge yet."
+        kicker="Create account"
+        title="Join Easy Rental"
+        lede="Create credentials, then choose your role. Landlord organisations activate Basic, Growth, or Pro at Pricing before listing ops unlock."
       />
 
       {referrer ? (
@@ -62,14 +76,13 @@ export default async function SignupPage({
       )}
 
       <p className="mt-6 text-sm text-ink-soft">
-        Already know your plan?{" "}
-        <Link href="/pricing" className="font-semibold text-terra hover:underline">
-          See pricing
-        </Link>
-        . Evaluating the OSS demo without an account? Use the{" "}
-        <span className="font-semibold text-ink">Demo</span> identity switcher in the header, or{" "}
+        Already registered?{" "}
         <Link href="/login" className="font-semibold text-terra hover:underline">
-          log in
+          Log in
+        </Link>
+        . Compare plans on{" "}
+        <Link href="/pricing" className="font-semibold text-terra hover:underline">
+          Pricing
         </Link>
         .
       </p>

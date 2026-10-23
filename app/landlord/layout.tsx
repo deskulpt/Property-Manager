@@ -1,5 +1,7 @@
 import { PortalFrame } from "@/components/portal-frame"
 import { RoleGate } from "@/components/product"
+import { SUBSCRIBE_PATH } from "@/lib/plans"
+import { subscriptionAllowsDesk } from "@/lib/role-level"
 import { getSessionUser } from "@/lib/session"
 
 const links = [
@@ -18,11 +20,39 @@ const links = [
 
 export default async function LandlordLayout({ children }: { children: React.ReactNode }) {
   const user = await getSessionUser()
-  if (!user || user.role !== "landlord_admin" || !user.tenantId) {
+  if (!user) {
     return (
       <RoleGate
-        title="This desk is for a landlord admin"
-        body="Create an account at Sign up, log in, or use the Demo identity switcher (Nadia · DEMO · EasyRent Hyderabad) when the demo switcher is enabled. Each organisation only sees its own data."
+        title="Landlord desk"
+        body="Sign in with your landlord account. Public demo role hopping is disabled — create an account or log in."
+        action={{ href: "/login?next=/landlord", label: "Log in" }}
+      />
+    )
+  }
+  if (user.role === "pending" || !user.onboardingComplete) {
+    return (
+      <RoleGate
+        title="Finish onboarding"
+        body="Choose your role before opening the landlord desk."
+        action={{ href: "/onboarding/role", label: "Continue onboarding" }}
+      />
+    )
+  }
+  if (user.roleLevel !== 2 || user.role !== "landlord_admin" || !user.tenantId) {
+    return (
+      <RoleGate
+        title="This desk is for a Landlord Account"
+        body="Your role cannot open landlord listing ops. Log in with an L2 landlord organisation or return to your desk."
+        action={{ href: "/login", label: "Log in" }}
+      />
+    )
+  }
+  if (!user.tenantIsDemo && !subscriptionAllowsDesk(user.tenantStatus)) {
+    return (
+      <RoleGate
+        title="Subscription required"
+        body="Activate Basic, Growth, or Pro to unlock landlord listing ops."
+        action={{ href: `${SUBSCRIBE_PATH}?from=onboard`, label: "Choose a plan" }}
       />
     )
   }

@@ -15,11 +15,12 @@ export default async function AccountPage({
 }) {
   const user = await getSessionUser()
   const { notice } = await searchParams
-  if (!user || user.role !== "applicant") {
+  if (!user || user.roleLevel !== 4) {
     return (
       <RoleGate
-        title="Applicant desk"
-        body="Sign in as an applicant, or use the Demo identity switcher (Maya Chen or Devon Hale) when the demo switcher is enabled."
+        title="Lease Applicant desk"
+        body="Sign in with a Lease Applicant account (L4). Public demo role hopping is disabled for anonymous visitors."
+        action={{ href: "/login?next=/account", label: "Log in" }}
       />
     )
   }

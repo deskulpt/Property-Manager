@@ -115,13 +115,15 @@ export function SpecList({
 export function RoleGate({
   title,
   body,
+  action,
 }: {
   title: string
   body: string
+  action?: { href: string; label: string }
 }) {
   return (
     <div className="mx-auto max-w-xl px-4 py-16">
-      <EmptyState title={title} body={body} />
+      <EmptyState title={title} body={body} action={action} />
     </div>
   )
 }

@@ -11,7 +11,9 @@ export type StaffRole =
   | "service_manager"
   | "property_manager"
   | "merchandiser"
-export type Role = MarketRole | StaffRole
+/** Credentials created; role not chosen yet. */
+export type PendingRole = "pending"
+export type Role = MarketRole | StaffRole | PendingRole
 /** `hold` = deliberately delisted from the public catalog (Ask Easy unlist). */
 export type UnitStatus = "available" | "pending" | "leased" | "hold"
 export type ApplicationStatus = "submitted" | "approved" | "denied"
@@ -38,6 +40,7 @@ export const MARKET_ROLES: MarketRole[] = [
 ]
 
 export function isStaffRole(role: string): role is StaffRole {
+  if (role === "pending") return false
   return (STAFF_ROLES as string[]).includes(role)
 }
 

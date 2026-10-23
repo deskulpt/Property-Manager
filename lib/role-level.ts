@@ -34,6 +34,8 @@ export function roleToLevel(role: Role | string): RoleLevel {
       return 4
     case "service_provider":
       return 5
+    case "pending":
+      return 5
     default:
       return 5
   }
@@ -55,4 +57,43 @@ export function canOpenConsole(level: RoleLevel) {
 
 export function canImpersonate(level: RoleLevel) {
   return level <= 1
+}
+
+/** Self-serve onboarding may only pick L2–L5. */
+export const ONBOARDING_ROLE_LEVELS: RoleLevel[] = [2, 3, 4, 5]
+
+export function roleForOnboardingLevel(level: RoleLevel): Role | null {
+  switch (level) {
+    case 2:
+      return "landlord_admin"
+    case 3:
+      return "managing_agent"
+    case 4:
+      return "applicant"
+    case 5:
+      return "service_provider"
+    default:
+      return null
+  }
+}
+
+export function deskPathForLevel(level: RoleLevel): string {
+  switch (level) {
+    case 0:
+    case 1:
+      return "/console"
+    case 2:
+      return "/landlord"
+    case 3:
+      return "/agent"
+    case 4:
+      return "/account"
+    case 5:
+      return "/provider"
+  }
+}
+
+/** Landlord listing desk unlocks when org billing status is active/trial (or demo). */
+export function subscriptionAllowsDesk(status: string | null | undefined): boolean {
+  return status === "active" || status === "trial"
 }

@@ -14,8 +14,10 @@ import {
   assessLateFees,
   assignJob,
   addCustomDomain,
+  completeLandlordOnboarding,
+  completeNonLandlordOnboarding,
   createApplication,
-  createLandlordAccount,
+  createPendingAccount,
   createPropertyForLandlord,
   createVisitRequest,
   exportUserData,
@@ -98,7 +100,13 @@ import {
   type PropertyType,
 } from "@/lib/referrals"
 import { agentCanAccessTenant } from "@/lib/agent-context"
-import { canImpersonate, canOpenConsole } from "@/lib/role-level"
+import {
+  canImpersonate,
+  canOpenConsole,
+  deskPathForLevel,
+  roleForOnboardingLevel,
+  subscriptionAllowsDesk,
+} from "@/lib/role-level"
 import { sessionCookieOptions } from "@/lib/env"
 import {
   ADMIN_SESSION_COOKIE,
@@ -138,10 +146,10 @@ const signupSchema = z.object({
   name: z.string().trim().min(2, "Enter your name"),
   email: z.string().trim().email("Enter a work email"),
   password: z.string().min(8, "Use at least 8 characters"),
-  company: z.string().trim().min(2, "Enter the organisation name"),
 })
 
-export async function signupLandlord(
+/** Public signup — credentials only; role at /onboarding/role; L2 then /pricing/subscribe. */
+export async function signupAccount(
   _prev: AuthFormState,
   formData: FormData,
 ): Promise<AuthFormState> {
@@ -155,7 +163,6 @@ export async function signupLandlord(
     name: formData.get("name"),
     email: formData.get("email"),
     password: formData.get("password"),
-    company: formData.get("company"),
   })
   if (!parsed.success) {
     return { error: "Check the highlighted fields.", fieldErrors: issues(parsed.error) }
@@ -163,12 +170,10 @@ export async function signupLandlord(
   const policy = passwordPolicyError(parsed.data.password)
   if (policy) return { error: policy, fieldErrors: { password: policy } }
   const passwordHash = await hashPassword(parsed.data.password)
-  const result = createLandlordAccount({
+  const result = createPendingAccount({
     name: parsed.data.name,
     email: parsed.data.email,
     passwordHash,
-    company: parsed.data.company,
-    packageTier: "starter",
   })
   if (!result.ok) return { error: result.error, fieldErrors: {} }
   recordConsentEvent({
@@ -185,12 +190,67 @@ export async function signupLandlord(
   notify({
     userId: result.userId,
     title: "Welcome to Easy Rental",
-    body: `${parsed.data.company} is ready. Choose a listing plan to open the landlord desk.`,
-    href: `${SUBSCRIBE_PATH}?from=onboard`,
+    body: "Choose your role to finish setting up your account.",
+    href: "/onboarding/role",
   })
-  refresh(["/", "/landlord", "/landlord/settings", "/inbox", "/pricing", SUBSCRIBE_PATH])
-  // L2 landlord onboard: signup → package select (secure-login may wrap role pick first).
-  redirect(`${SUBSCRIBE_PATH}?from=onboard`)
+  refresh(["/", "/onboarding/role", "/inbox"])
+  redirect("/onboarding/role")
+}
+
+/** @deprecated Prefer signupAccount — kept for import compatibility. */
+export async function signupLandlord(
+  prev: AuthFormState,
+  formData: FormData,
+): Promise<AuthFormState> {
+  return signupAccount(prev, formData)
+}
+
+const onboardingRoleSchema = z.object({
+  level: z.coerce.number().int().min(2).max(5),
+  company: z.string().trim().optional(),
+  trade: z.string().trim().optional(),
+  serviceArea: z.string().trim().optional(),
+})
+
+export async function completeOnboardingRole(
+  _prev: AuthFormState,
+  formData: FormData,
+): Promise<AuthFormState> {
+  const user = await getSessionUser()
+  if (!user) return { error: "Sign in to continue onboarding.", fieldErrors: {} }
+  const parsed = onboardingRoleSchema.safeParse({
+    level: formData.get("level"),
+    company: formData.get("company") || undefined,
+    trade: formData.get("trade") || undefined,
+    serviceArea: formData.get("serviceArea") || undefined,
+  })
+  if (!parsed.success) {
+    return { error: "Choose a role to continue.", fieldErrors: issues(parsed.error) }
+  }
+  const level = parsed.data.level as 2 | 3 | 4 | 5
+  if (!roleForOnboardingLevel(level)) {
+    return { error: "That role is not available for self-serve signup.", fieldErrors: {} }
+  }
+  if (level === 2) {
+    const company = parsed.data.company?.trim() ?? ""
+    if (company.length < 2) {
+      return { error: "Enter your organisation name.", fieldErrors: { company: "Required" } }
+    }
+    const result = completeLandlordOnboarding({ userId: user.id, company })
+    if (!result.ok) return { error: result.error, fieldErrors: {} }
+    refresh(["/", SUBSCRIBE_PATH, "/landlord"])
+    redirect(`${SUBSCRIBE_PATH}?from=onboard`)
+  }
+  const result = completeNonLandlordOnboarding({
+    userId: user.id,
+    level,
+    company: parsed.data.company,
+    trade: parsed.data.trade,
+    serviceArea: parsed.data.serviceArea,
+  })
+  if (!result.ok) return { error: result.error, fieldErrors: {} }
+  refresh(["/", deskPathForLevel(level)])
+  redirect(deskPathForLevel(level))
 }
 
 export type SubscribeFormState = {
@@ -283,10 +343,19 @@ export async function loginWithPassword(
     const jar = await cookies()
     jar.delete(ADMIN_SESSION_COOKIE)
   }
-  refresh(["/", "/landlord", "/inbox", "/cms", "/console"])
-  if (account.role === "landlord_admin") redirect("/landlord")
+  refresh(["/", "/landlord", "/inbox", "/cms", "/console", "/onboarding/role", SUBSCRIBE_PATH])
+  if (!account.onboardingComplete || account.role === "pending") {
+    redirect("/onboarding/role")
+  }
+  if (
+    account.roleLevel === 2 &&
+    !account.tenantIsDemo &&
+    !subscriptionAllowsDesk(account.tenantStatus)
+  ) {
+    redirect(`${SUBSCRIBE_PATH}?from=onboard`)
+  }
   if (canOpenConsole(account.roleLevel)) redirect("/console")
-  redirect("/")
+  redirect(deskPathForLevel(account.roleLevel))
 }
 
 export async function logoutSession() {

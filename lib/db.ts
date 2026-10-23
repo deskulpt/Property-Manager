@@ -52,7 +52,7 @@ import {
   type RewardStatus,
 } from "@/lib/referrals"
 
-const SEED_VERSION = "18"
+const SEED_VERSION = "19"
 
 function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
@@ -104,12 +104,16 @@ export type SessionUser = {
   tenantName: string | null
   tenantKind: "landlord" | "platform" | null
   tenantPackage: PackageTier | null
+  /** Org billing: pending until /pricing/subscribe activates. */
+  tenantStatus: string | null
   phone: string | null
   displayCurrency: DisplayCurrency
   hasPassword: boolean
   /** Fixture identity; only these appear in the staff impersonation switcher. */
   isDemo: boolean
   tenantIsDemo: boolean
+  /** False until role (+ L2 subscribe) finishes. */
+  onboardingComplete: boolean
 }
 
 export type FloorRecord = {
@@ -220,11 +224,13 @@ function mapUser(row: Record<string, unknown>): SessionUser {
     tenantName: str(row, "tenant_name"),
     tenantKind: (str(row, "tenant_kind") as "landlord" | "platform" | null) ?? null,
     tenantPackage: pkg ? parsePlanId(pkg) : null,
+    tenantStatus: str(row, "tenant_status"),
     phone: str(row, "phone"),
     displayCurrency: (str(row, "display_currency") as DisplayCurrency | null) ?? "INR",
     hasPassword: Boolean(str(row, "password_hash")),
     isDemo: Number(row.is_demo) === 1,
     tenantIsDemo: Number(row.tenant_is_demo) === 1,
+    onboardingComplete: Number(row.onboarding_complete ?? 1) === 1,
   }
 }
 
@@ -272,6 +278,7 @@ const USER_SQL = `
          u.service_area, u.provider_verified, u.phone, u.password_hash,
          COALESCE(u.is_demo, 0) AS is_demo,
          COALESCE(u.role_level, 5) AS role_level,
+         COALESCE(u.onboarding_complete, 1) AS onboarding_complete,
          t.name AS tenant_name, t.kind AS tenant_kind,
          COALESCE(t.display_currency, 'INR') AS display_currency,
          COALESCE(t.package, 'starter') AS tenant_package,
@@ -300,6 +307,7 @@ function createSchema(db: Sql) {
       email TEXT NOT NULL UNIQUE,
       role TEXT NOT NULL,
       role_level INTEGER NOT NULL DEFAULT 5,
+      onboarding_complete INTEGER NOT NULL DEFAULT 1,
       tenant_id TEXT,
       company TEXT,
       trade TEXT,
@@ -2100,12 +2108,34 @@ export function slugifyOrg(name: string) {
   return normalizeSlug(name)
 }
 
+/** Credentials-only signup — role chosen at /onboarding/role. */
+export function createPendingAccount(input: {
+  name: string
+  email: string
+  passwordHash: string
+}) {
+  const db = getDb()
+  const email = input.email.trim().toLowerCase()
+  const existing = asRow(db.prepare("SELECT id FROM users WHERE lower(email) = ?").get(email))
+  if (existing) return { ok: false as const, error: "An account with that email already exists." }
+  const userId = crypto.randomUUID()
+  db.prepare(
+    `INSERT INTO users (
+      id, name, email, role, role_level, onboarding_complete, tenant_id, company, trade,
+      service_area, provider_verified, phone, password_hash, is_demo
+    ) VALUES (?, ?, ?, 'pending', 5, 0, NULL, NULL, NULL, NULL, 0, NULL, ?, 0)`,
+  ).run(userId, input.name.trim(), email, input.passwordHash)
+  return { ok: true as const, userId }
+}
+
 export function createLandlordAccount(input: {
   name: string
   email: string
   passwordHash: string
   company: string
   packageTier?: PackageTier
+  /** pending until /pricing/subscribe; active unlocks desk. */
+  tenantStatus?: "pending" | "active" | "trial"
 }) {
   const db = getDb()
   const email = input.email.trim().toLowerCase()
@@ -2122,21 +2152,96 @@ export function createLandlordAccount(input: {
   const tenantId = crypto.randomUUID()
   const userId = crypto.randomUUID()
   const pkg: PackageTier = input.packageTier ?? "starter"
+  const status = input.tenantStatus ?? "pending"
   transaction((tx) => {
     tx.prepare(
       `INSERT INTO tenants (id, name, slug, city, kind, display_currency, package, status, is_demo)
-       VALUES (?, ?, ?, ?, 'landlord', 'INR', ?, 'active', 0)`,
-    ).run(tenantId, company, slug, "India", pkg)
+       VALUES (?, ?, ?, ?, 'landlord', 'INR', ?, ?, 0)`,
+    ).run(tenantId, company, slug, "India", pkg, status)
     tx.prepare(
       `INSERT INTO users (
-        id, name, email, role, role_level, tenant_id, company, trade, service_area, provider_verified, phone, password_hash, is_demo
-      ) VALUES (?, ?, ?, 'landlord_admin', 2, ?, ?, NULL, NULL, 0, NULL, ?, 0)`,
-    ).run(userId, input.name.trim(), email, tenantId, company, input.passwordHash)
+        id, name, email, role, role_level, onboarding_complete, tenant_id, company, trade,
+        service_area, provider_verified, phone, password_hash, is_demo
+      ) VALUES (?, ?, ?, 'landlord_admin', 2, ?, ?, ?, NULL, NULL, 0, NULL, ?, 0)`,
+    ).run(
+      userId,
+      input.name.trim(),
+      email,
+      status === "active" || status === "trial" ? 1 : 0,
+      tenantId,
+      company,
+      input.passwordHash,
+    )
     tx.prepare(
       "INSERT INTO late_fee_rules (tenant_id, grace_days, flat_cents, percent_bps) VALUES (?, 5, 1500000, 150)",
     ).run(tenantId)
   })
   return { ok: true as const, userId, tenantId, slug }
+}
+
+export function completeLandlordOnboarding(input: { userId: string; company: string }) {
+  const user = getUser(input.userId)
+  if (!user) return { ok: false as const, error: "Account not found." }
+  if (user.role === "landlord_admin" && user.tenantId) {
+    return { ok: true as const, tenantId: user.tenantId }
+  }
+  if (user.role !== "pending") {
+    return { ok: false as const, error: "Onboarding already complete." }
+  }
+  const company = input.company.trim()
+  if (company.length < 2) return { ok: false as const, error: "Enter the organisation name." }
+  let slug = slugifyOrg(company)
+  let n = 0
+  while (asRow(getDb().prepare("SELECT id FROM tenants WHERE slug = ?").get(slug))) {
+    n += 1
+    slug = `${slugifyOrg(company)}-${n}`
+  }
+  const tenantId = crypto.randomUUID()
+  transaction((tx) => {
+    tx.prepare(
+      `INSERT INTO tenants (id, name, slug, city, kind, display_currency, package, status, is_demo)
+       VALUES (?, ?, ?, ?, 'landlord', 'INR', 'starter', 'pending', 0)`,
+    ).run(tenantId, company, slug, "India")
+    tx.prepare(
+      `UPDATE users SET role = 'landlord_admin', role_level = 2, tenant_id = ?, company = ?,
+        onboarding_complete = 0 WHERE id = ?`,
+    ).run(tenantId, company, input.userId)
+    tx.prepare(
+      "INSERT INTO late_fee_rules (tenant_id, grace_days, flat_cents, percent_bps) VALUES (?, 5, 1500000, 150)",
+    ).run(tenantId)
+  })
+  return { ok: true as const, tenantId }
+}
+
+export function completeNonLandlordOnboarding(input: {
+  userId: string
+  level: 3 | 4 | 5
+  company?: string | null
+  trade?: string | null
+  serviceArea?: string | null
+}) {
+  const user = getUser(input.userId)
+  if (!user) return { ok: false as const, error: "Account not found." }
+  if (user.onboardingComplete && user.role !== "pending") {
+    return { ok: false as const, error: "Onboarding already complete." }
+  }
+  const role =
+    input.level === 3 ? "managing_agent" : input.level === 5 ? "service_provider" : "applicant"
+  getDb()
+    .prepare(
+      `UPDATE users SET role = ?, role_level = ?, company = COALESCE(?, company),
+        trade = COALESCE(?, trade), service_area = COALESCE(?, service_area),
+        onboarding_complete = 1 WHERE id = ?`,
+    )
+    .run(
+      role,
+      input.level,
+      input.company?.trim() || null,
+      input.trade?.trim() || null,
+      input.serviceArea?.trim() || null,
+      input.userId,
+    )
+  return { ok: true as const, role }
 }
 
 export function getUserByEmail(email: string) {
@@ -2208,7 +2313,14 @@ export function setTenantPackage(
     return { ok: false, error: "Only landlord organisations can subscribe to listing plans." }
   }
   const pkg = parsePlanId(packageTier)
-  getDb().prepare("UPDATE tenants SET package = ? WHERE id = ?").run(pkg, tenantId)
+  getDb()
+    .prepare("UPDATE tenants SET package = ?, status = 'active' WHERE id = ?")
+    .run(pkg, tenantId)
+  getDb()
+    .prepare(
+      `UPDATE users SET onboarding_complete = 1 WHERE tenant_id = ? AND role = 'landlord_admin'`,
+    )
+    .run(tenantId)
   return { ok: true, package: pkg }
 }
 
