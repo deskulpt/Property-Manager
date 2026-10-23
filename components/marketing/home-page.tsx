@@ -12,7 +12,7 @@ export function HomePage({
   return (
     <Motion>
       {/* Full-bleed blueprint atmosphere — first viewport is one composition */}
-      <section className="relative isolate border-b border-ink/10">
+      <section className="relative isolate overflow-hidden border-b border-ink/10">
         <div
           className="blueprint-grid pointer-events-none absolute inset-0 -z-10 opacity-70"
           aria-hidden
@@ -21,19 +21,19 @@ export function HomePage({
           className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_20%_0%,rgb(14_110_140/0.14),transparent_55%),radial-gradient(ellipse_at_90%_40%,rgb(19_37_58/0.08),transparent_50%)]"
           aria-hidden
         />
-        <div className="mx-auto grid min-h-[min(78vh,720px)] max-w-[1200px] items-center gap-10 overflow-visible px-4 pb-14 pt-12 md:grid-cols-[0.95fr_1.05fr] md:gap-12 md:px-8 md:pb-16 md:pt-16">
+        <div className="mx-auto grid min-h-[min(72vh,640px)] max-w-[1200px] items-end gap-10 px-4 pb-14 pt-16 md:grid-cols-[1.1fr_0.9fr] md:px-8 md:pb-20 md:pt-24">
           <div>
             <p className="hero-brand">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/logo.svg"
                 alt="Easy Rental"
-                width={420}
-                height={78}
-                className="h-20 w-auto object-contain md:h-28"
+                width={480}
+                height={270}
+                className="h-16 w-auto object-contain md:h-24"
               />
             </p>
-            <h1 className="hero-rise mt-6 max-w-[22ch] font-serif text-2xl font-medium leading-snug tracking-tight text-ink md:text-3xl">
+            <h1 className="hero-rise mt-5 max-w-[22ch] font-serif text-2xl font-medium leading-snug tracking-tight text-ink md:text-3xl">
               Industrial bays, mapped and leased online.
             </h1>
             <p className="hero-rise mt-4 max-w-[40ch] text-base leading-relaxed text-ink-soft md:text-lg">
@@ -55,71 +55,20 @@ export function HomePage({
               </Link>
             </div>
           </div>
-
-          {/* Portal showcase — dominant right visual; stacks under copy on mobile */}
-          <div className="hero-rise w-full" aria-label="Product screenshots">
-            <div className="mx-auto flex max-w-[560px] flex-col gap-3 md:max-w-none">
-              <Link
-                href="/listings"
-                className="group relative block overflow-hidden border border-ink/20 bg-brand shadow-[0_24px_60px_-28px_rgb(19_37_58/0.55)]"
-              >
-                <div className="flex items-center gap-1.5 border-b border-white/10 bg-brand-deep px-3 py-2">
-                  <span className="h-2 w-2 rounded-full bg-paper/35" aria-hidden />
-                  <span className="h-2 w-2 rounded-full bg-paper/35" aria-hidden />
-                  <span className="h-2 w-2 rounded-full bg-paper/35" aria-hidden />
-                  <span className="ml-2 font-mono text-[10px] uppercase tracking-[0.14em] text-paper/55">
-                    listings · live map
-                  </span>
-                </div>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/marketing/portal-listings.png"
-                  alt="Public listings with map and bay filters"
-                  width={1280}
-                  height={800}
-                  className="aspect-[16/10] w-full object-cover object-top transition duration-500 group-hover:scale-[1.015]"
-                />
-              </Link>
-
-              <div className="grid grid-cols-2 gap-3">
-                <Link
-                  href="/properties/waterman/units/B1"
-                  className="group overflow-hidden border border-ink/20 bg-paper"
-                >
-                  <div className="border-b border-ink/10 bg-paper-2 px-2.5 py-1.5 font-mono text-[9px] uppercase tracking-[0.14em] text-ink-faint">
-                    Unit · Matterport
-                  </div>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src="/marketing/portal-unit-matterport.png"
-                    alt="Unit B1 Matterport walkthrough"
-                    width={1280}
-                    height={800}
-                    className="aspect-[16/11] w-full object-cover object-top transition duration-500 group-hover:scale-[1.02]"
-                  />
-                </Link>
-                <Link
-                  href="/landlord/ask"
-                  className="group overflow-hidden border border-ink/20 bg-paper"
-                >
-                  <div className="border-b border-ink/10 bg-paper-2 px-2.5 py-1.5 font-mono text-[9px] uppercase tracking-[0.14em] text-ink-faint">
-                    Landlord · Ask Easy
-                  </div>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src="/marketing/portal-ask-easy.png"
-                    alt="Ask Easy landlord assistant"
-                    width={1280}
-                    height={800}
-                    className="aspect-[16/11] w-full object-cover object-top transition duration-500 group-hover:scale-[1.02]"
-                  />
-                </Link>
-              </div>
-            </div>
-            <p className="mt-4 font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
-              Portal · listings · walkthrough · landlord desk
-            </p>
-          </div>
+          <Link
+            href="/properties/waterman/units/B1"
+            className="hero-rise group relative hidden overflow-hidden border border-ink/15 md:block"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/media/gen-exterior.jpg"
+              alt="BBM logistics park exterior"
+              className="aspect-[4/3] h-full w-full object-cover transition duration-500 group-hover:scale-[1.02]"
+            />
+            <span className="absolute inset-x-0 bottom-0 bg-brand/80 px-4 py-3 text-sm text-paper">
+              Featured · Unit B1 walkthrough
+            </span>
+          </Link>
         </div>
       </section>
 
