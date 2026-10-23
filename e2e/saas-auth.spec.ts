@@ -36,8 +36,8 @@ test.describe("Slice A hosted signup path", () => {
 
     await expect(page).toHaveURL(/\/landlord/, { timeout: 20_000 })
     await expect(page.getByText(`Eval Parks ${stamp}`, { exact: true })).toBeVisible()
-    // Must not require seeded identities for this path
-    await expect(page.getByTestId("demo-identity")).toBeVisible()
+    // Signup path must not require picking a seeded identity; OSS still shows the demo banner.
+    await expect(page.getByTestId("demo-auth-banner")).toBeVisible()
   })
 
   test("log in returns to the same org desk", async ({ page }) => {
