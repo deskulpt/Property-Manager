@@ -54,6 +54,20 @@ The United States, Canada, Brazil, and the United Kingdom (`US`, `CA`, `BR`, `GB
 
 Each future market is meant to plug in through the same seams: currency, phone, address, ID document types, and payment methods. Completing the checklist is required before that country can appear on public forms.
 
+## Hosted vs OSS auth (Slice A)
+
+| Mode | How to run | Session | Demo identity switcher |
+| --- | --- | --- | --- |
+| **OSS / local** (default) | `npm run dev` | Cookie `deskulpt_user` | **On**, with a persistent banner |
+| **Hosted SaaS** | `HOSTED=1 npm run dev` | Same cookie after Sign up / Log in; `Secure` flag | **Off** (Sign up / Log in in the header) |
+| Hosted + demo override | `HOSTED=1 ALLOW_DEMO_AUTH=1` | Either path | On (for staging demos only) |
+
+Public auth routes: `/signup`, `/login`, `/create-account` (India-only landlord org), `/forgot-password` (demo email stub), `/invite/[token]`.
+
+Self-serve Create account provisions a landlord tenant, **owner** seat, default **Basic** (`starter`) package, and late-fee rule. Org invites add `leasing_manager` / `accountant` / `viewer` seats within package seat caps. Passwords use scrypt (`lib/auth/password.ts`). Still SQLite — no Postgres, DocuSign, or live Razorpay in this slice.
+
+Evaluator path (hosted): visitor → Sign up → Create account → `/landlord` empty desk (no seeded identity). OSS evaluator path: keep using the identity switcher as before.
+
 ## Roles and demo identities
 
 **Real landlords** sign up with email/password at `/signup` (`is_demo=0`). Sessions use a signed cookie (`DESKULPT_SECRET_KEY`).
@@ -246,7 +260,7 @@ npm test
 npm run test  # isolation + shop + rust parity
 ```
 
-- `npm test` runs Vitest suites including isolation, shop, segment expansion, listing import, plan-draft, **rust-core-parity** (WASM vs prior TS), and **Ask Easy** (`ask-easy`, `ask-easy-onboard`, `adk-platform`). It checks tenant isolation, approving Maya (rent plus GST, and a second approve fails), late-fee idempotence, CMS email redaction, provider area approval, and that public form countries stay India-only until a draft checklist is complete. Ask Easy asserts stub draft listings stay unpublished, reject leaves no job, approve runs `createJob`/`assignJob`, and execute without approval fails. It does not use `data/deskulpt.sqlite`.
+- `npm test` runs Vitest suites including isolation, shop, segment expansion, listing import, plan-draft, **rust-core-parity** (WASM vs prior TS), and **Ask Easy**, plus **saas-auth** (signup, seats, packages, invites) (`ask-easy`, `ask-easy-onboard`, `adk-platform`). It checks tenant isolation, approving Maya (rent plus GST, and a second approve fails), late-fee idempotence, CMS email redaction, provider area approval, and that public form countries stay India-only until a draft checklist is complete. Ask Easy asserts stub draft listings stay unpublished, reject leaves no job, approve runs `createJob`/`assignJob`, and execute without approval fails. It does not use `data/deskulpt.sqlite`.
 - `npm run test:watch` runs the same files under Vitest watch.
 - `npm run test:e2e` runs Playwright (`e2e/leasing-path.spec.ts`) against its own Next process on **port 43124** and a throwaway database. It does not reuse the dev server on 43123. The script loads the home page, switches to Nadia, approves Maya's application, and confirms Maya sees approved status and an INR rent row.
 - `npm run lint` runs ESLint.
