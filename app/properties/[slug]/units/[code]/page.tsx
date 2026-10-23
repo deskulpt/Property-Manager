@@ -52,9 +52,14 @@ export default async function UnitPage({
           <p className="mt-1 text-sm text-ink-soft">{property.address}</p>
           <div className="mt-4">
             <PropertyMap
-              lat={property.latitude}
-              lng={property.longitude}
+              latitude={property.latitude}
+              longitude={property.longitude}
+              address={property.address}
               label={property.name}
+              entranceLatitude={property.entranceLatitude}
+              entranceLongitude={property.entranceLongitude}
+              entranceLabel={property.entranceLabel}
+              hideExactPin={property.hideExactPin}
             />
           </div>
         </div>
@@ -118,6 +123,15 @@ export default async function UnitPage({
           >
             Back to property
           </Link>
+          {property.visitsEnabled ? (
+            <Link
+              href={`/properties/${property.slug}/book?unit=${unit.code}`}
+              className="border border-white/30 px-4 py-3 font-serif text-sm font-bold transition-colors hover:border-white"
+              data-testid="book-visit-unit"
+            >
+              Schedule visit
+            </Link>
+          ) : null}
         </div>
         <div className="mt-6">
           <BookVisitForm

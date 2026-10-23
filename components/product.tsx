@@ -80,6 +80,10 @@ const tones: Record<string, string> = {
   completed: "bg-avail/15 text-[#1f6b38]",
   cancelled: "bg-destructive/10 text-destructive",
   refunded: "bg-leased/20 text-ink-soft",
+  requested: "bg-pending/20 text-[#8a6312]",
+  confirmed: "bg-avail/15 text-[#1f6b38]",
+  declined: "bg-destructive/10 text-destructive",
+  no_show: "bg-leased/20 text-ink-soft",
 }
 
 export function StatusBadge({ status }: { status: string }) {

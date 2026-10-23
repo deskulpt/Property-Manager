@@ -67,7 +67,7 @@ export function ListingsMap({ pins }: { pins: ListingMapPin[] }) {
   const first = valid[0]
 
   return (
-    <div className="mb-6 border border-ink/10 bg-card">
+    <div className="mb-6 border border-ink/10 bg-card" data-testid="listings-map-panel">
       <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-ink/10 px-4 py-3">
         <h2 className="font-serif text-lg font-semibold">Map</h2>
         <a

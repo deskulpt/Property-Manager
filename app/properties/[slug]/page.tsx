@@ -35,6 +35,17 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
             : `${property.address}. Click a pin to open that bay.`
         }
       />
+      {property.visitsEnabled ? (
+        <p className="mb-6">
+          <Link
+            href={`/properties/${property.slug}/book`}
+            className="border border-ink/20 px-3 py-2 font-serif text-sm font-semibold transition-colors hover:border-terra hover:text-terra"
+            data-testid="book-visit-property"
+          >
+            Book a visit
+          </Link>
+        </p>
+      ) : null}
       {multiFloor ? (
         <FloorStackViewer
           floors={property.floors.map((floor) => ({
@@ -100,9 +111,14 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
         </p>
         <div className="mt-4">
           <PropertyMap
-            lat={property.latitude}
-            lng={property.longitude}
+            latitude={property.latitude}
+            longitude={property.longitude}
+            address={property.address}
             label={property.name}
+            entranceLatitude={property.entranceLatitude}
+            entranceLongitude={property.entranceLongitude}
+            entranceLabel={property.entranceLabel}
+            hideExactPin={property.hideExactPin}
           />
         </div>
       </section>

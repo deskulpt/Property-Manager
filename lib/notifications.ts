@@ -6,6 +6,8 @@ export type Notice = {
   title: string
   body: string
   href?: string
+  /** Optional idempotency key (e.g. visit_remind:<appointmentId>). */
+  sourceId?: string
 }
 
 export type NoticeChannel = "in_app" | "email_demo" | "push_demo" | "whatsapp_demo"
@@ -33,12 +35,18 @@ class DemoNotificationQueue implements NotificationQueue {
     if (batch.length === 0) return 0
     const db = getDb()
     const insert = db.prepare(
-      `INSERT INTO notifications (id, user_id, title, body, href, read_at, created_at, channel)
-       VALUES (?, ?, ?, ?, ?, NULL, ?, ?)`,
+      `INSERT INTO notifications (id, user_id, title, body, href, read_at, created_at, channel, source_id)
+       VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
     )
+    const exists = db.prepare("SELECT id FROM notifications WHERE source_id = ? LIMIT 1")
     const now = new Date().toISOString()
     const channels: NoticeChannel[] = ["in_app", "email_demo", "push_demo", "whatsapp_demo"]
+    let drained = 0
     for (const notice of batch) {
+      if (notice.sourceId) {
+        const prior = exists.get(notice.sourceId)
+        if (prior) continue
+      }
       for (const channel of channels) {
         insert.run(
           crypto.randomUUID(),
@@ -48,10 +56,12 @@ class DemoNotificationQueue implements NotificationQueue {
           notice.href ?? null,
           now,
           channel,
+          notice.sourceId ?? null,
         )
       }
+      drained += 1
     }
-    return batch.length
+    return drained
   }
 }
 

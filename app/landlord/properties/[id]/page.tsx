@@ -2,6 +2,7 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { BuildingVisualsPanel } from "@/components/floor/building-visuals-panel"
 import { UnitPlanCreator } from "@/components/floor/unit-plan-creator"
+import { MapPinForm } from "@/components/landlord/map-pin-form"
 import { PageHeader } from "@/components/product"
 import { propertyForLandlord } from "@/lib/db"
 import { getSessionUser } from "@/lib/session"
@@ -42,9 +43,28 @@ export default async function BuildingVisualsPage({ params }: { params: Promise<
         </div>
       </section>
 
+      <div className="mb-6">
+        <MapPinForm
+          propertyId={property.id}
+          latitude={property.latitude}
+          longitude={property.longitude}
+          entranceLatitude={property.entranceLatitude}
+          entranceLongitude={property.entranceLongitude}
+          entranceLabel={property.entranceLabel}
+          hideExactPin={property.hideExactPin}
+        />
+      </div>
       <div className="mb-6 border border-ink/10 bg-paper-2 p-4">
         <p className="font-mono text-[11px] uppercase tracking-wider text-ink-faint">QR posters</p>
         <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-sm">
+          <li>
+            <Link
+              href={`/landlord/poster/property/${property.id}`}
+              className="font-semibold text-terra hover:underline"
+            >
+              Property QR poster
+            </Link>
+          </li>
           {property.units.map((unit) => (
             <li key={unit.id}>
               <Link
