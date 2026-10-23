@@ -8,7 +8,7 @@ export default async function ProviderLayout({ children }: { children: React.Rea
     return (
       <RoleGate
         title="This desk is for a service provider"
-        body="Switch to Luis Ortega to accept the weather-seal job, Rosa Delgado to see a completed clean, or Kei Watanabe to see an empty board. Amrita Singh is approved at Harbourline and has nothing until Jonah assigns her."
+        body="Use the Demo identity switcher and pick Luis Ortega (electrician, Bhiwandi) for the seeded weather-seal job. Real provider accounts are not seeded."
       />
     )
   }

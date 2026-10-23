@@ -14,7 +14,7 @@ export default async function CmsHomePage() {
 
   const cards = [
     caps.personas.includes("platform_staff")
-      ? { href: "/cms/staff", title: "Platform staff", body: "DeSkulpt operators and their roles." }
+      ? { href: "/cms/staff", title: "Platform staff", body: "Easy Rental operators and their roles." }
       : null,
     caps.personas.includes("landlords")
       ? { href: "/cms/landlords", title: "Landlords", body: "Organisations and admin accounts. Invite a demo landlord." }
@@ -57,7 +57,7 @@ export default async function CmsHomePage() {
             href={card.href}
             className="desk-chrome border border-ink/10 bg-card p-5 transition-colors hover:border-terra/40"
           >
-            <h2 className="font-heading text-xl font-extrabold">{card.title}</h2>
+            <h2 className="font-serif text-xl font-semibold">{card.title}</h2>
             <p className="mt-2 text-sm text-ink-soft">{card.body}</p>
           </Link>
         ))}

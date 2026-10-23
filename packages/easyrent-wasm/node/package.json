@@ -1,0 +1,13 @@
+{
+  "name": "easyrent-wasm",
+  "description": "WASM bindings for easyrent-core",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "easyrent_wasm_bg.wasm",
+    "easyrent_wasm.js",
+    "easyrent_wasm.d.ts"
+  ],
+  "main": "easyrent_wasm.js",
+  "types": "easyrent_wasm.d.ts"
+}

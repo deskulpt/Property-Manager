@@ -5,10 +5,14 @@ import { getSessionUser } from "@/lib/session"
 const links = [
   { href: "/landlord", label: "Overview" },
   { href: "/landlord/properties", label: "Properties" },
+  { href: "/landlord/import", label: "Import listing" },
   { href: "/landlord/applications", label: "Applications" },
   { href: "/landlord/jobs", label: "Concierge" },
   { href: "/landlord/providers", label: "Providers" },
   { href: "/landlord/ledger", label: "Ledger" },
+  { href: "/landlord/visits", label: "Visits" },
+  { href: "/landlord/ask", label: "Ask Easy" },
+  { href: "/landlord/shop", label: "Shop" },
   { href: "/landlord/settings", label: "Settings" },
 ]
 
@@ -18,7 +22,7 @@ export default async function LandlordLayout({ children }: { children: React.Rea
     return (
       <RoleGate
         title="This desk is for a landlord admin"
-        body="Switch to Nadia Okonkwo for BBM Logistics Parks, Jonah Ellis for Harbourline Yards India, or Meera Sahni (NRI) for Sahni Global Realty. Each one only sees their own organisation."
+        body="Create an account at Sign up, log in, or use the Demo identity switcher (Nadia · DEMO · EasyRent Hyderabad) when the demo switcher is enabled. Each organisation only sees its own data."
       />
     )
   }

@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { EmptyState, PageHeader, RoleGate, StatusBadge } from "@/components/product"
 import { PhoneOtpForm } from "@/components/otp/phone-otp"
+import { DataRightsPanel } from "@/components/privacy/data-rights"
 import { applicationsForApplicant } from "@/lib/db"
 import { formatDay } from "@/lib/format"
 import { getSessionUser } from "@/lib/session"
@@ -15,7 +16,12 @@ export default async function AccountPage({
   const user = await getSessionUser()
   const { notice } = await searchParams
   if (!user || user.role !== "applicant") {
-    return <RoleGate title="Applicant desk" body="Pick Maya Chen or Devon Hale in the demo header to see applications." />
+    return (
+      <RoleGate
+        title="Applicant desk"
+        body="Sign in as an applicant, or use the Demo identity switcher (Maya Chen or Devon Hale) when the demo switcher is enabled."
+      />
+    )
   }
   const applications = applicationsForApplicant(user.id)
   return (
@@ -29,6 +35,7 @@ export default async function AccountPage({
       <div className="mb-6 flex flex-wrap gap-3 text-sm font-bold">
         <Link href="/account/verify" className="text-brand">Verification</Link>
         <Link href="/account/payments" className="text-brand">Payments</Link>
+        <Link href="/shop" className="text-brand">Shop</Link>
         <Link href="/inbox" className="text-brand">Inbox</Link>
       </div>
       <section className="mb-8 bg-card p-4 ring-1 ring-foreground/10">
@@ -38,6 +45,9 @@ export default async function AccountPage({
           <PhoneOtpForm currentPhone={user.phone} />
         </div>
       </section>
+      <div className="mb-8">
+        <DataRightsPanel role={user.role} />
+      </div>
       {applications.length === 0 ? (
         <EmptyState title="No applications yet" body="Open a bay from the portfolio and apply. Leased bays stay closed." action={{ href: "/properties", label: "Browse buildings" }} />
       ) : (

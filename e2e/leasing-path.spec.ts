@@ -1,10 +1,11 @@
 import { expect, test, type Page } from "@playwright/test"
+import { mintDemoSessionCookie } from "./session"
 
 async function switchIdentity(page: Page, userId: string) {
   await page.context().addCookies([
     {
       name: "deskulpt_user",
-      value: userId,
+      value: mintDemoSessionCookie(userId),
       domain: "127.0.0.1",
       path: "/",
       httpOnly: true,
@@ -16,10 +17,10 @@ async function switchIdentity(page: Page, userId: string) {
 }
 
 test.describe("evaluator leasing path", () => {
-  test("home loads, Nadia approves Maya, Maya sees rent, Jonah inbox empty", async ({ page }) => {
+  test("home loads, Nadia approves Maya, Maya sees rent", async ({ page }) => {
     await page.goto("/")
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
-    await expect(page.locator("body")).toContainText(/DeSkulpt|BBM|industrial|landlord/i)
+    await expect(page.locator("body")).toContainText(/Easy Rental|DeSkulpt|DEMO|industrial|landlord/i)
 
     await switchIdentity(page, "u_nadia")
     await page.goto("/landlord/applications")
@@ -39,9 +40,5 @@ test.describe("evaluator leasing path", () => {
     await page.goto("/account/payments")
     await expect(page.locator("table")).toContainText(/Rent/i)
     await expect(page.locator("table")).toContainText(/₹/)
-
-    await switchIdentity(page, "u_jonah")
-    await page.goto("/landlord/applications")
-    await expect(page.getByText("The inbox is clear")).toBeVisible()
   })
 })

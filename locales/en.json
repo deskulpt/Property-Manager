@@ -1,6 +1,6 @@
 {
-  "app.name": "DeSkulpt",
-  "app.tagline": "Open-source property desk · demo data only",
+  "app.name": "Easy Rental",
+  "app.tagline": "easyrental.space \u00b7 a product of DeSkulpt Inc. \u00b7 demo data only",
   "nav.context": "Context",
   "nav.map": "Map",
   "nav.listings": "Listings",
@@ -21,8 +21,8 @@
   "cms.markets.iso": "Country code (ISO 3166)",
   "cms.markets.name": "Display name",
   "cms.markets.empty": "No draft markets yet. Start one to work the checklist.",
-  "cms.markets.incomplete": "Incomplete — hidden on public forms",
-  "cms.markets.ready": "Ready — offered on public forms",
+  "cms.markets.incomplete": "Incomplete \u2014 hidden on public forms",
+  "cms.markets.ready": "Ready \u2014 offered on public forms",
   "cms.markets.live": "Live market",
   "cms.markets.save_row": "Save row notes",
   "cms.markets.mark_done": "Mark done",
@@ -37,7 +37,9 @@
   "cms.languages.english": "English (source)",
   "cms.languages.no_key_hint": "Set GOOGLE_CLOUD_TRANSLATION_API_KEY to translate. The app runs without it.",
   "verify.country": "Country",
-  "verify.kicker": "Identity · demo",
+  "verify.kicker": "Identity \u00b7 demo",
   "verify.title": "Verify the applicant.",
-  "verify.lede": "Only India and checklist-ready draft markets appear here. Incomplete drafts stay off public forms."
+  "verify.lede": "Only India and checklist-ready draft markets appear here. Incomplete drafts stay off public forms.",
+  "app.legal": "Easy Rental is a product of DeSkulpt Inc.",
+  "nav.ask": "Ask Easy Rental"
 }

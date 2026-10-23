@@ -6,14 +6,25 @@ import {
   addDays,
   firstOfNextMonth,
   lateFeeCents,
-  monthlyRentCents,
   todayISO,
+  unitMonthlyRentCents,
   type ApplicationStatus,
   type JobStatus,
   type Role,
   type Trade,
   type UnitStatus,
 } from "@/lib/format"
+import { normalizeSlug } from "@/lib/rust/money"
+import {
+  gstAppliesForUnit,
+  isPropertySegment,
+  leaseProfile,
+  parseUnitAttributes,
+  stringifyAttributes,
+  type PropertySegment,
+  type RateBasis,
+  type UnitAttributes,
+} from "@/lib/listing-schemas"
 import { gstCents, type DisplayCurrency } from "@/lib/market"
 import {
   LIVE_MARKET,
@@ -21,12 +32,45 @@ import {
   MARKET_CHECKLIST_LABELS,
   type MarketChecklistKey,
 } from "@/lib/market-checklist"
+import { seedDemoDatabase } from "@/lib/seed-demo"
+import { decryptSecret, encryptSecret, secretLast4 } from "@/lib/shop-crypto"
+import { resolveShopPaymentProvider } from "@/lib/shop-payments"
 
-const SEED_VERSION = "5"
+const SEED_VERSION = "13"
 
 function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
 }
+
+/** Exclusive file lock so parallel Next build workers do not race seed/reset. */
+function withDbInitLock<T>(fn: () => T): T {
+  const lockPath = `${dbPath()}.initlock`
+  const deadline = Date.now() + 20_000
+  while (true) {
+    try {
+      const fd = fs.openSync(lockPath, "wx")
+      try {
+        return fn()
+      } finally {
+        fs.closeSync(fd)
+        try {
+          fs.unlinkSync(lockPath)
+        } catch {
+          /* ignore */
+        }
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err
+      if (Date.now() > deadline) {
+        throw new Error(`Timed out waiting for SQLite init lock at ${lockPath}`)
+      }
+      const wait = new Int32Array(new SharedArrayBuffer(4))
+      Atomics.wait(wait, 0, 0, 40)
+    }
+  }
+}
+
+export type PackageTier = "starter" | "pro"
 
 export type SessionUser = {
   id: string
@@ -40,14 +84,31 @@ export type SessionUser = {
   providerVerified: boolean
   tenantName: string | null
   tenantKind: "landlord" | "platform" | null
+  tenantPackage: PackageTier | null
   phone: string | null
   displayCurrency: DisplayCurrency
+  hasPassword: boolean
+  /** Fixture identity; only these appear in the demo switcher. */
+  isDemo: boolean
+  tenantIsDemo: boolean
+}
+
+export type FloorRecord = {
+  id: string
+  tenantId: string
+  propertyId: string
+  label: string
+  levelIndex: number
+  planPath: string | null
+  /** Validated unit-plan creator JSON (see lib/plan-draft.ts). */
+  planDraftJson: string | null
 }
 
 export type UnitRecord = {
   id: string
   tenantId: string
   propertyId: string
+  floorId: string | null
   code: string
   sqft: number
   clearHeight: string
@@ -55,6 +116,15 @@ export type UnitRecord = {
   driveIns: number
   power: string
   ratePsf: number
+  rateBasis: RateBasis
+  rentAmountMinor: number | null
+  attributes: UnitAttributes
+  attributesJson: string
+  bhk: number | null
+  carpetSqft: number | null
+  securityDepositMonths: number | null
+  maintenanceMinor: number | null
+  gstApplicable: boolean | null
   status: UnitStatus
   hotspotX: number | null
   hotspotY: number | null
@@ -80,7 +150,13 @@ export type PropertyRecord = {
   area: string
   cityLine: string
   totalSqft: number
+  segment: PropertySegment
+  subtype: string
   floorPlanPath: string | null
+  modelPath: string | null
+  latitude: number | null
+  longitude: number | null
+  floors: FloorRecord[]
   units: UnitRecord[]
 }
 
@@ -108,6 +184,7 @@ function num(row: Record<string, unknown>, key: string) {
 }
 
 function mapUser(row: Record<string, unknown>): SessionUser {
+  const pkg = str(row, "tenant_package")
   return {
     id: String(row.id),
     name: String(row.name),
@@ -120,16 +197,30 @@ function mapUser(row: Record<string, unknown>): SessionUser {
     providerVerified: Number(row.provider_verified) === 1,
     tenantName: str(row, "tenant_name"),
     tenantKind: (str(row, "tenant_kind") as "landlord" | "platform" | null) ?? null,
+    tenantPackage: pkg === "pro" || pkg === "starter" ? pkg : null,
     phone: str(row, "phone"),
     displayCurrency: (str(row, "display_currency") as DisplayCurrency | null) ?? "INR",
+    hasPassword: Boolean(str(row, "password_hash")),
+    isDemo: Number(row.is_demo) === 1,
+    tenantIsDemo: Number(row.tenant_is_demo) === 1,
   }
 }
 
-function mapUnit(row: Record<string, unknown>): UnitRecord {
+function mapUnit(row: Record<string, unknown>, segmentHint?: PropertySegment): UnitRecord {
+  const segment =
+    segmentHint ??
+    (isPropertySegment(String(row.segment ?? "warehouse"))
+      ? (String(row.segment) as PropertySegment)
+      : "warehouse")
+  const rateBasisRaw = str(row, "rate_basis") ?? "per_sqft_month"
+  const rateBasis: RateBasis = rateBasisRaw === "flat_month" ? "flat_month" : "per_sqft_month"
+  const attributesJson = str(row, "attributes") ?? "{}"
+  const gstRaw = num(row, "gst_applicable")
   return {
     id: String(row.id),
     tenantId: String(row.tenant_id),
     propertyId: String(row.property_id),
+    floorId: str(row, "floor_id"),
     code: String(row.code),
     sqft: Number(row.sqft),
     clearHeight: String(row.clear_height),
@@ -137,6 +228,15 @@ function mapUnit(row: Record<string, unknown>): UnitRecord {
     driveIns: Number(row.drive_ins),
     power: String(row.power),
     ratePsf: Number(row.rate_psf),
+    rateBasis,
+    rentAmountMinor: num(row, "rent_amount_minor"),
+    attributes: parseUnitAttributes(segment, attributesJson),
+    attributesJson,
+    bhk: num(row, "bhk"),
+    carpetSqft: num(row, "carpet_sqft"),
+    securityDepositMonths: num(row, "security_deposit_months"),
+    maintenanceMinor: num(row, "maintenance_minor"),
+    gstApplicable: gstRaw == null ? null : gstRaw === 1,
     status: String(row.status) as UnitStatus,
     hotspotX: num(row, "hotspot_x"),
     hotspotY: num(row, "hotspot_y"),
@@ -147,8 +247,12 @@ function mapUnit(row: Record<string, unknown>): UnitRecord {
 
 const USER_SQL = `
   SELECT u.id, u.name, u.email, u.role, u.tenant_id, u.company, u.trade,
-         u.service_area, u.provider_verified, u.phone, t.name AS tenant_name,
-         t.kind AS tenant_kind, COALESCE(t.display_currency, 'INR') AS display_currency
+         u.service_area, u.provider_verified, u.phone, u.password_hash,
+         COALESCE(u.is_demo, 0) AS is_demo,
+         t.name AS tenant_name, t.kind AS tenant_kind,
+         COALESCE(t.display_currency, 'INR') AS display_currency,
+         COALESCE(t.package, 'starter') AS tenant_package,
+         COALESCE(t.is_demo, 0) AS tenant_is_demo
   FROM users u
   LEFT JOIN tenants t ON t.id = u.tenant_id
 `
@@ -161,19 +265,42 @@ function createSchema(db: Sql) {
       slug TEXT NOT NULL UNIQUE,
       city TEXT NOT NULL,
       kind TEXT NOT NULL DEFAULT 'landlord',
-      display_currency TEXT NOT NULL DEFAULT 'INR'
+      display_currency TEXT NOT NULL DEFAULT 'INR',
+      package TEXT NOT NULL DEFAULT 'starter',
+      is_demo INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE users (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
-      email TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
       role TEXT NOT NULL,
       tenant_id TEXT,
       company TEXT,
       trade TEXT,
       service_area TEXT,
       provider_verified INTEGER NOT NULL DEFAULT 0,
-      phone TEXT
+      phone TEXT,
+      password_hash TEXT,
+      is_demo INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE consent_events (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      email TEXT,
+      purpose TEXT NOT NULL,
+      version TEXT NOT NULL,
+      granted INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      ip_hint TEXT
+    );
+    CREATE TABLE custom_domains (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      hostname TEXT NOT NULL UNIQUE,
+      status TEXT NOT NULL,
+      txt_token TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      verified_at TEXT
     );
     CREATE TABLE otp_challenges (
       id TEXT PRIMARY KEY,
@@ -199,12 +326,42 @@ function createSchema(db: Sql) {
       area TEXT NOT NULL,
       city_line TEXT NOT NULL,
       total_sqft INTEGER NOT NULL,
-      floor_plan_path TEXT
+      segment TEXT NOT NULL DEFAULT 'warehouse',
+      subtype TEXT NOT NULL DEFAULT 'logistics_park',
+      floor_plan_path TEXT,
+      model_path TEXT,
+      latitude REAL,
+      longitude REAL
+    );
+    CREATE TABLE floors (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      property_id TEXT NOT NULL,
+      label TEXT NOT NULL,
+      level_index INTEGER NOT NULL,
+      plan_path TEXT,
+      plan_draft_json TEXT,
+      UNIQUE (property_id, level_index)
+    );
+    CREATE TABLE visit_requests (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      property_id TEXT NOT NULL,
+      unit_id TEXT,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      note TEXT NOT NULL DEFAULT '',
+      visit_type TEXT NOT NULL,
+      preferred_at TEXT,
+      status TEXT NOT NULL,
+      created_at TEXT NOT NULL
     );
     CREATE TABLE units (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
       property_id TEXT NOT NULL,
+      floor_id TEXT,
       code TEXT NOT NULL,
       sqft INTEGER NOT NULL,
       clear_height TEXT NOT NULL,
@@ -212,6 +369,14 @@ function createSchema(db: Sql) {
       drive_ins INTEGER NOT NULL,
       power TEXT NOT NULL,
       rate_psf REAL NOT NULL,
+      rate_basis TEXT NOT NULL DEFAULT 'per_sqft_month',
+      rent_amount_minor INTEGER,
+      attributes TEXT NOT NULL DEFAULT '{}',
+      bhk INTEGER,
+      carpet_sqft INTEGER,
+      security_deposit_months REAL,
+      maintenance_minor INTEGER,
+      gst_applicable INTEGER,
       status TEXT NOT NULL,
       hotspot_x REAL,
       hotspot_y REAL,
@@ -325,12 +490,92 @@ function createSchema(db: Sql) {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE agent_landlord_access (
+      agent_user_id TEXT NOT NULL,
+      tenant_id TEXT NOT NULL,
+      PRIMARY KEY (agent_user_id, tenant_id)
+    );
+    CREATE TABLE listing_import_drafts (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      property_id TEXT NOT NULL,
+      unit_id TEXT NOT NULL,
+      source_site TEXT NOT NULL,
+      source_url TEXT NOT NULL,
+      used_fixture INTEGER NOT NULL DEFAULT 0,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      created_by TEXT NOT NULL
+    );
     CREATE TABLE meta (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+    CREATE TABLE shop_settings (
+      tenant_id TEXT PRIMARY KEY,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      demo_mode INTEGER NOT NULL DEFAULT 1,
+      razorpay_key_id TEXT,
+      razorpay_key_secret_enc TEXT,
+      razorpay_mode TEXT NOT NULL DEFAULT 'test'
+    );
+    CREATE TABLE shop_skus (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      property_id TEXT,
+      name TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      price_cents INTEGER NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      stock INTEGER,
+      slot_capacity INTEGER,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE shop_cart_items (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      tenant_id TEXT NOT NULL,
+      sku_id TEXT NOT NULL,
+      qty INTEGER NOT NULL DEFAULT 1,
+      slot_start TEXT,
+      UNIQUE (user_id, tenant_id, sku_id, slot_start)
+    );
+    CREATE TABLE shop_orders (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      property_id TEXT,
+      user_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      amount_cents INTEGER NOT NULL,
+      payment_provider TEXT NOT NULL,
+      payment_ref TEXT,
+      note TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      paid_at TEXT
+    );
+    CREATE TABLE shop_order_lines (
+      id TEXT PRIMARY KEY,
+      order_id TEXT NOT NULL,
+      sku_id TEXT NOT NULL,
+      sku_name TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      qty INTEGER NOT NULL,
+      unit_price_cents INTEGER NOT NULL,
+      slot_start TEXT
+    );
+    CREATE TABLE shop_rental_bookings (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      sku_id TEXT NOT NULL,
+      order_id TEXT NOT NULL,
+      slot_start TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      UNIQUE (sku_id, slot_start)
+    );
     CREATE INDEX idx_units_tenant ON units(tenant_id);
     CREATE INDEX idx_units_property ON units(property_id);
+    CREATE INDEX idx_floors_property ON floors(property_id);
     CREATE INDEX idx_apps_tenant ON applications(tenant_id, status);
     CREATE INDEX idx_apps_applicant ON applications(applicant_id);
     CREATE INDEX idx_jobs_tenant ON jobs(tenant_id, status);
@@ -340,6 +585,11 @@ function createSchema(db: Sql) {
     CREATE INDEX idx_notes_user ON notifications(user_id, created_at);
     CREATE INDEX idx_properties_tenant ON properties(tenant_id);
     CREATE INDEX idx_media_unit ON unit_media(unit_id, sort_order);
+    CREATE INDEX idx_shop_skus_tenant ON shop_skus(tenant_id);
+    CREATE INDEX idx_shop_cart_user ON shop_cart_items(user_id, tenant_id);
+    CREATE INDEX idx_shop_orders_tenant ON shop_orders(tenant_id, created_at);
+    CREATE INDEX idx_shop_orders_user ON shop_orders(user_id);
+    CREATE INDEX idx_shop_rentals_sku ON shop_rental_bookings(sku_id, slot_start);
   `)
 }
 
@@ -354,15 +604,27 @@ function reset(db: Sql) {
     "jobs",
     "verifications",
     "applications",
+    "visit_requests",
+    "custom_domains",
+    "shop_rental_bookings",
+    "shop_order_lines",
+    "shop_orders",
+    "shop_cart_items",
+    "shop_skus",
+    "shop_settings",
     "unit_media",
     "units",
+    "floors",
     "properties",
     "provider_approvals",
+    "consent_events",
     "users",
     "tenants",
     "market_checklist_items",
     "market_drafts",
     "languages",
+    "listing_import_drafts",
+    "agent_landlord_access",
     "meta",
   ]) {
     db.exec(`DROP TABLE IF EXISTS ${table}`)
@@ -373,303 +635,30 @@ function reset(db: Sql) {
   db.prepare("INSERT INTO meta (key, value) VALUES ('seed_version', ?)").run(SEED_VERSION)
 }
 
-type UnitSeed = {
-  code: string
-  sqft: number
-  h: string
-  dock: number
-  drive: number
-  pwr: string
-  rate: number
-  status: UnitStatus
-  x: number
-  y: number
-}
-
 function seed(db: Sql) {
-  const tenant = db.prepare(
-    "INSERT INTO tenants (id, name, slug, city, kind, display_currency) VALUES (?, ?, ?, ?, ?, ?)",
-  )
-  tenant.run("t_deskulpt", "DeSkulpt India Pvt Ltd", "deskulpt", "Bengaluru", "platform", "INR")
-  tenant.run("t_bbm", "BBM Logistics Parks", "bbm-parks", "Mumbai", "landlord", "INR")
-  tenant.run("t_harbour", "Harbourline Yards India", "harbourline-india", "Chennai", "landlord", "INR")
-  tenant.run("t_nri", "Sahni Global Realty (NRI)", "sahni-global", "Dubai / Mumbai", "landlord", "USD")
-
-  const user = db.prepare(
-    `INSERT INTO users (id, name, email, role, tenant_id, company, trade, service_area, provider_verified, phone)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  )
-  user.run("u_avery", "Avery Quinn", "avery@deskulpt.example", "super_admin", "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+918012345678")
-  user.run("u_sam", "Sam Rivera", "sam@deskulpt.example", "account_manager", "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+918012345679")
-  user.run("u_priya", "Priya Nair", "priya@deskulpt.example", "service_manager", "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+919845551122")
-  user.run("u_chris", "Chris Vogel", "chris@deskulpt.example", "property_manager", "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+918022334455")
-  user.run("u_jordan", "Jordan Blake", "jordan@deskulpt.example", "merchandiser", "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+919900112233")
-  user.run("u_maya", "Maya Chen", "maya@apexlogistics.example", "applicant", null, "Apex Logistics India", null, null, 0, "+919876543210")
-  user.run("u_devon", "Devon Hale", "devon@northline.example", "applicant", null, "Northline Distribution India", null, null, 0, "+919811223344")
-  user.run("u_nadia", "Nadia Okonkwo", "nadia@bbmparks.example", "landlord_admin", "t_bbm", null, null, null, 0, "+912240012345")
-  user.run("u_jonah", "Jonah Ellis", "jonah@harbourline.example", "landlord_admin", "t_harbour", null, null, null, 0, "+914440056789")
-  user.run("u_meera", "Meera Sahni", "meera@sahniglobal.example", "landlord_admin", "t_nri", null, null, null, 0, "+14155550198")
-  user.run("u_luis", "Luis Ortega", "luis@ortegaelectric.example", "service_provider", null, null, "electrician", "Bhiwandi", 1, "+919820011122")
-  user.run("u_rosa", "Rosa Delgado", "rosa@clearbay.example", "service_provider", null, null, "cleaning", "Bhiwandi", 1, "+919820011133")
-  user.run("u_kei", "Kei Watanabe", "kei@lanterncourier.example", "service_provider", null, null, "courier", "Bhiwandi", 1, "+919820011144")
-  user.run("u_hana", "Hana Berger", "hana@bergerpower.example", "service_provider", null, null, "electrician", "Whitefield", 1, "+919845667788")
-  user.run("u_amrita", "Amrita Singh", "amrita@southplumbers.example", "service_provider", null, null, "plumber", "Sriperumbudur", 1, "+919444556677")
-  user.run("u_idris", "Idris Cole", "idris@coleelectric.example", "service_provider", null, null, "electrician", "Sriperumbudur", 1, "+919444556688")
-
-  const approval = db.prepare(
-    "INSERT INTO provider_approvals (tenant_id, user_id, status) VALUES (?, ?, ?)",
-  )
-  approval.run("t_bbm", "u_luis", "approved")
-  approval.run("t_bbm", "u_rosa", "approved")
-  approval.run("t_bbm", "u_kei", "pending")
-  approval.run("t_bbm", "u_hana", "pending")
-  approval.run("t_harbour", "u_amrita", "approved")
-  approval.run("t_harbour", "u_idris", "pending")
-
-  const property = db.prepare(
-    `INSERT INTO properties (id, tenant_id, name, slug, address, area, city_line, total_sqft, floor_plan_path)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  )
-  property.run("p_waterman", "t_bbm", "BBM Bhiwandi Hub", "waterman", "Plot 19, Kalyan-Bhiwandi Road, Bhiwandi, Maharashtra 421302", "Bhiwandi", "BHIWANDI · PIN 421302 · 214,000 SF", 214000, "/floorplans/waterman.svg")
-  property.run("p_bartley", "t_bbm", "BBM Whitefield Sheds", "bartley", "161 ITPL Main Road, Whitefield, Bengaluru, Karnataka 560066", "Whitefield", "WHITEFIELD · PIN 560066 · 96,000 SF", 96000, "/floorplans/bartley.svg")
-  property.run("p_cranfield", "t_bbm", "BBM Andheri East", "cranfield", "12 MIDC Central Road, Andheri East, Mumbai, Maharashtra 400093", "Andheri East", "ANDHERI EAST · PIN 400093 · 74,500 SF", 74500, "/floorplans/cranfield.svg")
-  property.run("p_commissioners", "t_harbour", "Harbourline Sriperumbudur", "commissioners", "88 SIPCOT Industrial Park, Sriperumbudur, Tamil Nadu 602105", "Sriperumbudur", "SRIPERUMBUDUR · PIN 602105 · 86,000 SF", 86000, "/floorplans/commissioners.svg")
-  property.run("p_nri_thane", "t_nri", "Sahni Thane Warehouse", "thane", "45 Wagle Estate, Thane West, Maharashtra 400604", "Thane", "THANE · PIN 400604 · 42,000 SF", 42000, "/floorplans/cranfield.svg")
-
-  const unitStmt = db.prepare(
-    `INSERT INTO units (
-      id, tenant_id, property_id, code, sqft, clear_height, docks, drive_ins, power,
-      rate_psf, status, hotspot_x, hotspot_y, matterport_url, description
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  )
-
-  function addUnits(
-    tenantId: string,
-    propertyId: string,
-    propertyName: string,
-    slug: string,
-    units: UnitSeed[],
-  ) {
-    for (const unit of units) {
-      const rich = slug === "waterman" && unit.code === "B1"
-      unitStmt.run(
-        `u_${slug}_${unit.code.toLowerCase()}`,
-        tenantId,
-        propertyId,
-        unit.code,
-        unit.sqft,
-        unit.h,
-        unit.dock,
-        unit.drive,
-        unit.pwr,
-        unit.rate,
-        unit.status,
-        unit.x,
-        unit.y,
-        rich ? "https://my.matterport.com/show/?m=SxQL3iGyoDo" : null,
-        rich
-          ? "Flagship bay at BBM Bhiwandi Hub. Clear-span distribution with stills, a motion loop, a short clip, a 360 photo, and a Matterport-compatible embed."
-          : `${unit.sqft.toLocaleString("en-IN")} SF bay at ${propertyName}. ${unit.h} clear, ${unit.dock} dock door${unit.dock === 1 ? "" : "s"}, ${unit.drive} drive-in, ${unit.pwr}.`,
-      )
-    }
-  }
-
-  addUnits("t_bbm", "p_waterman", "BBM Bhiwandi Hub", "waterman", [
-    { code: "A1", sqft: 38500, h: "28'", dock: 6, drive: 1, pwr: "600A / 415V", rate: 52, status: "leased", x: 22, y: 38 },
-    { code: "A2", sqft: 24200, h: "26'", dock: 4, drive: 1, pwr: "400A / 415V", rate: 55, status: "available", x: 46, y: 38 },
-    { code: "B1", sqft: 52000, h: "30'", dock: 8, drive: 2, pwr: "800A / 415V", rate: 48, status: "available", x: 22, y: 68 },
-    { code: "B2", sqft: 18900, h: "24'", dock: 3, drive: 1, pwr: "400A / 415V", rate: 58, status: "pending", x: 46, y: 68 },
-    { code: "C1", sqft: 31600, h: "28'", dock: 5, drive: 1, pwr: "600A / 415V", rate: 50, status: "leased", x: 74, y: 38 },
-    { code: "C2", sqft: 28800, h: "28'", dock: 5, drive: 2, pwr: "600A / 415V", rate: 51, status: "available", x: 74, y: 68 },
-  ])
-  addUnits("t_bbm", "p_bartley", "BBM Whitefield Sheds", "bartley", [
-    { code: "01", sqft: 12400, h: "22'", dock: 2, drive: 1, pwr: "200A / 415V", rate: 72, status: "available", x: 22, y: 40 },
-    { code: "02", sqft: 21000, h: "24'", dock: 4, drive: 1, pwr: "400A / 415V", rate: 68, status: "leased", x: 46, y: 40 },
-    { code: "03", sqft: 16800, h: "24'", dock: 3, drive: 1, pwr: "400A / 415V", rate: 70, status: "pending", x: 74, y: 40 },
-    { code: "04", sqft: 30200, h: "26'", dock: 5, drive: 2, pwr: "600A / 415V", rate: 65, status: "available", x: 34, y: 70 },
-    { code: "05", sqft: 15600, h: "22'", dock: 2, drive: 1, pwr: "200A / 415V", rate: 74, status: "leased", x: 68, y: 70 },
-  ])
-  addUnits("t_bbm", "p_cranfield", "BBM Andheri East", "cranfield", [
-    { code: "U1", sqft: 9800, h: "20'", dock: 1, drive: 1, pwr: "200A / 415V", rate: 95, status: "available", x: 24, y: 42 },
-    { code: "U2", sqft: 14500, h: "22'", dock: 2, drive: 1, pwr: "400A / 415V", rate: 88, status: "leased", x: 50, y: 42 },
-    { code: "U3", sqft: 22300, h: "26'", dock: 4, drive: 2, pwr: "600A / 415V", rate: 82, status: "available", x: 28, y: 72 },
-    { code: "U4", sqft: 27900, h: "26'", dock: 4, drive: 1, pwr: "600A / 415V", rate: 80, status: "leased", x: 62, y: 72 },
-  ])
-  addUnits("t_harbour", "p_commissioners", "Harbourline Sriperumbudur", "commissioners", [
-    { code: "H1", sqft: 22000, h: "28'", dock: 4, drive: 1, pwr: "600A / 415V", rate: 42, status: "available", x: 28, y: 40 },
-    { code: "H2", sqft: 18000, h: "24'", dock: 3, drive: 1, pwr: "400A / 415V", rate: 45, status: "leased", x: 62, y: 40 },
-    { code: "H3", sqft: 31000, h: "30'", dock: 6, drive: 2, pwr: "800A / 415V", rate: 40, status: "pending", x: 28, y: 70 },
-    { code: "H4", sqft: 15000, h: "22'", dock: 2, drive: 1, pwr: "400A / 415V", rate: 46, status: "available", x: 62, y: 70 },
-  ])
-  addUnits("t_nri", "p_nri_thane", "Sahni Thane Warehouse", "thane", [
-    { code: "T1", sqft: 22000, h: "26'", dock: 4, drive: 1, pwr: "600A / 415V", rate: 78, status: "available", x: 35, y: 45 },
-    { code: "T2", sqft: 20000, h: "24'", dock: 3, drive: 1, pwr: "400A / 415V", rate: 80, status: "leased", x: 65, y: 55 },
-  ])
-
-  const media = db.prepare(
-    `INSERT INTO unit_media (id, tenant_id, unit_id, kind, url, caption, sort_order)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  )
-  const b1 = "u_waterman_b1"
-  media.run("m1", "t_bbm", b1, "photo", "/media/b1-dock.jpg", "Dock approach, demo still", 1)
-  media.run("m2", "t_bbm", b1, "photo", "/media/b1-aisle.jpg", "Rack aisle, demo still", 2)
-  media.run("m3", "t_bbm", b1, "photo", "/media/b1-yard.jpg", "Yard and trailer positions, demo still", 3)
-  media.run("m4", "t_bbm", b1, "gif", "/media/b1-loop.gif", "Motion loop across the bay stills", 4)
-  media.run("m5", "t_bbm", b1, "video", "/media/b1-walk.mp4", "Short walk-through clip", 5)
-  media.run("m6", "t_bbm", b1, "pano", "/media/b1-pano.jpg", "Equirectangular 360 photo — drag to look around", 6)
-
-  db.prepare(
-    `INSERT INTO applications (
-      id, tenant_id, unit_id, applicant_id, company, contact_name, email, intended_use, notes, status, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    "app_devon",
-    "t_bbm",
-    "u_waterman_a1",
-    "u_devon",
-    "Northline Distribution India",
-    "Devon Hale",
-    "devon@northline.example",
-    "Regional distribution and cross-dock for West India",
-    "GSTIN and insurance certificate on file in the demo vault.",
-    "approved",
-    "2026-03-12T15:00:00.000Z",
-  )
-  db.prepare(
-    `INSERT INTO applications (
-      id, tenant_id, unit_id, applicant_id, company, contact_name, email, intended_use, notes, status, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    "app_maya",
-    "t_bbm",
-    "u_waterman_b2",
-    "u_maya",
-    "Apex Logistics India",
-    "Maya Chen",
-    "maya@apexlogistics.example",
-    "Last-mile parcel sortation for MMR",
-    "Looking for a September occupancy. Trailer pool of 12. PIN 400001 billing.",
-    "submitted",
-    "2026-09-18T14:30:00.000Z",
-  )
-
-  db.prepare(
-    `INSERT INTO verifications (
-      id, user_id, country, region, doc_type, file_name, face_name, simulated_score, simulated_result, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    "v_devon",
-    "u_devon",
-    "India",
-    "Maharashtra",
-    "aadhaar",
-    "demo-aadhaar.pdf",
-    "demo-face.jpg",
-    0.94,
-    "match",
-    "2026-03-02T18:00:00.000Z",
-  )
-
-  db.prepare(
-    "INSERT INTO late_fee_rules (tenant_id, grace_days, flat_cents, percent_bps) VALUES (?, ?, ?, ?)",
-  ).run("t_bbm", 5, 2500000, 150)
-  db.prepare(
-    "INSERT INTO late_fee_rules (tenant_id, grace_days, flat_cents, percent_bps) VALUES (?, ?, ?, ?)",
-  ).run("t_harbour", 3, 1000000, 200)
-  db.prepare(
-    "INSERT INTO late_fee_rules (tenant_id, grace_days, flat_cents, percent_bps) VALUES (?, ?, ?, ?)",
-  ).run("t_nri", 5, 2000000, 150)
-
-  db.prepare(
-    `INSERT INTO payment_methods (id, user_id, tenant_id, brand, last4, autopay, provider_ref)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    "pm_devon",
-    "u_devon",
-    "t_bbm",
-    "eNACH / auto-debit (demo)",
-    "4821",
-    1,
-    "demo_enach_4821_t_bbm",
-  )
-
-  const a1 = db.prepare("SELECT sqft, rate_psf FROM units WHERE id = ?").get("u_waterman_a1") as {
-    sqft: number
-    rate_psf: number
-  }
-  const rent = monthlyRentCents(a1.rate_psf, a1.sqft)
-  const gst = gstCents(rent)
-  const fee = lateFeeCents(rent, { flatCents: 2500000, percentBps: 150 })
-  const ledger = db.prepare(
-    `INSERT INTO ledger_entries (
-      id, tenant_id, unit_id, user_id, kind, description, amount_cents, status, due_on, created_at, source_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  )
-  ledger.run("led_jun_rent", "t_bbm", "u_waterman_a1", "u_devon", "rent", "June rent · Unit A1", rent, "paid", "2026-06-01", "2026-06-01T12:00:00.000Z", null)
-  ledger.run("led_jun_gst", "t_bbm", "u_waterman_a1", "u_devon", "gst", "GST (18%) · June rent · Unit A1", gst, "paid", "2026-06-01", "2026-06-01T12:00:00.000Z", "led_jun_rent")
-  ledger.run("led_jun_pay", "t_bbm", "u_waterman_a1", "u_devon", "payment", "eNACH demo ····4821", rent + gst, "paid", "2026-06-01", "2026-06-01T12:05:00.000Z", "led_jun_rent")
-  ledger.run("led_sep_rent", "t_bbm", "u_waterman_a1", "u_devon", "rent", "September rent · Unit A1", rent, "due", "2026-09-01", "2026-09-01T12:00:00.000Z", null)
-  ledger.run("led_sep_gst", "t_bbm", "u_waterman_a1", "u_devon", "gst", "GST (18%) · September rent · Unit A1", gst, "due", "2026-09-01", "2026-09-01T12:00:00.000Z", "led_sep_rent")
-  ledger.run("led_sep_fee", "t_bbm", "u_waterman_a1", "u_devon", "late_fee", "Late fee · September rent past 5-day grace", fee, "due", "2026-09-06", "2026-09-06T12:00:00.000Z", "led_sep_rent")
-  ledger.run("led_oct_rent", "t_bbm", "u_waterman_a1", "u_devon", "rent", "October rent · Unit A1", rent, "due", "2026-10-01", "2026-09-20T12:00:00.000Z", null)
-  ledger.run("led_oct_gst", "t_bbm", "u_waterman_a1", "u_devon", "gst", "GST (18%) · October rent · Unit A1", gst, "due", "2026-10-01", "2026-09-20T12:00:00.000Z", "led_oct_rent")
-
-  const t2 = db.prepare("SELECT sqft, rate_psf FROM units WHERE id = ?").get("u_thane_t2") as {
-    sqft: number
-    rate_psf: number
-  }
-  const nriRent = monthlyRentCents(t2.rate_psf, t2.sqft)
-  const nriGst = gstCents(nriRent)
-  ledger.run("led_nri_sep_rent", "t_nri", "u_thane_t2", "u_devon", "rent", "September rent · Unit T2", nriRent, "due", "2026-09-01", "2026-09-01T12:00:00.000Z", null)
-  ledger.run("led_nri_sep_gst", "t_nri", "u_thane_t2", "u_devon", "gst", "GST (18%) · September rent · Unit T2", nriGst, "due", "2026-09-01", "2026-09-01T12:00:00.000Z", "led_nri_sep_rent")
-
-  const job = db.prepare(
-    `INSERT INTO jobs (id, tenant_id, property_id, unit_id, title, details, trade, status, provider_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  )
-  job.run("j_seal", "t_bbm", "p_waterman", "u_waterman_b1", "Weather seal on the north drive-in", "The north drive-in seal is torn. Trailer doors are catching in the monsoon.", "electrician", "assigned", "u_luis", "2026-09-20T16:00:00.000Z")
-  job.run("j_dock", "t_bbm", "p_waterman", "u_waterman_a2", "Dock leveler sticks at the top of travel", "Bay 3 leveler pauses six inches short. Treat it as a make-ready before handover.", "electrician", "open", null, "2026-09-22T15:00:00.000Z")
-  job.run("j_panel", "t_bbm", "p_bartley", "u_bartley_04", "Panel schedule labels missing in unit 04", "The 415V panel is live and labeled only at the main. Print a directory before showings.", "electrician", "open", null, "2026-09-23T15:00:00.000Z")
-  job.run("j_sweep", "t_bbm", "p_cranfield", "u_cranfield_u1", "Pre-showing sweep of unit U1", "Dust and pallet scraps along the south wall before Thursday's tour.", "cleaning", "complete", "u_rosa", "2026-09-10T15:00:00.000Z")
-  job.run("j_sump", "t_harbour", "p_commissioners", "u_commissioners_h1", "Sump alarm chirping in H1", "The pit alarm cycles every few minutes. No standing water this morning.", "plumber", "open", null, "2026-09-21T15:00:00.000Z")
-
-  const note = db.prepare(
-    `INSERT INTO notifications (id, user_id, title, body, href, read_at, created_at, channel)
-     VALUES (?, ?, ?, ?, ?, NULL, ?, ?)`,
-  )
-  note.run("n1", "u_maya", "Application received", "Apex Logistics India is in review for Unit B2 at BBM Bhiwandi Hub.", "/account", "2026-09-18T14:31:00.000Z", "in_app")
-  note.run("n1e", "u_maya", "Application received", "Apex Logistics India is in review for Unit B2 at BBM Bhiwandi Hub.", "/account", "2026-09-18T14:31:00.000Z", "email_demo")
-  note.run("n1w", "u_maya", "Application received", "Apex Logistics India is in review for Unit B2 at BBM Bhiwandi Hub.", "/account", "2026-09-18T14:31:00.000Z", "whatsapp_demo")
-  note.run("n2", "u_nadia", "New application", "Maya Chen at Apex Logistics India applied for Unit B2.", "/landlord/applications", "2026-09-18T14:31:00.000Z", "in_app")
-  note.run("n3", "u_devon", "September rent is past grace", "A late fee was assessed on Unit A1. October rent is still inside grace. Amounts are in INR.", "/account/payments", "2026-09-06T12:10:00.000Z", "in_app")
-  note.run("n3p", "u_devon", "September rent is past grace", "A late fee was assessed on Unit A1.", "/account/payments", "2026-09-06T12:10:00.000Z", "push_demo")
-  note.run("n3w", "u_devon", "September rent is past grace", "A late fee was assessed on Unit A1. Pay via UPI or eNACH (demo).", "/account/payments", "2026-09-06T12:10:00.000Z", "whatsapp_demo")
-  note.run("n4", "u_luis", "Job assigned", "Weather seal on the north drive-in at BBM Bhiwandi Hub is waiting for you to accept.", "/provider", "2026-09-20T16:05:00.000Z", "in_app")
-  note.run("n5", "u_jonah", "Open concierge job", "Sump alarm in H1 has no provider yet. Amrita Singh is approved for Sriperumbudur.", "/landlord/jobs", "2026-09-21T15:05:00.000Z", "in_app")
-  note.run("n6", "u_meera", "NRI display currency", "Your landlord desk shows USD as a view. Charges and the ledger stay in INR.", "/landlord/settings", "2026-09-15T10:00:00.000Z", "in_app")
-
-  // Languages: English is the source. No parked markets and no extra locales are seeded.
-  db.prepare(
-    `INSERT INTO languages (code, name, status, waiting_reason, created_at, updated_at)
-     VALUES (?, ?, ?, NULL, ?, ?)`,
-  ).run("en", "English", "ready", "2026-09-01T00:00:00.000Z", "2026-09-01T00:00:00.000Z")
+  seedDemoDatabase(db)
 }
 
 function openDatabase() {
-  const file = dbPath()
-  fs.mkdirSync(path.dirname(file), { recursive: true })
-  const db = new DatabaseSync(file)
-  db.exec("PRAGMA foreign_keys = ON")
-  const meta = db.prepare(
-    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'meta'",
-  ).get()
-  if (!meta) {
-    reset(db)
+  return withDbInitLock(() => {
+    const file = dbPath()
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    const db = new DatabaseSync(file)
+    // WAL + busy timeout: readers across workers after init.
+    db.exec("PRAGMA journal_mode = WAL")
+    db.exec("PRAGMA busy_timeout = 8000")
+    db.exec("PRAGMA foreign_keys = ON")
+    const meta = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'meta'",
+    ).get()
+    if (!meta) {
+      reset(db)
+      return db
+    }
+    const version = asRow(db.prepare("SELECT value FROM meta WHERE key = 'seed_version'").get())
+    if (!version || version.value !== SEED_VERSION) reset(db)
     return db
-  }
-  const version = asRow(db.prepare("SELECT value FROM meta WHERE key = 'seed_version'").get())
-  if (!version || version.value !== SEED_VERSION) reset(db)
-  return db
+  })
 }
 
 export function getDb() {
@@ -689,16 +678,99 @@ export function closeDatabase() {
   globalDb.deskulptDb = undefined
 }
 
+export function recordConsentEvent(input: {
+  userId: string | null
+  email: string | null
+  purpose: string
+  version: string
+  ipHint?: string | null
+}) {
+  getDb()
+    .prepare(
+      `INSERT INTO consent_events (id, user_id, email, purpose, version, granted, created_at, ip_hint)
+       VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+    )
+    .run(
+      crypto.randomUUID(),
+      input.userId,
+      input.email,
+      input.purpose,
+      input.version,
+      new Date().toISOString(),
+      input.ipHint ?? null,
+    )
+}
+
+/** DPDP-oriented export of the signed-in user's rows (no password hashes). */
+export function exportUserData(userId: string) {
+  const db = getDb()
+  const user = getUser(userId)
+  if (!user) return null
+  const applications = asRows(
+    db.prepare("SELECT * FROM applications WHERE applicant_id = ?").all(userId),
+  )
+  const ledger = asRows(db.prepare("SELECT * FROM ledger_entries WHERE user_id = ?").all(userId))
+  const verifications = asRows(
+    db
+      .prepare(
+        "SELECT id, country, region, doc_type, file_name, simulated_result, created_at FROM verifications WHERE user_id = ?",
+      )
+      .all(userId),
+  )
+  const consents = asRows(db.prepare("SELECT * FROM consent_events WHERE user_id = ?").all(userId))
+  return {
+    exportedAt: new Date().toISOString(),
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      phone: user.phone,
+      company: user.company,
+    },
+    applications,
+    ledger,
+    verifications,
+    consents,
+  }
+}
+
+/** Soft-delete personal fields for an applicant (keeps ledger integrity). */
+export function redactUserPersonalData(userId: string) {
+  const user = getUser(userId)
+  if (!user) return { ok: false as const, error: "User not found." }
+  if (user.role !== "applicant") {
+    return { ok: false as const, error: "Self-service deletion is available for applicant accounts in this build." }
+  }
+  getDb()
+    .prepare(
+      `UPDATE users SET name = 'Redacted user', email = ?, phone = NULL, company = NULL, password_hash = NULL
+       WHERE id = ?`,
+    )
+    .run(`redacted-${userId}@deleted.invalid`, userId)
+  getDb().prepare("DELETE FROM verifications WHERE user_id = ?").run(userId)
+  getDb().prepare("DELETE FROM otp_challenges WHERE user_id = ?").run(userId)
+  recordConsentEvent({
+    userId,
+    email: user.email,
+    purpose: "erasure_request",
+    version: "dpdp-2023-v1",
+  })
+  return { ok: true as const }
+}
+
 export function listSessionUsers() {
   return asRows(
     getDb()
       .prepare(
         `${USER_SQL}
+         WHERE COALESCE(u.is_demo, 0) = 1
          ORDER BY CASE
            WHEN u.role IN ('super_admin','account_manager','service_manager','property_manager','merchandiser') THEN 0
            WHEN u.role = 'applicant' THEN 1
            WHEN u.role = 'landlord_admin' THEN 2
-           ELSE 3
+           WHEN u.role = 'managing_agent' THEN 3
+           ELSE 4
          END, u.name`,
       )
       .all(),
@@ -763,17 +835,40 @@ export function markAllRead(userId: string) {
     .run(new Date().toISOString(), userId)
 }
 
-function unitsFor(propertyId: string) {
+function unitsFor(propertyId: string, segment: PropertySegment = "warehouse") {
   return asRows(
     getDb()
       .prepare("SELECT * FROM units WHERE property_id = ? ORDER BY code")
       .all(propertyId),
-  ).map(mapUnit)
+  ).map((row) => mapUnit(row, segment))
+}
+
+function floorsFor(propertyId: string): FloorRecord[] {
+  return asRows(
+    getDb()
+      .prepare(
+        "SELECT * FROM floors WHERE property_id = ? ORDER BY level_index ASC",
+      )
+      .all(propertyId),
+  ).map(
+    (row): FloorRecord => ({
+      id: String(row.id),
+      tenantId: String(row.tenant_id),
+      propertyId: String(row.property_id),
+      label: String(row.label),
+      levelIndex: Number(row.level_index),
+      planPath: str(row, "plan_path"),
+      planDraftJson: str(row, "plan_draft_json"),
+    }),
+  )
 }
 
 function mapProperty(row: Record<string, unknown>): PropertyRecord {
+  const id = String(row.id)
+  const segmentRaw = String(row.segment ?? "warehouse")
+  const segment: PropertySegment = isPropertySegment(segmentRaw) ? segmentRaw : "warehouse"
   return {
-    id: String(row.id),
+    id,
     tenantId: String(row.tenant_id),
     tenantName: String(row.tenant_name),
     name: String(row.name),
@@ -782,8 +877,14 @@ function mapProperty(row: Record<string, unknown>): PropertyRecord {
     area: String(row.area),
     cityLine: String(row.city_line),
     totalSqft: Number(row.total_sqft),
+    segment,
+    subtype: String(row.subtype ?? "logistics_park"),
     floorPlanPath: str(row, "floor_plan_path"),
-    units: unitsFor(String(row.id)),
+    modelPath: str(row, "model_path"),
+    latitude: num(row, "latitude"),
+    longitude: num(row, "longitude"),
+    floors: floorsFor(id),
+    units: unitsFor(id, segment),
   }
 }
 
@@ -831,13 +932,42 @@ export function getUnitPage(slug: string, code: string) {
 
 export function landlordOverview(tenantId: string) {
   const db = getDb()
-  const units = asRows(db.prepare("SELECT status, sqft, rate_psf FROM units WHERE tenant_id = ?").all(tenantId))
+  const units = asRows(
+    db
+      .prepare(
+        `SELECT u.status, u.sqft, u.rate_psf, u.rate_basis, u.rent_amount_minor, p.segment
+         FROM units u JOIN properties p ON p.id = u.property_id
+         WHERE u.tenant_id = ?`,
+      )
+      .all(tenantId),
+  )
   const leased = units.filter((unit) => unit.status === "leased")
   const occupancy = units.length === 0 ? 0 : Math.round((leased.length / units.length) * 100)
-  const rentRoll = leased.reduce(
-    (sum, unit) => sum + monthlyRentCents(Number(unit.rate_psf), Number(unit.sqft)),
-    0,
-  )
+  const rentRoll = leased.reduce((sum, unit) => {
+    const segmentRaw = String(unit.segment ?? "warehouse")
+    const segment: PropertySegment = isPropertySegment(segmentRaw) ? segmentRaw : "warehouse"
+    return (
+      sum +
+      unitMonthlyRentCents(
+        mapUnit(
+          {
+            ...unit,
+            id: "x",
+            tenant_id: tenantId,
+            property_id: "x",
+            code: "x",
+            clear_height: "",
+            docks: 0,
+            drive_ins: 0,
+            power: "",
+            attributes: "{}",
+            description: "",
+          },
+          segment,
+        ),
+      )
+    )
+  }, 0)
   const apps = asRow(
     db.prepare(
       "SELECT COUNT(*) AS c FROM applications WHERE tenant_id = ? AND status = 'submitted'",
@@ -1066,7 +1196,7 @@ export type LedgerRecord = {
   propertyName: string
   userId: string
   payerName: string
-  kind: "rent" | "late_fee" | "payment" | "gst"
+  kind: "rent" | "late_fee" | "payment" | "gst" | "deposit" | "maintenance"
   description: string
   amountCents: number
   status: "due" | "paid" | "waived"
@@ -1224,6 +1354,254 @@ function transaction(work: (db: Sql) => void) {
   }
 }
 
+
+export function slugifyOrg(name: string) {
+  return normalizeSlug(name)
+}
+
+export function createLandlordAccount(input: {
+  name: string
+  email: string
+  passwordHash: string
+  company: string
+  packageTier?: PackageTier
+}) {
+  const db = getDb()
+  const email = input.email.trim().toLowerCase()
+  const existing = asRow(db.prepare("SELECT id FROM users WHERE lower(email) = ?").get(email))
+  if (existing) return { ok: false as const, error: "An account with that email already exists." }
+  const company = input.company.trim()
+  if (company.length < 2) return { ok: false as const, error: "Enter the organisation name." }
+  let slug = slugifyOrg(company)
+  let n = 0
+  while (asRow(db.prepare("SELECT id FROM tenants WHERE slug = ?").get(slug))) {
+    n += 1
+    slug = `${slugifyOrg(company)}-${n}`
+  }
+  const tenantId = crypto.randomUUID()
+  const userId = crypto.randomUUID()
+  const pkg: PackageTier = input.packageTier ?? "starter"
+  transaction((tx) => {
+    tx.prepare(
+      `INSERT INTO tenants (id, name, slug, city, kind, display_currency, package, is_demo)
+       VALUES (?, ?, ?, ?, 'landlord', 'INR', ?, 0)`,
+    ).run(tenantId, company, slug, "India", pkg)
+    tx.prepare(
+      `INSERT INTO users (
+        id, name, email, role, tenant_id, company, trade, service_area, provider_verified, phone, password_hash, is_demo
+      ) VALUES (?, ?, ?, 'landlord_admin', ?, ?, NULL, NULL, 0, NULL, ?, 0)`,
+    ).run(userId, input.name.trim(), email, tenantId, company, input.passwordHash)
+    tx.prepare(
+      "INSERT INTO late_fee_rules (tenant_id, grace_days, flat_cents, percent_bps) VALUES (?, 5, 1500000, 150)",
+    ).run(tenantId)
+  })
+  return { ok: true as const, userId, tenantId, slug }
+}
+
+export function getUserByEmail(email: string) {
+  const row = asRow(
+    getDb().prepare(`${USER_SQL} WHERE lower(u.email) = ?`).get(email.trim().toLowerCase()),
+  )
+  return row ? mapUser(row) : null
+}
+
+export function getPasswordHashForEmail(email: string): string | null {
+  const row = asRow(
+    getDb()
+      .prepare("SELECT password_hash FROM users WHERE lower(email) = ?")
+      .get(email.trim().toLowerCase()),
+  )
+  return str(row ?? {}, "password_hash")
+}
+
+export type CustomDomainRecord = {
+  id: string
+  tenantId: string
+  hostname: string
+  status: "pending" | "verified" | "active"
+  txtToken: string
+  createdAt: string
+  verifiedAt: string | null
+}
+
+function mapDomain(row: Record<string, unknown>): CustomDomainRecord {
+  return {
+    id: String(row.id),
+    tenantId: String(row.tenant_id),
+    hostname: String(row.hostname),
+    status: String(row.status) as CustomDomainRecord["status"],
+    txtToken: String(row.txt_token),
+    createdAt: String(row.created_at),
+    verifiedAt: str(row, "verified_at"),
+  }
+}
+
+export function listCustomDomains(tenantId: string) {
+  return asRows(
+    getDb()
+      .prepare(
+        "SELECT * FROM custom_domains WHERE tenant_id = ? ORDER BY created_at DESC",
+      )
+      .all(tenantId),
+  ).map(mapDomain)
+}
+
+export function getTenantPackage(tenantId: string): PackageTier {
+  const row = asRow(
+    getDb().prepare("SELECT package FROM tenants WHERE id = ?").get(tenantId),
+  )
+  return str(row ?? {}, "package") === "pro" ? "pro" : "starter"
+}
+
+function normalizeHostname(raw: string): string | null {
+  const host = raw.trim().toLowerCase().replace(/^https?:\/\//, "").split("/")[0]
+  if (!host || host.includes(" ") || !host.includes(".")) return null
+  if (host.length > 253) return null
+  if (!/^[a-z0-9.-]+$/.test(host)) return null
+  return host
+}
+
+export function addCustomDomain(tenantId: string, hostnameRaw: string) {
+  if (getTenantPackage(tenantId) !== "pro") {
+    return { ok: false as const, error: "Custom domains require the PRO package." }
+  }
+  const hostname = normalizeHostname(hostnameRaw)
+  if (!hostname) return { ok: false as const, error: "Enter a valid hostname such as listings.yourcompany.com." }
+  const clash = asRow(
+    getDb().prepare("SELECT id, tenant_id FROM custom_domains WHERE hostname = ?").get(hostname),
+  )
+  if (clash) {
+    if (String(clash.tenant_id) === tenantId) {
+      return { ok: false as const, error: "That hostname is already on your organisation." }
+    }
+    return { ok: false as const, error: "That hostname is already claimed." }
+  }
+  const id = crypto.randomUUID()
+  const txtToken = `deskulpt-verify=${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`
+  const now = new Date().toISOString()
+  getDb()
+    .prepare(
+      `INSERT INTO custom_domains (id, tenant_id, hostname, status, txt_token, created_at, verified_at)
+       VALUES (?, ?, ?, 'pending', ?, ?, NULL)`,
+    )
+    .run(id, tenantId, hostname, txtToken, now)
+  return { ok: true as const, domain: listCustomDomains(tenantId).find((d) => d.id === id)! }
+}
+
+/** Demo DNS check: marks verified when pending. Optional TXT match for guided step. */
+export function verifyCustomDomain(
+  tenantId: string,
+  domainId: string,
+  opts?: { demoForce?: boolean; observedTxt?: string | null },
+) {
+  if (getTenantPackage(tenantId) !== "pro") {
+    return { ok: false as const, error: "Custom domains require the PRO package." }
+  }
+  const row = asRow(
+    getDb()
+      .prepare("SELECT * FROM custom_domains WHERE id = ? AND tenant_id = ?")
+      .get(domainId, tenantId),
+  )
+  if (!row) return { ok: false as const, error: "Domain not found." }
+  const domain = mapDomain(row)
+  if (domain.status === "verified" || domain.status === "active") {
+    return { ok: true as const, domain }
+  }
+  const observed = opts?.observedTxt?.trim()
+  const demoOk = opts?.demoForce !== false
+  if (observed && observed !== domain.txtToken && !observed.includes(domain.txtToken)) {
+    return {
+      ok: false as const,
+      error: "TXT value does not match the challenge. Paste the exact deskulpt-verify=… token, or use Check DNS in demo mode.",
+    }
+  }
+  if (!demoOk && !observed) {
+    return { ok: false as const, error: "No TXT record observed yet." }
+  }
+  const now = new Date().toISOString()
+  getDb()
+    .prepare(
+      "UPDATE custom_domains SET status = 'active', verified_at = ? WHERE id = ? AND tenant_id = ?",
+    )
+    .run(now, domainId, tenantId)
+  return { ok: true as const, domain: listCustomDomains(tenantId).find((d) => d.id === domainId)! }
+}
+
+export function removeCustomDomain(tenantId: string, domainId: string) {
+  getDb()
+    .prepare("DELETE FROM custom_domains WHERE id = ? AND tenant_id = ?")
+    .run(domainId, tenantId)
+  return { ok: true as const }
+}
+
+export function findTenantByCustomHost(hostname: string) {
+  const host = normalizeHostname(hostname)
+  if (!host) return null
+  const row = asRow(
+    getDb()
+      .prepare(
+        `SELECT t.id, t.name, t.slug, d.hostname, d.status
+         FROM custom_domains d
+         JOIN tenants t ON t.id = d.tenant_id
+         WHERE d.hostname = ? AND d.status IN ('verified', 'active')`,
+      )
+      .get(host),
+  )
+  if (!row) return null
+  return {
+    tenantId: String(row.id),
+    tenantName: String(row.name),
+    slug: String(row.slug),
+    hostname: String(row.hostname),
+  }
+}
+
+export function createVisitRequest(input: {
+  unitId: string
+  name: string
+  email: string
+  phone: string
+  note: string
+  visitType: "in_person" | "virtual"
+  preferredAt: string | null
+}) {
+  const db = getDb()
+  const unitRow = asRow(db.prepare("SELECT * FROM units WHERE id = ?").get(input.unitId))
+  if (!unitRow) return { ok: false as const, error: "That bay is not listed." }
+  const unit = mapUnit(unitRow)
+  const property = asRow(
+    db.prepare("SELECT id, slug, name FROM properties WHERE id = ?").get(unit.propertyId),
+  )
+  if (!property) return { ok: false as const, error: "That building is not listed." }
+  const id = crypto.randomUUID()
+  const now = new Date().toISOString()
+  db.prepare(
+    `INSERT INTO visit_requests (
+      id, tenant_id, property_id, unit_id, name, email, phone, note, visit_type, preferred_at, status, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'requested', ?)`,
+  ).run(
+    id,
+    unit.tenantId,
+    String(property.id),
+    unit.id,
+    input.name,
+    input.email,
+    input.phone,
+    input.note,
+    input.visitType,
+    input.preferredAt,
+    now,
+  )
+  return {
+    ok: true as const,
+    id,
+    tenantId: unit.tenantId,
+    propertySlug: String(property.slug),
+    propertyName: String(property.name),
+    unitCode: unit.code,
+  }
+}
+
 export function createApplication(input: {
   unitId: string
   applicantId: string
@@ -1235,10 +1613,15 @@ export function createApplication(input: {
 }) {
   const db = getDb()
   const unitRow = asRow(db.prepare("SELECT * FROM units WHERE id = ?").get(input.unitId))
-  if (!unitRow) return { ok: false as const, error: "That bay is not listed." }
-  const unit = mapUnit(unitRow)
+  if (!unitRow) return { ok: false as const, error: "That unit is not listed." }
+  const propSeg = asRow(
+    db.prepare("SELECT segment FROM properties WHERE id = ?").get(String(unitRow.property_id)),
+  )
+  const segmentRaw = String(propSeg?.segment ?? "warehouse")
+  const segment: PropertySegment = isPropertySegment(segmentRaw) ? segmentRaw : "warehouse"
+  const unit = mapUnit(unitRow, segment)
   if (unit.status === "leased") {
-    return { ok: false as const, error: "This bay is leased. Choose an available one." }
+    return { ok: false as const, error: "This unit is leased. Choose an available one." }
   }
   const existing = asRow(
     db.prepare(
@@ -1316,10 +1699,15 @@ export function decideApplication(
         deniedIds.push(String(other.applicant_id))
         tx.prepare("UPDATE applications SET status = 'denied' WHERE id = ?").run(String(other.id))
       }
-      const unit = asRow(tx.prepare("SELECT sqft, rate_psf, code FROM units WHERE id = ?").get(application.unitId))
+      const unitRow = asRow(tx.prepare("SELECT * FROM units WHERE id = ?").get(application.unitId))
+      const propRow = asRow(
+        tx.prepare("SELECT segment FROM properties WHERE id = ?").get(String(unitRow?.property_id)),
+      )
+      const segmentRaw = String(propRow?.segment ?? "warehouse")
+      const segment: PropertySegment = isPropertySegment(segmentRaw) ? segmentRaw : "warehouse"
+      const unit = mapUnit(unitRow ?? {}, segment)
       const dueOn = firstOfNextMonth()
-      const amount = monthlyRentCents(Number(unit?.rate_psf), Number(unit?.sqft))
-      const gst = gstCents(amount)
+      const amount = unitMonthlyRentCents(unit)
       const rentId = crypto.randomUUID()
       const now = new Date().toISOString()
       tx.prepare(
@@ -1336,21 +1724,66 @@ export function decideApplication(
         dueOn,
         now,
       )
-      tx.prepare(
-        `INSERT INTO ledger_entries (
-          id, tenant_id, unit_id, user_id, kind, description, amount_cents, status, due_on, created_at, source_id
-        ) VALUES (?, ?, ?, ?, 'gst', ?, ?, 'due', ?, ?, ?)`,
-      ).run(
-        crypto.randomUUID(),
-        tenantId,
-        application.unitId,
-        application.applicantId,
-        `GST (18%) · Unit ${application.unitCode} · due ${dueOn}`,
-        gst,
-        dueOn,
-        now,
-        rentId,
-      )
+      if (
+        gstAppliesForUnit({
+          segment,
+          gstApplicable: unit.gstApplicable,
+        })
+      ) {
+        const gst = gstCents(amount)
+        tx.prepare(
+          `INSERT INTO ledger_entries (
+            id, tenant_id, unit_id, user_id, kind, description, amount_cents, status, due_on, created_at, source_id
+          ) VALUES (?, ?, ?, ?, 'gst', ?, ?, 'due', ?, ?, ?)`,
+        ).run(
+          crypto.randomUUID(),
+          tenantId,
+          application.unitId,
+          application.applicantId,
+          `GST (18%) · Unit ${application.unitCode} · due ${dueOn}`,
+          gst,
+          dueOn,
+          now,
+          rentId,
+        )
+      }
+      const depositMonths =
+        unit.securityDepositMonths ?? leaseProfile(segment).defaultDepositMonths
+      if (depositMonths != null && depositMonths > 0) {
+        const deposit = Math.round(amount * depositMonths)
+        tx.prepare(
+          `INSERT INTO ledger_entries (
+            id, tenant_id, unit_id, user_id, kind, description, amount_cents, status, due_on, created_at, source_id
+          ) VALUES (?, ?, ?, ?, 'deposit', ?, ?, 'due', ?, ?, ?)`,
+        ).run(
+          crypto.randomUUID(),
+          tenantId,
+          application.unitId,
+          application.applicantId,
+          `Security deposit · ${depositMonths} month${depositMonths === 1 ? "" : "s"} · Unit ${application.unitCode}`,
+          deposit,
+          dueOn,
+          now,
+          rentId,
+        )
+      }
+      if (unit.maintenanceMinor != null && unit.maintenanceMinor > 0) {
+        tx.prepare(
+          `INSERT INTO ledger_entries (
+            id, tenant_id, unit_id, user_id, kind, description, amount_cents, status, due_on, created_at, source_id
+          ) VALUES (?, ?, ?, ?, 'maintenance', ?, ?, 'due', ?, ?, ?)`,
+        ).run(
+          crypto.randomUUID(),
+          tenantId,
+          application.unitId,
+          application.applicantId,
+          `Maintenance · Unit ${application.unitCode} · due ${dueOn}`,
+          unit.maintenanceMinor,
+          dueOn,
+          now,
+          rentId,
+        )
+      }
     } else {
       const remaining = asRow(
         tx.prepare(
@@ -1502,6 +1935,112 @@ export function saveHotspots(
   return { ok: true as const, slug: property.slug }
 }
 
+export function createPropertyForLandlord(input: {
+  tenantId: string
+  name: string
+  address: string
+  area: string
+  cityLine: string
+  segment: PropertySegment
+  subtype: string
+  totalSqft?: number
+  latitude?: number | null
+  longitude?: number | null
+  unit?: {
+    code: string
+    description: string
+    status?: UnitStatus
+    sqft: number
+    ratePsf?: number
+    rateBasis: RateBasis
+    rentAmountMinor?: number | null
+    clearHeight?: string
+    docks?: number
+    driveIns?: number
+    power?: string
+    attributes: UnitAttributes
+    bhk?: number | null
+    carpetSqft?: number | null
+    securityDepositMonths?: number | null
+    maintenanceMinor?: number | null
+    gstApplicable?: boolean | null
+  }
+}) {
+  const db = getDb()
+  const tenant = asRow(
+    db.prepare("SELECT id FROM tenants WHERE id = ? AND kind = 'landlord'").get(input.tenantId),
+  )
+  if (!tenant) return { ok: false as const, error: "Landlord organisation not found." }
+  const slugBase = input.name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 48)
+  let slug = slugBase || `property-${crypto.randomUUID().slice(0, 8)}`
+  let n = 2
+  while (asRow(db.prepare("SELECT id FROM properties WHERE slug = ?").get(slug))) {
+    slug = `${slugBase}-${n}`
+    n += 1
+  }
+  const propertyId = crypto.randomUUID()
+  const profile = leaseProfile(input.segment)
+  transaction((tx) => {
+    tx.prepare(
+      `INSERT INTO properties (
+        id, tenant_id, name, slug, address, area, city_line, total_sqft, segment, subtype,
+        floor_plan_path, model_path, latitude, longitude
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)`,
+    ).run(
+      propertyId,
+      input.tenantId,
+      input.name.trim(),
+      slug,
+      input.address.trim(),
+      input.area.trim(),
+      input.cityLine.trim(),
+      input.totalSqft ?? input.unit?.sqft ?? 0,
+      input.segment,
+      input.subtype,
+      input.latitude ?? null,
+      input.longitude ?? null,
+    )
+    if (input.unit) {
+      const u = input.unit
+      const attrsJson = stringifyAttributes(u.attributes)
+      tx.prepare(
+        `INSERT INTO units (
+          id, tenant_id, property_id, floor_id, code, sqft, clear_height, docks, drive_ins, power,
+          rate_psf, rate_basis, rent_amount_minor, attributes, bhk, carpet_sqft,
+          security_deposit_months, maintenance_minor, gst_applicable,
+          status, hotspot_x, hotspot_y, matterport_url, description
+        ) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?)`,
+      ).run(
+        crypto.randomUUID(),
+        input.tenantId,
+        propertyId,
+        u.code.trim(),
+        u.sqft,
+        u.clearHeight ?? "",
+        u.docks ?? 0,
+        u.driveIns ?? 0,
+        u.power ?? "",
+        u.ratePsf ?? 0,
+        u.rateBasis,
+        u.rentAmountMinor ?? null,
+        attrsJson,
+        u.bhk ?? null,
+        u.carpetSqft ?? null,
+        u.securityDepositMonths ?? profile.defaultDepositMonths,
+        u.maintenanceMinor ?? null,
+        u.gstApplicable == null ? (profile.gstOnRent ? 1 : 0) : u.gstApplicable ? 1 : 0,
+        u.status ?? "available",
+        u.description.trim(),
+      )
+    }
+  })
+  return { ok: true as const, propertyId, slug }
+}
+
 export function saveFloorPlan(tenantId: string, propertyId: string, publicPath: string) {
   const property = propertyForLandlord(tenantId, propertyId)
   if (!property) return { ok: false as const, error: "Building not found in this organisation." }
@@ -1509,6 +2048,61 @@ export function saveFloorPlan(tenantId: string, propertyId: string, publicPath: 
     .prepare("UPDATE properties SET floor_plan_path = ? WHERE id = ? AND tenant_id = ?")
     .run(publicPath, propertyId, tenantId)
   return { ok: true as const, slug: property.slug }
+}
+
+/** Persist a validated plan-draft JSON blob on a floor owned by the tenant. */
+export function saveFloorPlanDraft(
+  tenantId: string,
+  propertyId: string,
+  floorId: string,
+  draftJson: string,
+) {
+  const property = propertyForLandlord(tenantId, propertyId)
+  if (!property) return { ok: false as const, error: "Building not found in this organisation." }
+  const floor = property.floors.find((f) => f.id === floorId)
+  if (!floor) return { ok: false as const, error: "Floor not found on this building." }
+  if (draftJson.length > 200_000) {
+    return { ok: false as const, error: "Plan draft is too large." }
+  }
+  getDb()
+    .prepare(
+      "UPDATE floors SET plan_draft_json = ? WHERE id = ? AND property_id = ? AND tenant_id = ?",
+    )
+    .run(draftJson, floorId, propertyId, tenantId)
+  return { ok: true as const, slug: property.slug, floorId }
+}
+
+/**
+ * Add a floor level for the landlord plan creator / stack navigator.
+ * Label is sanitized; level_index is next max+1 (or 0 when empty).
+ */
+export function addFloorLevel(
+  tenantId: string,
+  propertyId: string,
+  labelRaw: string,
+) {
+  const property = propertyForLandlord(tenantId, propertyId)
+  if (!property) return { ok: false as const, error: "Building not found in this organisation." }
+  const label = labelRaw
+    .replace(/[^\w .'#/_-]/g, "")
+    .trim()
+    .slice(0, 40)
+  if (!label) return { ok: false as const, error: "Floor label is required." }
+  if (property.floors.length >= 40) {
+    return { ok: false as const, error: "This building already has the maximum number of floors." }
+  }
+  const nextIndex =
+    property.floors.length === 0
+      ? 0
+      : Math.max(...property.floors.map((f) => f.levelIndex)) + 1
+  const id = `f_${propertyId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 18)}_${nextIndex}_${crypto.randomUUID().slice(0, 6)}`
+  getDb()
+    .prepare(
+      `INSERT INTO floors (id, tenant_id, property_id, label, level_index, plan_path, plan_draft_json)
+       VALUES (?, ?, ?, ?, ?, NULL, NULL)`,
+    )
+    .run(id, tenantId, propertyId, label, nextIndex)
+  return { ok: true as const, slug: property.slug, floorId: id, levelIndex: nextIndex, label }
 }
 
 export function saveLateFeeRule(
@@ -1686,19 +2280,25 @@ export type ListingFilters = {
   q?: string
   tenantId?: string
   area?: string
+  segment?: PropertySegment
   statuses?: UnitStatus[]
   minSqft?: number
   maxSqft?: number
   minRate?: number
   maxRate?: number
+  minMonthly?: number
+  maxMonthly?: number
   minDocks?: number
   minDriveIns?: number
   minClearHeight?: number
   power?: string
+  bhk?: number
+  furnishing?: string
+  fitOut?: string
   hasFloorPlan?: boolean
   hasMatterport?: boolean
   hasPano?: boolean
-  sort?: "rate_asc" | "rate_desc" | "sqft_asc" | "sqft_desc" | "name"
+  sort?: "rate_asc" | "rate_desc" | "sqft_asc" | "sqft_desc" | "name" | "monthly_asc" | "monthly_desc"
 }
 
 export type ListingCard = {
@@ -1712,10 +2312,18 @@ export type ListingCard = {
   driveIns: number
   power: string
   ratePsf: number
+  rateBasis: RateBasis
   monthlyCents: number
+  bhk: number | null
+  carpetSqft: number | null
+  furnishing: string | null
+  fitOut: string | null
+  segment: PropertySegment
+  subtype: string
   description: string
   matterportUrl: string | null
   hasPano: boolean
+  coverUrl: string | null
   propertyId: string
   propertyName: string
   propertySlug: string
@@ -1723,6 +2331,8 @@ export type ListingCard = {
   area: string
   cityLine: string
   floorPlanPath: string | null
+  latitude: number | null
+  longitude: number | null
   tenantId: string
   tenantName: string
 }
@@ -1751,11 +2361,18 @@ export function searchListings(filters: ListingFilters = {}): ListingCard[] {
       .prepare(
         `SELECT
            u.id AS unit_id, u.code, u.status, u.sqft, u.clear_height, u.docks, u.drive_ins,
-           u.power, u.rate_psf, u.description, u.matterport_url,
+           u.power, u.rate_psf, u.rate_basis, u.rent_amount_minor, u.attributes, u.bhk, u.carpet_sqft,
+           u.description, u.matterport_url,
            p.id AS property_id, p.name AS property_name, p.slug AS property_slug,
-           p.address, p.area, p.city_line, p.floor_plan_path,
+           p.address, p.area, p.city_line, p.floor_plan_path, p.latitude, p.longitude,
+           p.segment, p.subtype,
            t.id AS tenant_id, t.name AS tenant_name,
-           EXISTS(SELECT 1 FROM unit_media m WHERE m.unit_id = u.id AND m.kind = 'pano') AS has_pano
+           EXISTS(SELECT 1 FROM unit_media m WHERE m.unit_id = u.id AND m.kind = 'pano') AS has_pano,
+           (
+             SELECT m.url FROM unit_media m
+             WHERE m.unit_id = u.id AND m.kind = 'photo'
+             ORDER BY m.sort_order ASC LIMIT 1
+           ) AS cover_url
          FROM units u
          JOIN properties p ON p.id = u.property_id
          JOIN tenants t ON t.id = u.tenant_id AND t.kind = 'landlord'`,
@@ -1767,25 +2384,60 @@ export function searchListings(filters: ListingFilters = {}): ListingCard[] {
   const statuses = filters.statuses?.length ? new Set(filters.statuses) : null
 
   let cards = rows.map((row): ListingCard => {
-    const clearHeight = String(row.clear_height)
+    const segmentRaw = String(row.segment ?? "warehouse")
+    const segment: PropertySegment = isPropertySegment(segmentRaw) ? segmentRaw : "warehouse"
+    const unit = mapUnit(
+      {
+        id: row.unit_id,
+        tenant_id: row.tenant_id,
+        property_id: row.property_id,
+        floor_id: null,
+        code: row.code,
+        sqft: row.sqft,
+        clear_height: row.clear_height,
+        docks: row.docks,
+        drive_ins: row.drive_ins,
+        power: row.power,
+        rate_psf: row.rate_psf,
+        rate_basis: row.rate_basis,
+        rent_amount_minor: row.rent_amount_minor,
+        attributes: row.attributes,
+        bhk: row.bhk,
+        carpet_sqft: row.carpet_sqft,
+        status: row.status,
+        hotspot_x: null,
+        hotspot_y: null,
+        matterport_url: row.matterport_url,
+        description: row.description,
+      },
+      segment,
+    )
+    const clearHeight = unit.clearHeight
     const feet = Number((clearHeight.match(/(\d+(?:\.\d+)?)/) ?? [0, "0"])[1])
-    const ratePsf = Number(row.rate_psf)
-    const sqftVal = Number(row.sqft)
+    const attrs = unit.attributes as Record<string, unknown>
     return {
-      unitId: String(row.unit_id),
-      code: String(row.code),
-      status: String(row.status) as UnitStatus,
-      sqft: sqftVal,
+      unitId: unit.id,
+      code: unit.code,
+      status: unit.status,
+      sqft: unit.sqft,
       clearHeight,
       clearHeightFeet: feet,
-      docks: Number(row.docks),
-      driveIns: Number(row.drive_ins),
-      power: String(row.power),
-      ratePsf,
-      monthlyCents: monthlyRentCents(ratePsf, sqftVal),
-      description: String(row.description),
-      matterportUrl: str(row, "matterport_url"),
+      docks: unit.docks,
+      driveIns: unit.driveIns,
+      power: unit.power,
+      ratePsf: unit.ratePsf,
+      rateBasis: unit.rateBasis,
+      monthlyCents: unitMonthlyRentCents(unit),
+      bhk: unit.bhk,
+      carpetSqft: unit.carpetSqft,
+      furnishing: typeof attrs.furnishing === "string" ? attrs.furnishing : null,
+      fitOut: typeof attrs.fitOut === "string" ? attrs.fitOut : null,
+      segment,
+      subtype: String(row.subtype ?? "logistics_park"),
+      description: unit.description,
+      matterportUrl: unit.matterportUrl,
       hasPano: Number(row.has_pano) === 1,
+      coverUrl: str(row, "cover_url"),
       propertyId: String(row.property_id),
       propertyName: String(row.property_name),
       propertySlug: String(row.property_slug),
@@ -1793,6 +2445,8 @@ export function searchListings(filters: ListingFilters = {}): ListingCard[] {
       area: String(row.area),
       cityLine: String(row.city_line),
       floorPlanPath: str(row, "floor_plan_path"),
+      latitude: num(row, "latitude"),
+      longitude: num(row, "longitude"),
       tenantId: String(row.tenant_id),
       tenantName: String(row.tenant_name),
     }
@@ -1800,12 +2454,17 @@ export function searchListings(filters: ListingFilters = {}): ListingCard[] {
 
   cards = cards.filter((card) => {
     if (statuses && !statuses.has(card.status)) return false
+    if (filters.segment && card.segment !== filters.segment) return false
     if (filters.tenantId && card.tenantId !== filters.tenantId) return false
     if (filters.area && card.area !== filters.area) return false
     if (filters.minSqft != null && card.sqft < filters.minSqft) return false
     if (filters.maxSqft != null && card.sqft > filters.maxSqft) return false
-    if (filters.minRate != null && card.ratePsf < filters.minRate) return false
-    if (filters.maxRate != null && card.ratePsf > filters.maxRate) return false
+    if (filters.minRate != null && card.rateBasis === "per_sqft_month" && card.ratePsf < filters.minRate)
+      return false
+    if (filters.maxRate != null && card.rateBasis === "per_sqft_month" && card.ratePsf > filters.maxRate)
+      return false
+    if (filters.minMonthly != null && card.monthlyCents < filters.minMonthly * 100) return false
+    if (filters.maxMonthly != null && card.monthlyCents > filters.maxMonthly * 100) return false
     if (filters.minDocks != null && card.docks < filters.minDocks) return false
     if (filters.minDriveIns != null && card.driveIns < filters.minDriveIns) return false
     if (filters.minClearHeight != null && card.clearHeightFeet < filters.minClearHeight) return false
@@ -1813,6 +2472,9 @@ export function searchListings(filters: ListingFilters = {}): ListingCard[] {
       const needle = filters.power.trim().toLowerCase()
       if (needle && !card.power.toLowerCase().includes(needle)) return false
     }
+    if (filters.bhk != null && card.bhk !== filters.bhk) return false
+    if (filters.furnishing && card.furnishing !== filters.furnishing) return false
+    if (filters.fitOut && card.fitOut !== filters.fitOut) return false
     if (filters.hasFloorPlan && !card.floorPlanPath) return false
     if (filters.hasMatterport && !card.matterportUrl) return false
     if (filters.hasPano && !card.hasPano) return false
@@ -1826,6 +2488,8 @@ export function searchListings(filters: ListingFilters = {}): ListingCard[] {
         card.description,
         card.tenantName,
         card.power,
+        card.segment,
+        card.subtype,
       ]
         .join(" ")
         .toLowerCase()
@@ -1838,6 +2502,8 @@ export function searchListings(filters: ListingFilters = {}): ListingCard[] {
   cards.sort((a, b) => {
     if (sort === "rate_asc") return a.ratePsf - b.ratePsf
     if (sort === "rate_desc") return b.ratePsf - a.ratePsf
+    if (sort === "monthly_asc") return a.monthlyCents - b.monthlyCents
+    if (sort === "monthly_desc") return b.monthlyCents - a.monthlyCents
     if (sort === "sqft_asc") return a.sqft - b.sqft
     if (sort === "sqft_desc") return b.sqft - a.sqft
     return `${a.propertyName} ${a.code}`.localeCompare(`${b.propertyName} ${b.code}`)
@@ -2073,11 +2739,11 @@ export function inviteLandlord(input: {
   const tenantId = `t_${slug}`.slice(0, 40)
   const userId = crypto.randomUUID()
   db.prepare(
-    "INSERT INTO tenants (id, name, slug, city, kind) VALUES (?, ?, ?, ?, 'landlord')",
+    "INSERT INTO tenants (id, name, slug, city, kind, is_demo) VALUES (?, ?, ?, ?, 'landlord', 0)",
   ).run(tenantId, input.companyName, slug, input.city)
   db.prepare(
-    `INSERT INTO users (id, name, email, role, tenant_id, company, trade, service_area, provider_verified)
-     VALUES (?, ?, ?, 'landlord_admin', ?, NULL, NULL, NULL, 0)`,
+    `INSERT INTO users (id, name, email, role, tenant_id, company, trade, service_area, provider_verified, is_demo)
+     VALUES (?, ?, ?, 'landlord_admin', ?, NULL, NULL, NULL, 0, 0)`,
   ).run(userId, input.adminName, input.adminEmail, tenantId)
   db.prepare(
     "INSERT INTO late_fee_rules (tenant_id, grace_days, flat_cents, percent_bps) VALUES (?, 5, 1500000, 150)",
@@ -2290,5 +2956,559 @@ export function upsertLanguage(input: {
       .run(code, name, input.status, input.waitingReason, now, now)
   }
   return { ok: true as const, code }
+}
+
+// --- Occupant shop (PRD §15 / Slice G) ---
+
+export type ShopSkuKind = "purchase" | "rental"
+export type ShopOrderStatus =
+  | "pending_payment"
+  | "paid"
+  | "fulfilling"
+  | "completed"
+  | "cancelled"
+  | "refunded"
+
+export type OccupantLease = {
+  tenantId: string
+  tenantName: string
+  propertyId: string
+  propertyName: string
+  propertySlug: string
+  unitId: string
+  unitCode: string
+  applicationId: string
+}
+
+export type ShopSkuRecord = {
+  id: string
+  tenantId: string
+  propertyId: string | null
+  name: string
+  kind: ShopSkuKind
+  priceCents: number
+  enabled: boolean
+  stock: number | null
+  slotCapacity: number | null
+  sortOrder: number
+}
+
+export type ShopCartLine = {
+  id: string
+  skuId: string
+  name: string
+  kind: ShopSkuKind
+  qty: number
+  unitPriceCents: number
+  slotStart: string | null
+  lineCents: number
+}
+
+export type ShopSettingsPublic = {
+  tenantId: string
+  enabled: boolean
+  demoMode: boolean
+  razorpayMode: "test" | "live"
+  keyId: string | null
+  hasSecret: boolean
+  secretLast4: string | null
+}
+
+export type ShopOrderRecord = {
+  id: string
+  tenantId: string
+  propertyId: string | null
+  userId: string
+  userName: string
+  status: ShopOrderStatus
+  amountCents: number
+  paymentProvider: string
+  paymentRef: string | null
+  note: string
+  createdAt: string
+  paidAt: string | null
+  lines: {
+    id: string
+    skuId: string
+    skuName: string
+    kind: ShopSkuKind
+    qty: number
+    unitPriceCents: number
+    slotStart: string | null
+  }[]
+}
+
+/** Active leases = approved applications (occupant portal gate for /shop). */
+export function leasesForOccupant(userId: string): OccupantLease[] {
+  return asRows(
+    getDb()
+      .prepare(
+        `SELECT a.id AS application_id, a.tenant_id, t.name AS tenant_name,
+                p.id AS property_id, p.name AS property_name, p.slug AS property_slug,
+                u.id AS unit_id, u.code AS unit_code
+         FROM applications a
+         JOIN tenants t ON t.id = a.tenant_id
+         JOIN units u ON u.id = a.unit_id
+         JOIN properties p ON p.id = u.property_id
+         WHERE a.applicant_id = ? AND a.status = 'approved'
+         ORDER BY a.created_at`,
+      )
+      .all(userId),
+  ).map((row) => ({
+    tenantId: String(row.tenant_id),
+    tenantName: String(row.tenant_name),
+    propertyId: String(row.property_id),
+    propertyName: String(row.property_name),
+    propertySlug: String(row.property_slug),
+    unitId: String(row.unit_id),
+    unitCode: String(row.unit_code),
+    applicationId: String(row.application_id),
+  }))
+}
+
+function mapSku(row: Record<string, unknown>): ShopSkuRecord {
+  return {
+    id: String(row.id),
+    tenantId: String(row.tenant_id),
+    propertyId: str(row, "property_id"),
+    name: String(row.name),
+    kind: String(row.kind) as ShopSkuKind,
+    priceCents: Number(row.price_cents),
+    enabled: Number(row.enabled) === 1,
+    stock: num(row, "stock"),
+    slotCapacity: num(row, "slot_capacity"),
+    sortOrder: Number(row.sort_order),
+  }
+}
+
+function ensureShopSettings(tenantId: string) {
+  const existing = asRow(
+    getDb().prepare("SELECT tenant_id FROM shop_settings WHERE tenant_id = ?").get(tenantId),
+  )
+  if (existing) return
+  getDb()
+    .prepare(
+      `INSERT INTO shop_settings (tenant_id, enabled, demo_mode, razorpay_key_id, razorpay_key_secret_enc, razorpay_mode)
+       VALUES (?, 1, 1, NULL, NULL, 'test')`,
+    )
+    .run(tenantId)
+}
+
+export function getShopSettingsPublic(tenantId: string): ShopSettingsPublic {
+  ensureShopSettings(tenantId)
+  const row = asRow(getDb().prepare("SELECT * FROM shop_settings WHERE tenant_id = ?").get(tenantId))
+  if (!row) {
+    return {
+      tenantId,
+      enabled: true,
+      demoMode: true,
+      razorpayMode: "test",
+      keyId: null,
+      hasSecret: false,
+      secretLast4: null,
+    }
+  }
+  const enc = str(row, "razorpay_key_secret_enc")
+  let last4: string | null = null
+  if (enc) {
+    const plain = decryptSecret(enc)
+    last4 = plain ? secretLast4(plain) : "••••"
+  }
+  return {
+    tenantId,
+    enabled: Number(row.enabled) === 1,
+    demoMode: Number(row.demo_mode) === 1,
+    razorpayMode: (str(row, "razorpay_mode") as "test" | "live") ?? "test",
+    keyId: str(row, "razorpay_key_id"),
+    hasSecret: Boolean(enc),
+    secretLast4: last4,
+  }
+}
+
+/** Server-only: never expose to client serializers. */
+export function getShopSettingsInternal(tenantId: string) {
+  ensureShopSettings(tenantId)
+  const row = asRow(getDb().prepare("SELECT * FROM shop_settings WHERE tenant_id = ?").get(tenantId))
+  const enc = row ? str(row, "razorpay_key_secret_enc") : null
+  return {
+    tenantId,
+    enabled: row ? Number(row.enabled) === 1 : true,
+    demoMode: row ? Number(row.demo_mode) === 1 : true,
+    razorpayMode: (row ? (str(row, "razorpay_mode") as "test" | "live") : "test") ?? "test",
+    keyId: row ? str(row, "razorpay_key_id") : null,
+    secretEnc: enc,
+    hasSecret: Boolean(enc),
+  }
+}
+
+export function saveShopRazorpaySettings(
+  tenantId: string,
+  input: {
+    keyId: string | null
+    keySecret: string | null
+    demoMode: boolean
+    razorpayMode: "test" | "live"
+    enabled: boolean
+  },
+) {
+  ensureShopSettings(tenantId)
+  const current = getShopSettingsInternal(tenantId)
+  let secretEnc = current.secretEnc
+  if (input.keySecret && input.keySecret.trim().length > 0) {
+    secretEnc = encryptSecret(input.keySecret.trim())
+  }
+  const keyId =
+    input.keyId != null && input.keyId.trim().length > 0 ? input.keyId.trim() : current.keyId
+  getDb()
+    .prepare(
+      `UPDATE shop_settings
+       SET enabled = ?, demo_mode = ?, razorpay_key_id = ?, razorpay_key_secret_enc = ?, razorpay_mode = ?
+       WHERE tenant_id = ?`,
+    )
+    .run(
+      input.enabled ? 1 : 0,
+      input.demoMode ? 1 : 0,
+      keyId,
+      secretEnc,
+      input.razorpayMode,
+      tenantId,
+    )
+  return getShopSettingsPublic(tenantId)
+}
+
+export function listShopSkus(tenantId: string, opts?: { enabledOnly?: boolean; propertyId?: string }) {
+  const enabledOnly = opts?.enabledOnly ?? false
+  const rows = asRows(
+    getDb()
+      .prepare(
+        `SELECT * FROM shop_skus WHERE tenant_id = ?
+         ORDER BY sort_order, name`,
+      )
+      .all(tenantId),
+  )
+    .map(mapSku)
+    .filter((sku) => {
+      if (enabledOnly && !sku.enabled) return false
+      if (opts?.propertyId && sku.propertyId && sku.propertyId !== opts.propertyId) return false
+      return true
+    })
+  return rows
+}
+
+export function setShopSkuEnabled(tenantId: string, skuId: string, enabled: boolean) {
+  const row = asRow(
+    getDb().prepare("SELECT id FROM shop_skus WHERE id = ? AND tenant_id = ?").get(skuId, tenantId),
+  )
+  if (!row) return { ok: false as const, error: "SKU not found for this organisation." }
+  getDb().prepare("UPDATE shop_skus SET enabled = ? WHERE id = ? AND tenant_id = ?").run(
+    enabled ? 1 : 0,
+    skuId,
+    tenantId,
+  )
+  return { ok: true as const }
+}
+
+export function cartForUser(userId: string, tenantId: string): ShopCartLine[] {
+  return asRows(
+    getDb()
+      .prepare(
+        `SELECT c.id, c.sku_id, c.qty, c.slot_start, s.name, s.kind, s.price_cents
+         FROM shop_cart_items c
+         JOIN shop_skus s ON s.id = c.sku_id
+         WHERE c.user_id = ? AND c.tenant_id = ?
+         ORDER BY s.sort_order, s.name`,
+      )
+      .all(userId, tenantId),
+  ).map((row) => {
+    const qty = Number(row.qty)
+    const unit = Number(row.price_cents)
+    return {
+      id: String(row.id),
+      skuId: String(row.sku_id),
+      name: String(row.name),
+      kind: String(row.kind) as ShopSkuKind,
+      qty,
+      unitPriceCents: unit,
+      slotStart: str(row, "slot_start"),
+      lineCents: qty * unit,
+    }
+  })
+}
+
+export function addToCart(input: {
+  userId: string
+  tenantId: string
+  skuId: string
+  qty: number
+  slotStart: string | null
+}) {
+  const lease = leasesForOccupant(input.userId).find((l) => l.tenantId === input.tenantId)
+  if (!lease) {
+    return { ok: false as const, error: "Shop is for current occupants." }
+  }
+  const settings = getShopSettingsInternal(input.tenantId)
+  if (!settings.enabled) {
+    return { ok: false as const, error: "This landlord has disabled the shop." }
+  }
+  const skuRow = asRow(
+    getDb()
+      .prepare("SELECT * FROM shop_skus WHERE id = ? AND tenant_id = ? AND enabled = 1")
+      .get(input.skuId, input.tenantId),
+  )
+  if (!skuRow) return { ok: false as const, error: "That item is not available." }
+  const sku = mapSku(skuRow)
+  if (sku.kind === "rental") {
+    if (!input.slotStart) {
+      return { ok: false as const, error: "Pick a time slot for this rental." }
+    }
+    const taken = asRow(
+      getDb()
+        .prepare(
+          `SELECT id FROM shop_rental_bookings
+           WHERE sku_id = ? AND slot_start = ? AND status != 'cancelled'`,
+        )
+        .get(sku.id, input.slotStart),
+    )
+    if (taken) {
+      return { ok: false as const, error: "That slot is already booked." }
+    }
+  }
+  const qty = Math.max(1, Math.min(99, Math.floor(input.qty) || 1))
+  const slot = sku.kind === "rental" ? input.slotStart : null
+  const existing = asRow(
+    getDb()
+      .prepare(
+        `SELECT id, qty FROM shop_cart_items
+         WHERE user_id = ? AND tenant_id = ? AND sku_id = ?
+           AND ((slot_start IS NULL AND ? IS NULL) OR slot_start = ?)`,
+      )
+      .get(input.userId, input.tenantId, sku.id, slot, slot),
+  )
+  if (existing) {
+    getDb()
+      .prepare("UPDATE shop_cart_items SET qty = ? WHERE id = ?")
+      .run(Number(existing.qty) + qty, String(existing.id))
+  } else {
+    getDb()
+      .prepare(
+        `INSERT INTO shop_cart_items (id, user_id, tenant_id, sku_id, qty, slot_start)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(crypto.randomUUID(), input.userId, input.tenantId, sku.id, qty, slot)
+  }
+  return { ok: true as const }
+}
+
+export function clearCart(userId: string, tenantId: string) {
+  getDb()
+    .prepare("DELETE FROM shop_cart_items WHERE user_id = ? AND tenant_id = ?")
+    .run(userId, tenantId)
+}
+
+export function checkoutCart(input: {
+  userId: string
+  tenantId: string
+  note: string
+}) {
+  const lease = leasesForOccupant(input.userId).find((l) => l.tenantId === input.tenantId)
+  if (!lease) {
+    return { ok: false as const, error: "Shop is for current occupants." }
+  }
+  const settings = getShopSettingsInternal(input.tenantId)
+  if (!settings.enabled) {
+    return { ok: false as const, error: "This landlord has disabled the shop." }
+  }
+  const lines = cartForUser(input.userId, input.tenantId)
+  if (lines.length === 0) {
+    return { ok: false as const, error: "Cart is empty." }
+  }
+  for (const line of lines) {
+    if (line.kind === "rental" && line.slotStart) {
+      const taken = asRow(
+        getDb()
+          .prepare(
+            `SELECT id FROM shop_rental_bookings
+             WHERE sku_id = ? AND slot_start = ? AND status != 'cancelled'`,
+          )
+          .get(line.skuId, line.slotStart),
+      )
+      if (taken) {
+        return {
+          ok: false as const,
+          error: `Slot conflict for ${line.name}. Pick another time.`,
+        }
+      }
+    }
+  }
+
+  const provider = resolveShopPaymentProvider({
+    demoMode: settings.demoMode,
+    hasSecret: settings.hasSecret,
+    keyId: settings.keyId,
+  })
+
+  const amountCents = lines.reduce((sum, line) => sum + line.lineCents, 0)
+  const orderId = crypto.randomUUID()
+  const now = new Date().toISOString()
+  const pay = provider.createOrder({
+    tenantId: input.tenantId,
+    orderId,
+    amountCents,
+    description: `Shop order ${orderId.slice(0, 8)}`,
+  })
+
+  try {
+    transaction((tx) => {
+      tx.prepare(
+        `INSERT INTO shop_orders (
+          id, tenant_id, property_id, user_id, status, amount_cents,
+          payment_provider, payment_ref, note, created_at, paid_at
+        ) VALUES (?, ?, ?, ?, 'paid', ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        orderId,
+        input.tenantId,
+        lease.propertyId,
+        input.userId,
+        amountCents,
+        pay.provider,
+        pay.reference,
+        input.note.trim(),
+        now,
+        now,
+      )
+      const lineIns = tx.prepare(
+        `INSERT INTO shop_order_lines (
+          id, order_id, sku_id, sku_name, kind, qty, unit_price_cents, slot_start
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      const bookIns = tx.prepare(
+        `INSERT INTO shop_rental_bookings (
+          id, tenant_id, sku_id, order_id, slot_start, user_id, status
+        ) VALUES (?, ?, ?, ?, ?, ?, 'booked')`,
+      )
+      for (const line of lines) {
+        lineIns.run(
+          crypto.randomUUID(),
+          orderId,
+          line.skuId,
+          line.name,
+          line.kind,
+          line.qty,
+          line.unitPriceCents,
+          line.slotStart,
+        )
+        if (line.kind === "rental" && line.slotStart) {
+          bookIns.run(
+            crypto.randomUUID(),
+            input.tenantId,
+            line.skuId,
+            orderId,
+            line.slotStart,
+            input.userId,
+          )
+        }
+      }
+      tx.prepare("DELETE FROM shop_cart_items WHERE user_id = ? AND tenant_id = ?").run(
+        input.userId,
+        input.tenantId,
+      )
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (message.includes("UNIQUE") || message.includes("constraint")) {
+      return { ok: false as const, error: "That rental slot was just taken. Try another time." }
+    }
+    throw error
+  }
+
+  return {
+    ok: true as const,
+    orderId,
+    amountCents,
+    paymentProvider: pay.provider,
+    paymentRef: pay.reference,
+    labelledDemo: pay.labelledDemo,
+  }
+}
+
+function mapOrder(row: Record<string, unknown>): ShopOrderRecord {
+  const id = String(row.id)
+  const lines = asRows(
+    getDb().prepare("SELECT * FROM shop_order_lines WHERE order_id = ?").all(id),
+  ).map((line) => ({
+    id: String(line.id),
+    skuId: String(line.sku_id),
+    skuName: String(line.sku_name),
+    kind: String(line.kind) as ShopSkuKind,
+    qty: Number(line.qty),
+    unitPriceCents: Number(line.unit_price_cents),
+    slotStart: str(line, "slot_start"),
+  }))
+  return {
+    id,
+    tenantId: String(row.tenant_id),
+    propertyId: str(row, "property_id"),
+    userId: String(row.user_id),
+    userName: String(row.user_name ?? ""),
+    status: String(row.status) as ShopOrderStatus,
+    amountCents: Number(row.amount_cents),
+    paymentProvider: String(row.payment_provider),
+    paymentRef: str(row, "payment_ref"),
+    note: String(row.note ?? ""),
+    createdAt: String(row.created_at),
+    paidAt: str(row, "paid_at"),
+    lines,
+  }
+}
+
+export function ordersForOccupant(userId: string) {
+  return asRows(
+    getDb()
+      .prepare(
+        `SELECT o.*, u.name AS user_name
+         FROM shop_orders o
+         JOIN users u ON u.id = o.user_id
+         WHERE o.user_id = ?
+         ORDER BY o.created_at DESC`,
+      )
+      .all(userId),
+  ).map(mapOrder)
+}
+
+export function ordersForTenant(tenantId: string) {
+  return asRows(
+    getDb()
+      .prepare(
+        `SELECT o.*, u.name AS user_name
+         FROM shop_orders o
+         JOIN users u ON u.id = o.user_id
+         WHERE o.tenant_id = ?
+         ORDER BY o.created_at DESC`,
+      )
+      .all(tenantId),
+  ).map(mapOrder)
+}
+
+/** Test helper: book a rental slot directly (simulates prior order). */
+export function forceBookRentalSlot(input: {
+  tenantId: string
+  skuId: string
+  slotStart: string
+  userId: string
+}) {
+  getDb()
+    .prepare(
+      `INSERT INTO shop_rental_bookings (
+        id, tenant_id, sku_id, order_id, slot_start, user_id, status
+      ) VALUES (?, ?, ?, ?, ?, ?, 'booked')`,
+    )
+    .run(
+      crypto.randomUUID(),
+      input.tenantId,
+      input.skuId,
+      `seed_${crypto.randomUUID()}`,
+      input.slotStart,
+      input.userId,
+    )
 }
 

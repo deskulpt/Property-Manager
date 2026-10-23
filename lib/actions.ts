@@ -7,9 +7,26 @@ import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import {
+  decideProposal,
+  stubAutofillListing,
+} from "@/lib/agentic/queue"
+import {
   assessLateFees,
   assignJob,
+  addCustomDomain,
   createApplication,
+  createLandlordAccount,
+  createPropertyForLandlord,
+  createVisitRequest,
+  exportUserData,
+  propertyForLandlord,
+  recordConsentEvent,
+  redactUserPersonalData,
+  getPasswordHashForEmail,
+  getUserByEmail,
+  getTenantPackage,
+  removeCustomDomain,
+  verifyCustomDomain,
   createJob,
   createMarketDraft,
   decideApplication,
@@ -20,7 +37,9 @@ import {
   openApplicationTenants,
   payDue,
   publicFormCountries,
+  addFloorLevel,
   saveFloorPlan,
+  saveFloorPlanDraft,
   saveHotspots,
   saveLateFeeRule,
   saveVerification,
@@ -32,16 +51,37 @@ import {
   transitionJob,
   upsertLanguage,
   upsertMethod,
+  addToCart,
+  checkoutCart,
+  saveShopRazorpaySettings,
+  setShopSkuEnabled,
+  getShopSettingsPublic,
 } from "@/lib/db"
 import { TRADES } from "@/lib/format"
 import { t } from "@/lib/i18n"
+import {
+  isPropertySegment,
+  leaseProfile,
+  PROPERTY_SUBTYPES,
+  type PropertySegment,
+  warehouseAttributesFromColumns,
+} from "@/lib/listing-schemas"
 import { toE164, type DisplayCurrency, type PaymentMethodKind } from "@/lib/market"
 import { MARKET_CHECKLIST_KEYS, type MarketChecklistKey } from "@/lib/market-checklist"
 import { notify, notifyMany } from "@/lib/notifications"
+import { hashPassword, passwordPolicyError, verifyPassword } from "@/lib/password"
 import { demoOtpCode, requestDemoOtp, verifyDemoOtp } from "@/lib/otp"
 import { demoPayments } from "@/lib/payments"
 import { staffCapabilities } from "@/lib/permissions"
-import { getSessionUser, SESSION_COOKIE } from "@/lib/session"
+import { agentCanAccessTenant } from "@/lib/agent-context"
+import { isDemoSwitcherEnabled, sessionCookieOptions } from "@/lib/env"
+import {
+  clearAgentTenantCookie,
+  getSessionUser,
+  mintSessionValue,
+  SESSION_COOKIE,
+  setAgentTenantCookie,
+} from "@/lib/session"
 import { translateEnglishCatalog, writeLocaleFile } from "@/lib/translate"
 import { simulateMatch } from "@/lib/verification"
 
@@ -58,29 +98,186 @@ function issues(error: z.ZodError) {
   return fieldErrors
 }
 
+
+export type AuthFormState = {
+  error?: string | null
+  fieldErrors?: Record<string, string>
+}
+
+const signupSchema = z.object({
+  name: z.string().trim().min(2, "Enter your name"),
+  email: z.string().trim().email("Enter a work email"),
+  password: z.string().min(8, "Use at least 8 characters"),
+  company: z.string().trim().min(2, "Enter the organisation name"),
+})
+
+export async function signupLandlord(
+  _prev: AuthFormState,
+  formData: FormData,
+): Promise<AuthFormState> {
+  if (formData.get("consent") !== "on") {
+    return {
+      error: "Accept the privacy notice to continue.",
+      fieldErrors: { consent: "Required" },
+    }
+  }
+  const parsed = signupSchema.safeParse({
+    name: formData.get("name"),
+    email: formData.get("email"),
+    password: formData.get("password"),
+    company: formData.get("company"),
+  })
+  if (!parsed.success) {
+    return { error: "Check the highlighted fields.", fieldErrors: issues(parsed.error) }
+  }
+  const policy = passwordPolicyError(parsed.data.password)
+  if (policy) return { error: policy, fieldErrors: { password: policy } }
+  const passwordHash = await hashPassword(parsed.data.password)
+  const result = createLandlordAccount({
+    name: parsed.data.name,
+    email: parsed.data.email,
+    passwordHash,
+    company: parsed.data.company,
+    packageTier: "starter",
+  })
+  if (!result.ok) return { error: result.error, fieldErrors: {} }
+  recordConsentEvent({
+    userId: result.userId,
+    email: parsed.data.email,
+    purpose: "signup_privacy_terms",
+    version: "dpdp-2023-v1",
+  })
+  const jar = await cookies()
+  jar.set(SESSION_COOKIE, mintSessionValue(result.userId), sessionCookieOptions())
+  notify({
+    userId: result.userId,
+    title: "Welcome to Easy Rental",
+    body: `${parsed.data.company} is ready. Add a property from the landlord desk.`,
+    href: "/landlord",
+  })
+  refresh(["/", "/landlord", "/landlord/settings", "/inbox"])
+  redirect("/landlord")
+}
+
+const loginSchema = z.object({
+  email: z.string().trim().email("Enter your email"),
+  password: z.string().min(1, "Enter your password"),
+})
+
+export async function loginWithPassword(
+  _prev: AuthFormState,
+  formData: FormData,
+): Promise<AuthFormState> {
+  const parsed = loginSchema.safeParse({
+    email: formData.get("email"),
+    password: formData.get("password"),
+  })
+  if (!parsed.success) {
+    return { error: "Check the highlighted fields.", fieldErrors: issues(parsed.error) }
+  }
+  const hash = getPasswordHashForEmail(parsed.data.email)
+  const generic = { error: "Email or password is incorrect.", fieldErrors: {} }
+  if (!hash) {
+    // Constant-time-ish: still hash a dummy so timing is closer; never reveal fixture emails.
+    await verifyPassword(parsed.data.password, "$2a$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUV")
+    return generic
+  }
+  const ok = await verifyPassword(parsed.data.password, hash)
+  if (!ok) return generic
+  const account = getUserByEmail(parsed.data.email)
+  if (!account) return generic
+  const jar = await cookies()
+  jar.set(SESSION_COOKIE, mintSessionValue(account.id), sessionCookieOptions())
+  refresh(["/", "/landlord", "/inbox"])
+  if (account.role === "landlord_admin") redirect("/landlord")
+  redirect("/")
+}
+
+export async function logoutSession() {
+  const jar = await cookies()
+  jar.delete(SESSION_COOKIE)
+  revalidatePath("/", "layout")
+  redirect("/")
+}
+
+export async function addLandlordDomain(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user?.tenantId || user.role !== "landlord_admin") {
+    return { ok: false as const, error: "Landlord admin session required." }
+  }
+  const result = addCustomDomain(user.tenantId, String(formData.get("hostname") ?? ""))
+  if (!result.ok) return result
+  refresh(["/landlord/settings"])
+  return { ok: true as const, id: result.domain.id, hostname: result.domain.hostname }
+}
+
+export async function checkLandlordDomainDns(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user?.tenantId || user.role !== "landlord_admin") {
+    return { ok: false as const, error: "Landlord admin session required." }
+  }
+  const domainId = String(formData.get("domainId") ?? "")
+  const observedTxt = String(formData.get("observedTxt") ?? "") || null
+  const demoForce = formData.get("demoForce") === "1" || formData.get("demoForce") === "on"
+  const result = verifyCustomDomain(user.tenantId, domainId, {
+    demoForce,
+    observedTxt,
+  })
+  if (!result.ok) return result
+  refresh(["/landlord/settings"])
+  return {
+    ok: true as const,
+    hostname: result.domain.hostname,
+    status: result.domain.status,
+  }
+}
+
+export async function removeLandlordDomain(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user?.tenantId || user.role !== "landlord_admin") {
+    return { ok: false as const, error: "Landlord admin session required." }
+  }
+  removeCustomDomain(user.tenantId, String(formData.get("domainId") ?? ""))
+  refresh(["/landlord/settings"])
+  return { ok: true as const }
+}
+
 export async function switchSession(userId: string) {
   const jar = await cookies()
   if (!userId || userId === "visitor") {
     jar.delete(SESSION_COOKIE)
-  } else {
-    const user = getUser(userId)
-    if (!user) return
-    jar.set(SESSION_COOKIE, user.id, {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 30,
-    })
+    await clearAgentTenantCookie()
+    revalidatePath("/", "layout")
+    return
+  }
+  if (!isDemoSwitcherEnabled()) {
+    return
+  }
+  const user = getUser(userId)
+  if (!user || !user.isDemo) return
+  jar.set(SESSION_COOKIE, mintSessionValue(user.id), sessionCookieOptions())
+  if (user.role !== "managing_agent") {
+    await clearAgentTenantCookie()
   }
   revalidatePath("/", "layout")
 }
 
+export async function setAgentLandlordForm(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user || user.role !== "managing_agent") return
+  const tenantId = String(formData.get("tenantId") ?? "")
+  if (!tenantId || !agentCanAccessTenant(user.id, tenantId)) return
+  await setAgentTenantCookie(tenantId)
+  revalidatePath("/agent", "layout")
+  redirect("/agent")
+}
+
 const applicationSchema = z.object({
   unitId: z.string().min(1),
-  company: z.string().trim().min(2, "Enter the company name"),
+  company: z.string().trim().min(2, "Enter a name or company"),
   contactName: z.string().trim().min(2, "Enter a contact name"),
-  email: z.string().trim().regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Enter a work email"),
-  intendedUse: z.string().trim().min(3, "Say how the bay will be used"),
+  email: z.string().trim().regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Enter an email"),
+  intendedUse: z.string().trim().min(3, "Add a short note on intended use"),
   notes: z.string().trim().max(1000).optional(),
 })
 
@@ -130,6 +327,202 @@ export async function submitApplication(_prev: ApplyState, formData: FormData): 
   )
   refresh(["/", "/properties", `/properties/${result.slug}`, `/properties/${result.slug}/units/${result.code}`, "/account", "/landlord", "/landlord/applications", "/inbox"])
   redirect("/account?notice=Application+submitted.+The+landlord+can+review+it+from+their+inbox.")
+}
+
+export type CreateListingState = {
+  error: string | null
+  fieldErrors?: Record<string, string>
+}
+
+export async function createListingProperty(
+  _prev: CreateListingState,
+  formData: FormData,
+): Promise<CreateListingState> {
+  const user = await getSessionUser()
+  if (!user?.tenantId || user.role !== "landlord_admin") {
+    return { error: "Switch to a landlord admin to create listings.", fieldErrors: {} }
+  }
+  const segmentRaw = String(formData.get("segment") ?? "")
+  if (!isPropertySegment(segmentRaw)) {
+    return { error: "Pick a valid segment.", fieldErrors: { segment: "Invalid segment" } }
+  }
+  const segment = segmentRaw as PropertySegment
+  const subtype = String(formData.get("subtype") ?? "")
+  if (!(PROPERTY_SUBTYPES[segment] as readonly string[]).includes(subtype)) {
+    return { error: "Pick a subtype for that segment.", fieldErrors: { subtype: "Invalid subtype" } }
+  }
+  const name = String(formData.get("name") ?? "").trim()
+  const address = String(formData.get("address") ?? "").trim()
+  const area = String(formData.get("area") ?? "").trim()
+  const cityLine = String(formData.get("cityLine") ?? "").trim()
+  const unitCode = String(formData.get("unitCode") ?? "").trim()
+  const description = String(formData.get("description") ?? "").trim()
+  const sqft = Number(formData.get("sqft"))
+  if (!name || !address || !area || !cityLine || !unitCode || !description || !Number.isFinite(sqft) || sqft <= 0) {
+    return { error: "Fill property name, address, area, city line, unit code, area SF, and description." }
+  }
+  const profile = leaseProfile(segment)
+  let rateBasis: "per_sqft_month" | "flat_month" = profile.rateBasisDefault
+  let ratePsf = 0
+  let rentAmountMinor: number | null = null
+  let attributes: Record<string, unknown> = {}
+  let clearHeight = ""
+  let docks = 0
+  let driveIns = 0
+  let power = ""
+  let bhk: number | null = null
+  let carpetSqft: number | null = null
+  let securityDepositMonths: number | null = profile.defaultDepositMonths
+  let maintenanceMinor: number | null = null
+
+  if (segment === "warehouse") {
+    ratePsf = Number(formData.get("ratePsf"))
+    if (!Number.isFinite(ratePsf) || ratePsf <= 0) {
+      return { error: "Enter a positive ₹/SF rate.", fieldErrors: { ratePsf: "Required" } }
+    }
+    clearHeight = String(formData.get("clearHeight") ?? "").trim() || "—"
+    docks = Number(formData.get("docks") ?? 0) || 0
+    driveIns = Number(formData.get("driveIns") ?? 0) || 0
+    power = String(formData.get("power") ?? "").trim() || "—"
+    attributes = warehouseAttributesFromColumns({
+      clearHeight,
+      docks,
+      driveIns,
+      power,
+    })
+  } else {
+    const monthly = Number(formData.get("monthlyRent"))
+    if (!Number.isFinite(monthly) || monthly <= 0) {
+      return { error: "Enter monthly rent in ₹.", fieldErrors: { monthlyRent: "Required" } }
+    }
+    rentAmountMinor = Math.round(monthly * 100)
+    rateBasis = "flat_month"
+    carpetSqft = Number(formData.get("carpetSqft"))
+    if (!Number.isFinite(carpetSqft) || carpetSqft <= 0) carpetSqft = sqft
+    if (segment === "residential") {
+      bhk = Number(formData.get("bhk")) || 1
+      const furnishing = String(formData.get("furnishing") ?? "semi")
+      securityDepositMonths = Number(formData.get("depositMonths")) || profile.defaultDepositMonths
+      const maintenance = Number(formData.get("maintenance") ?? 0)
+      maintenanceMinor = Number.isFinite(maintenance) && maintenance > 0 ? Math.round(maintenance * 100) : null
+      attributes = {
+        bhk,
+        furnishing: furnishing === "fully" || furnishing === "unfurnished" ? furnishing : "semi",
+        societyAmenities: [],
+      }
+    } else {
+      attributes = {
+        carpetSqft,
+        superBuiltUpSqft: sqft,
+        frontageFt: Number(formData.get("frontageFt")) || undefined,
+        floor: String(formData.get("floor") ?? "").trim() || undefined,
+        mallName: String(formData.get("mallName") ?? "").trim() || undefined,
+        fitOut: (() => {
+          const raw = String(formData.get("fitOut") ?? "")
+          if (raw === "fitted" || raw === "warm_shell" || raw === "bare_shell") return raw
+          return "bare_shell" as const
+        })(),
+      }
+    }
+  }
+
+  const result = createPropertyForLandlord({
+    tenantId: user.tenantId,
+    name,
+    address,
+    area,
+    cityLine,
+    segment,
+    subtype,
+    totalSqft: sqft,
+    unit: {
+      code: unitCode,
+      description,
+      sqft,
+      ratePsf,
+      rateBasis,
+      rentAmountMinor,
+      clearHeight,
+      docks,
+      driveIns,
+      power,
+      attributes: attributes as import("@/lib/listing-schemas").UnitAttributes,
+      bhk,
+      carpetSqft,
+      securityDepositMonths,
+      maintenanceMinor,
+      gstApplicable: profile.gstOnRent,
+    },
+  })
+  if (!result.ok) return { error: result.error }
+  refresh(["/landlord/properties", `/landlord/properties/${result.propertyId}`, "/listings", "/properties"])
+  redirect(`/landlord/properties/${result.propertyId}`)
+}
+
+
+const visitSchema = z.object({
+  unitId: z.string().min(1),
+  name: z.string().trim().min(2, "Enter your name"),
+  email: z.string().trim().regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Enter an email"),
+  phone: z.string().trim().min(8, "Enter a phone number"),
+  note: z.string().trim().max(1000).optional(),
+  visitType: z.enum(["in_person", "virtual"]),
+  preferredAt: z.string().trim().optional(),
+})
+
+export type VisitFormState = {
+  ok?: boolean
+  error?: string | null
+  fieldErrors?: Record<string, string>
+}
+
+export async function requestVisit(
+  _prev: VisitFormState,
+  formData: FormData,
+): Promise<VisitFormState> {
+  const phoneRaw = String(formData.get("phone") ?? "").trim()
+  const digits = phoneRaw.replace(/\D/g, "")
+  const phone =
+    (phoneRaw.startsWith("+") ? phoneRaw.replace(/\s/g, "") : null) ||
+    toE164("+91", digits) ||
+    phoneRaw
+  const parsed = visitSchema.safeParse({
+    unitId: formData.get("unitId"),
+    name: formData.get("name"),
+    email: formData.get("email"),
+    phone,
+    note: formData.get("note") ?? "",
+    visitType: formData.get("visitType") || "in_person",
+    preferredAt: formData.get("preferredAt") || "",
+  })
+  if (!parsed.success) {
+    return { error: "Check the highlighted fields.", fieldErrors: issues(parsed.error) }
+  }
+  const result = createVisitRequest({
+    unitId: parsed.data.unitId,
+    name: parsed.data.name,
+    email: parsed.data.email,
+    phone: parsed.data.phone,
+    note: parsed.data.note ?? "",
+    visitType: parsed.data.visitType,
+    preferredAt: parsed.data.preferredAt || null,
+  })
+  if (!result.ok) return { error: result.error, fieldErrors: {} }
+  notifyMany(
+    landlordIds(result.tenantId).map((id) => ({
+      userId: id,
+      title: "Visit requested",
+      body: `${parsed.data.name} asked to visit Unit ${result.unitCode} at ${result.propertyName} (${parsed.data.visitType.replace("_", "-")}).`,
+      href: `/properties/${result.propertySlug}/units/${result.unitCode}`,
+    })),
+  )
+  refresh([
+    `/properties/${result.propertySlug}`,
+    `/properties/${result.propertySlug}/units/${result.unitCode}`,
+    "/inbox",
+    "/landlord",
+  ])
+  return { ok: true }
 }
 
 export async function reviewApplication(formData: FormData) {
@@ -288,18 +681,97 @@ export async function submitHotspots(formData: FormData) {
   refresh([`/properties/${result.slug}`, `/landlord/properties/${propertyId}`])
 }
 
+const planDraftPayloadSchema = z.object({
+  propertyId: z.string().regex(/^[a-zA-Z0-9_-]+$/),
+  floorId: z.string().regex(/^[a-zA-Z0-9_-]+$/),
+  draftJson: z.string().min(2).max(200_000),
+})
+
+/** Landlord-only: save validated unit-plan creator JSON on a floor. */
+export async function savePlanDraftAction(input: {
+  propertyId: string
+  floorId: string
+  draftJson: string
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) {
+    return { ok: false, error: "Landlord session required." }
+  }
+  const parsed = planDraftPayloadSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, error: "Invalid plan draft payload." }
+
+  // Validate structure with the shared schema (no HTML / eval).
+  const { planDraftSchema } = await import("@/lib/plan-draft")
+  let draftUnknown: unknown
+  try {
+    draftUnknown = JSON.parse(parsed.data.draftJson)
+  } catch {
+    return { ok: false, error: "Plan draft must be valid JSON." }
+  }
+  const draft = planDraftSchema.safeParse(draftUnknown)
+  if (!draft.success) return { ok: false, error: "Plan draft failed validation." }
+
+  const result = saveFloorPlanDraft(
+    user.tenantId,
+    parsed.data.propertyId,
+    parsed.data.floorId,
+    JSON.stringify(draft.data),
+  )
+  if (!result.ok) return { ok: false, error: result.error }
+  refresh([
+    `/properties/${result.slug}`,
+    `/landlord/properties/${parsed.data.propertyId}`,
+  ])
+  return { ok: true }
+}
+
+const addFloorPayloadSchema = z.object({
+  propertyId: z.string().regex(/^[a-zA-Z0-9_-]+$/),
+  label: z.string().trim().min(1).max(40),
+})
+
+/** Landlord-only: append a floor level for stack + plan creator. */
+export async function addFloorLevelAction(input: {
+  propertyId: string
+  label: string
+}): Promise<
+  | { ok: true; floorId: string; label: string; levelIndex: number }
+  | { ok: false; error: string }
+> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) {
+    return { ok: false, error: "Landlord session required." }
+  }
+  const parsed = addFloorPayloadSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, error: "Invalid floor label." }
+  const result = addFloorLevel(user.tenantId, parsed.data.propertyId, parsed.data.label)
+  if (!result.ok) return { ok: false, error: result.error }
+  refresh([
+    `/properties/${result.slug}`,
+    `/landlord/properties/${parsed.data.propertyId}`,
+  ])
+  return {
+    ok: true,
+    floorId: result.floorId,
+    label: result.label,
+    levelIndex: result.levelIndex,
+  }
+}
+
 const TYPES = new Map([
   ["image/png", "png"],
   ["image/jpeg", "jpg"],
   ["image/webp", "webp"],
   ["image/gif", "gif"],
-  ["image/svg+xml", "svg"],
 ])
 
 export async function submitFloorPlan(formData: FormData) {
   const user = await getSessionUser()
   if (!user || user.role !== "landlord_admin" || !user.tenantId) return
   const propertyId = String(formData.get("propertyId") ?? "")
+  if (!/^[a-zA-Z0-9_-]+$/.test(propertyId)) return
+  const owned = propertyForLandlord(user.tenantId, propertyId)
+  if (!owned) return
   const file = formData.get("floorPlan")
   if (!(file instanceof File) || file.size === 0) return
   if (file.size > 5_000_000) return
@@ -308,7 +780,10 @@ export async function submitFloorPlan(formData: FormData) {
   const name = `${propertyId}-${Date.now()}.${ext}`
   const dir = path.join(process.cwd(), "data", "uploads")
   await fs.mkdir(dir, { recursive: true })
-  await fs.writeFile(path.join(dir, name), Buffer.from(await file.arrayBuffer()))
+  const target = path.join(dir, name)
+  const resolved = path.resolve(target)
+  if (!resolved.startsWith(path.resolve(dir) + path.sep)) return
+  await fs.writeFile(resolved, Buffer.from(await file.arrayBuffer()))
   const result = saveFloorPlan(user.tenantId, propertyId, `/files/${name}`)
   if (!result.ok) return
   refresh([`/properties/${result.slug}`, `/landlord/properties/${propertyId}`])
@@ -546,8 +1021,12 @@ export async function submitPayment(formData: FormData) {
 const verificationSchema = z.object({
   country: z.string().trim().min(2),
   region: z.string().trim().min(2, "Enter a province, state, or region"),
-  docType: z.enum(["aadhaar", "driving_licence"]),
-  fileName: z.string().trim().max(180),
+  docType: z.enum(["kyc_provider", "driving_licence"]),
+  fileName: z
+    .string()
+    .trim()
+    .max(64)
+    .regex(/^[A-Za-z0-9._:-]+$/, "Use a provider reference id (letters, numbers, . _ : -)"),
   faceName: z.string().trim().max(180),
 })
 
@@ -578,11 +1057,15 @@ export async function completeVerification(_prev: VerifyState, payload: {
     }
   }
   const isIndia = parsed.data.country === "India" || parsed.data.country === "IN"
-  if (isIndia && parsed.data.docType !== "aadhaar") {
-    return { error: "India uses Aadhaar in this demo.", result: null }
+  if (isIndia && parsed.data.docType !== "kyc_provider") {
+    return { error: "India uses a licensed KYC provider reference in this demo (no Aadhaar images).", result: null }
   }
   if (!isIndia && parsed.data.docType !== "driving_licence") {
-    return { error: "Non-India markets use a driving licence in this demo.", result: null }
+    return { error: "Non-India markets use a driving licence reference in this demo.", result: null }
+  }
+  // Refuse obvious Aadhaar number patterns in free-text refs.
+  if (/\b\d{4}\s?\d{4}\s?\d{4}\b/.test(parsed.data.fileName)) {
+    return { error: "Do not enter an Aadhaar number. Use a provider reference only.", result: null }
   }
   const simulated = simulateMatch(parsed.data)
   saveVerification({
@@ -656,7 +1139,7 @@ export async function submitLandlordInvite(
   if (!result.ok) return { error: result.error, notice: null }
   notify({
     userId: result.userId,
-    title: "Welcome to DeSkulpt",
+    title: "Welcome to Easy Rental",
     body: `${result.companyName} is on the platform. Switch to this identity in the demo header to open the landlord desk.`,
     href: "/landlord",
   })
@@ -685,7 +1168,7 @@ export async function submitProviderVerify(formData: FormData) {
     userId: providerId,
     title: verified ? "Provider verified" : "Verification removed",
     body: verified
-      ? "DeSkulpt marked you verified. A landlord can now approve you for their area."
+      ? "Easy Rental marked you verified. A landlord can now approve you for their area."
       : "Your verified flag was cleared by platform staff.",
     href: "/provider",
   })
@@ -807,4 +1290,200 @@ export async function submitAddLanguage(
 /** Used by the verify page to pass countries without importing db in the client. */
 export async function listPublicFormCountriesAction() {
   return publicFormCountries()
+}
+
+/* ── Ask Easy · Slice L.0 (PRD §21) ───────────────────────────── */
+
+export async function approveAgenticProposal(
+  proposalId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) {
+    return { ok: false, error: "Switch to a landlord admin to approve proposals." }
+  }
+  if ((user.tenantPackage ?? getTenantPackage(user.tenantId)) !== "pro") {
+    return { ok: false, error: "Ask Easy is a PRO feature." }
+  }
+  const result = decideProposal({
+    tenantId: user.tenantId,
+    proposalId,
+    actorId: user.id,
+    decision: "approved",
+  })
+  if (!result.ok) return result
+  refresh(["/landlord/ask", "/landlord/jobs", "/landlord", "/provider", "/inbox"])
+  return { ok: true }
+}
+
+export async function rejectAgenticProposal(
+  proposalId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) {
+    return { ok: false, error: "Switch to a landlord admin to reject proposals." }
+  }
+  if ((user.tenantPackage ?? getTenantPackage(user.tenantId)) !== "pro") {
+    return { ok: false, error: "Ask Easy is a PRO feature." }
+  }
+  const result = decideProposal({
+    tenantId: user.tenantId,
+    proposalId,
+    actorId: user.id,
+    decision: "rejected",
+  })
+  if (!result.ok) return result
+  refresh(["/landlord/ask"])
+  return { ok: true }
+}
+
+export async function runStubListingAutofill(
+  prompt: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) {
+    return { ok: false, error: "Switch to a landlord admin to run autofill." }
+  }
+  if ((user.tenantPackage ?? getTenantPackage(user.tenantId)) !== "pro") {
+    return { ok: false, error: "Ask Easy is a PRO feature." }
+  }
+  const trimmed = prompt.trim()
+  if (trimmed.length < 8) {
+    return { ok: false, error: "Describe the bay in a short prompt (at least 8 characters)." }
+  }
+  stubAutofillListing({
+    tenantId: user.tenantId,
+    prompt: trimmed,
+    actorId: user.id,
+  })
+  refresh(["/landlord/ask"])
+  return { ok: true }
+}
+
+export type ShopActionState = {
+  error?: string | null
+  message?: string | null
+  orderId?: string | null
+}
+
+export async function addShopCartItem(
+  _prev: ShopActionState,
+  formData: FormData,
+): Promise<ShopActionState> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "applicant") {
+    return { error: "Shop is for current occupants." }
+  }
+  const tenantId = String(formData.get("tenantId") ?? "")
+  const skuId = String(formData.get("skuId") ?? "")
+  const qty = Number(formData.get("qty") ?? 1)
+  const slotStartRaw = String(formData.get("slotStart") ?? "").trim()
+  const result = addToCart({
+    userId: user.id,
+    tenantId,
+    skuId,
+    qty,
+    slotStart: slotStartRaw || null,
+  })
+  if (!result.ok) return { error: result.error }
+  refresh(["/shop"])
+  return { error: null, message: "Added to cart." }
+}
+
+export async function checkoutShopCart(
+  _prev: ShopActionState,
+  formData: FormData,
+): Promise<ShopActionState> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "applicant") {
+    return { error: "Shop is for current occupants." }
+  }
+  const tenantId = String(formData.get("tenantId") ?? "")
+  const note = String(formData.get("note") ?? "")
+  const result = checkoutCart({ userId: user.id, tenantId, note })
+  if (!result.ok) return { error: result.error }
+  notifyMany(
+    landlordIds(tenantId).map((id) => ({
+      userId: id,
+      title: "Shop order paid",
+      body: `${user.name} placed a shop order (${result.paymentProvider}).`,
+      href: "/landlord/shop",
+    })),
+  )
+  notify({
+    userId: user.id,
+    title: result.labelledDemo ? "Shop order paid (demo)" : "Shop order paid",
+    body: `Order ${result.orderId.slice(0, 8)} · ₹${(result.amountCents / 100).toFixed(0)} via ${result.paymentProvider}.`,
+    href: "/shop",
+  })
+  refresh(["/shop", "/landlord/shop", "/inbox"])
+  return {
+    error: null,
+    message: result.labelledDemo
+      ? "Paid with demo adapter — no live charge."
+      : "Paid via Razorpay stub — no live network charge in this build.",
+    orderId: result.orderId,
+  }
+}
+
+export async function saveRazorpaySettingsAction(
+  _prev: ShopActionState,
+  formData: FormData,
+): Promise<ShopActionState> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) {
+    return { error: "Landlord admin only." }
+  }
+  const keyId = String(formData.get("keyId") ?? "").trim()
+  const keySecret = String(formData.get("keySecret") ?? "")
+  const demoMode = formData.get("demoMode") === "on"
+  const enabled = formData.get("enabled") === "on"
+  const razorpayMode = formData.get("razorpayMode") === "live" ? "live" : "test"
+  const publicSettings = saveShopRazorpaySettings(user.tenantId, {
+    keyId: keyId || null,
+    keySecret: keySecret.trim() ? keySecret : null,
+    demoMode,
+    razorpayMode,
+    enabled,
+  })
+  // Guard: never return secret fields from the action payload beyond public shape
+  void publicSettings
+  refresh(["/landlord/settings", "/landlord/shop", "/shop"])
+  return { error: null, message: "Payment settings saved. Secret is write-only and was not echoed." }
+}
+
+export async function toggleShopSkuAction(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) return
+  const skuId = String(formData.get("skuId") ?? "")
+  const enabled = formData.get("enabled") === "1"
+  setShopSkuEnabled(user.tenantId, skuId, enabled)
+  refresh(["/landlord/shop", "/shop"])
+}
+
+export async function getShopSettingsPublicAction(tenantId: string) {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || user.tenantId !== tenantId) {
+    return null
+  }
+  return getShopSettingsPublic(tenantId)
+}
+
+export async function downloadMyData() {
+  const user = await getSessionUser()
+  if (!user) return { ok: false as const, error: "Sign in first." }
+  const payload = exportUserData(user.id)
+  if (!payload) return { ok: false as const, error: "No data." }
+  recordConsentEvent({
+    userId: user.id,
+    email: user.email,
+    purpose: "data_export",
+    version: "dpdp-2023-v1",
+  })
+  return { ok: true as const, payload }
+}
+
+export async function requestAccountErasure() {
+  const user = await getSessionUser()
+  if (!user) return { ok: false as const, error: "Sign in first." }
+  return redactUserPersonalData(user.id)
 }

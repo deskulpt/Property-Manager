@@ -1,10 +1,15 @@
+import {
+  convertFromInrMinorMajor,
+  gstCents as rustGstCents,
+} from "@/lib/rust/money"
+
 export type MarketId = "IN"
 
 export type DisplayCurrency = "INR" | "USD" | "CAD" | "GBP"
 
 export type PaymentMethodKind = "upi" | "enach" | "card_demo"
 
-export type IdDocumentKind = "aadhaar" | "driving_licence"
+export type IdDocumentKind = "kyc_provider" | "driving_licence"
 
 export type MarketProfile = {
   id: MarketId
@@ -58,7 +63,7 @@ export const MARKETS: Record<MarketId, MarketProfile> = {
       },
     ],
     idDocuments: [
-      { country: "India", docType: "aadhaar", label: "Aadhaar" },
+      { country: "India", docType: "kyc_provider", label: "Licensed KYC provider (no Aadhaar image)" },
     ],
     defaultCountry: "India",
     statesLabel: "State / UT",
@@ -84,7 +89,7 @@ export function documentForCountry(country: string): {
 }
 
 export function gstCents(taxableMinor: number, market = activeMarket()) {
-  return Math.round((taxableMinor * market.gstRateBps) / 10000)
+  return rustGstCents(taxableMinor, market.gstRateBps)
 }
 
 /**
@@ -104,8 +109,7 @@ export function convertFromInrMinor(
   inrMinor: number,
   display: DisplayCurrency,
 ): { major: number; currency: DisplayCurrency } {
-  const rate = DEMO_FX_PER_INR[display] ?? 1
-  return { major: (inrMinor / 100) * rate, currency: display }
+  return { major: convertFromInrMinorMajor(inrMinor, display), currency: display }
 }
 
 export function formatDisplayMoney(inrMinor: number, display: DisplayCurrency = "INR") {

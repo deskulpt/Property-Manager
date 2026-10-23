@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import { MARKET_CHECKLIST_KEYS } from "@/lib/market-checklist"
-import { useTempDatabase } from "./helpers/temp-db"
+import { installTempDatabase } from "./helpers/temp-db"
 
-useTempDatabase()
+installTempDatabase()
 
 async function db() {
   return import("@/lib/db")
@@ -15,17 +15,23 @@ describe("tenant isolation and leasing commands", () => {
     getDb()
   })
 
-  it("BBM has open applications; Harbourline inbox is empty", async () => {
+  it("demo landlord has open applications", async () => {
     const { applicationsForTenant } = await db()
-    const bbm = applicationsForTenant("t_bbm")
-    const harbour = applicationsForTenant("t_harbour")
-    expect(bbm.some((app) => app.status === "submitted")).toBe(true)
-    expect(harbour).toHaveLength(0)
+    const demo = applicationsForTenant("t_bbm")
+    expect(demo.some((app) => app.status === "submitted")).toBe(true)
   })
 
-  it("Harbourline cannot load a BBM property id", async () => {
-    const { propertyForLandlord } = await db()
-    expect(propertyForLandlord("t_harbour", "p_waterman")).toBeNull()
+  it("a newly signed-up landlord cannot load the demo property id", async () => {
+    const { createLandlordAccount, propertyForLandlord } = await db()
+    const created = createLandlordAccount({
+      name: "Other Owner",
+      email: `other-${crypto.randomUUID()}@example.com`,
+      passwordHash: "$2a$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUV",
+      company: "Other Realty Pvt Ltd",
+    })
+    expect(created.ok).toBe(true)
+    if (!created.ok) return
+    expect(propertyForLandlord(created.tenantId, "p_waterman")).toBeNull()
     expect(propertyForLandlord("t_bbm", "p_waterman")?.slug).toBe("waterman")
   })
 
@@ -80,33 +86,23 @@ describe("tenant isolation and leasing commands", () => {
     expect(rows.every((row) => row.email?.startsWith("••••@"))).toBe(true)
   })
 
-  it("Service Manager has no CMS applicant rows while Devon ledger exists", async () => {
-    const { getUser, ledgerForUser, methodsForUser, cmsApplicants } = await db()
-    const priya = getUser("u_priya")!
-    expect(cmsApplicants(priya)).toHaveLength(0)
+  it("Service Manager role is not seeded; Devon ledger still exists for demo occupant", async () => {
+    const { ledgerForUser, methodsForUser, getUser } = await db()
+    expect(getUser("u_priya")).toBeNull()
     expect(ledgerForUser("u_devon").length).toBeGreaterThan(0)
     expect(methodsForUser("u_devon").length).toBeGreaterThan(0)
   })
 
-  it("BBM provider Luis cannot take a Harbourline job until area-approved", async () => {
-    const { assignJob, setProviderApproval, createJob } = await db()
-    const job = createJob({
-      tenantId: "t_harbour",
-      propertyId: "p_commissioners",
-      unitId: "u_commissioners_h1",
-      title: "Isolation probe",
-      details: "Should reject Luis until approved at Harbourline.",
-      trade: "electrician",
-      providerId: null,
-    })
-    expect(job.ok).toBe(true)
-    if (!job.ok) return
-
-    const denied = assignJob("t_harbour", job.id, "u_luis")
-    expect(denied.ok).toBe(false)
-
-    // Luis is Bhiwandi; Harbourline buildings are Sriperumbudur — area seam blocks approval.
-    const approval = setProviderApproval("t_harbour", "u_luis", "approved")
+  it("provider outside the demo service area cannot be approved", async () => {
+    const { setProviderApproval, getDb } = await db()
+    // Insert a provider whose area does not match demo property areas.
+    getDb()
+      .prepare(
+        `INSERT INTO users (id, name, email, role, tenant_id, company, trade, service_area, provider_verified, phone, password_hash, is_demo)
+         VALUES (?, ?, ?, 'service_provider', NULL, NULL, 'electrician', 'Whitefield', 1, NULL, NULL, 0)`,
+      )
+      .run("u_outsider", "Out Sider", "out@example.com")
+    const approval = setProviderApproval("t_bbm", "u_outsider", "approved")
     expect(approval.ok).toBe(false)
   })
 
@@ -124,5 +120,21 @@ describe("tenant isolation and leasing commands", () => {
       setChecklistItem(draft.id, key, { done: true, notes: "e2e" })
     }
     expect(publicFormCountries().map((c) => c.iso).sort()).toEqual(["IN", "NZ"])
+  })
+
+  it("demo switcher list only includes is_demo users", async () => {
+    const { listSessionUsers, createLandlordAccount } = await db()
+    const before = listSessionUsers()
+    expect(before.every((u) => u.isDemo)).toBe(true)
+    const created = createLandlordAccount({
+      name: "Real Landlord",
+      email: `real-${crypto.randomUUID()}@example.com`,
+      passwordHash: "$2a$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUV",
+      company: "Real Holdings",
+    })
+    expect(created.ok).toBe(true)
+    const after = listSessionUsers()
+    expect(after.every((u) => u.isDemo)).toBe(true)
+    expect(after.some((u) => u.id === (created.ok ? created.userId : ""))).toBe(false)
   })
 })

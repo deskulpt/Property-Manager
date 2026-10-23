@@ -1,6 +1,10 @@
 import { activeMarket, type MarketId } from "@/lib/market"
+import {
+  lateFeeCents as rustLateFeeCents,
+  monthlyRentCents as rustMonthlyRentCents,
+} from "@/lib/rust/money"
 
-export type MarketRole = "applicant" | "landlord_admin" | "service_provider"
+export type MarketRole = "applicant" | "landlord_admin" | "service_provider" | "managing_agent"
 export type StaffRole =
   | "super_admin"
   | "account_manager"
@@ -24,7 +28,12 @@ export const STAFF_ROLES: StaffRole[] = [
   "merchandiser",
 ]
 
-export const MARKET_ROLES: MarketRole[] = ["applicant", "landlord_admin", "service_provider"]
+export const MARKET_ROLES: MarketRole[] = [
+  "applicant",
+  "landlord_admin",
+  "service_provider",
+  "managing_agent",
+]
 
 export function isStaffRole(role: string): role is StaffRole {
   return (STAFF_ROLES as string[]).includes(role)
@@ -69,12 +78,30 @@ export function rateCaption() {
 /**
  * Monthly rent in minor currency units from the stored asking rate.
  * India stores ₹/SF/month; a later market with annual rates would divide by 12.
+ * Integer math via `easyrent-core` WASM when available (`lib/rust/money`).
  */
 export function monthlyRentCents(ratePsf: number, area: number) {
   const market = activeMarket()
-  const monthlyMajor =
-    market.ratePeriod === "month" ? ratePsf * area : (ratePsf * area) / 12
-  return Math.round(monthlyMajor * market.currencyMinorPerMajor)
+  return rustMonthlyRentCents(ratePsf, area, {
+    currencyMinorPerMajor: market.currencyMinorPerMajor,
+    ratePeriod: market.ratePeriod,
+  })
+}
+
+/** Monthly rent for a unit — supports warehouse ₹/SF and flat monthly asking rents. */
+export function unitMonthlyRentCents(input: {
+  rateBasis: "per_sqft_month" | "flat_month"
+  ratePsf: number
+  sqft: number
+  rentAmountMinor: number | null
+}) {
+  if (input.rateBasis === "flat_month") {
+    if (input.rentAmountMinor != null) return input.rentAmountMinor
+    // Flat asking stored in rate_psf as major ₹/month when rent_amount_minor is unset.
+    const market = activeMarket()
+    return Math.round(input.ratePsf * market.currencyMinorPerMajor)
+  }
+  return monthlyRentCents(input.ratePsf, input.sqft)
 }
 
 export function addDays(isoDate: string, days: number) {
@@ -108,6 +135,7 @@ export function formatDay(iso: string | null) {
 
 export function roleLabel(role: Role) {
   if (role === "landlord_admin") return "Landlord admin"
+  if (role === "managing_agent") return "Managing agent"
   if (role === "service_provider") return "Service provider"
   if (role === "super_admin") return "Super Admin"
   if (role === "account_manager") return "Account Manager"
@@ -125,10 +153,13 @@ export function identityLabel(user: {
   serviceArea?: string | null
 }) {
   if (isStaffRole(user.role)) {
-    return `${user.name} · DeSkulpt · ${roleLabel(user.role)}`
+    return `${user.name} · Easy Rental · ${roleLabel(user.role)}`
   }
   if (user.role === "landlord_admin") {
     return `${user.name} · ${user.tenantName ?? "Landlord"} admin`
+  }
+  if (user.role === "managing_agent") {
+    return `${user.name} · Managing agent`
   }
   if (user.role === "service_provider") {
     return `${user.name} · ${user.trade ?? "Trade"} · ${user.serviceArea ?? ""}`
@@ -151,6 +182,11 @@ export function statusLabel(status: string) {
   if (status === "paid") return "Paid"
   if (status === "rejected") return "Rejected"
   if (status === "verified") return "Verified"
+  if (status === "pending_payment") return "Pending payment"
+  if (status === "fulfilling") return "Fulfilling"
+  if (status === "completed") return "Completed"
+  if (status === "cancelled") return "Cancelled"
+  if (status === "refunded") return "Refunded"
   return status
 }
 
@@ -158,8 +194,7 @@ export function lateFeeCents(
   rentCents: number,
   rule: { flatCents: number; percentBps: number },
 ) {
-  const percent = Math.round((rentCents * rule.percentBps) / 10000)
-  return Math.max(rule.flatCents, percent)
+  return rustLateFeeCents(rentCents, rule)
 }
 
 export function parseClearHeightFeet(value: string) {
