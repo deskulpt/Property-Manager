@@ -35,6 +35,7 @@ import {
 import { parsePlanId, type PlanId } from "@/lib/plans"
 import { normalizeRoleLevel, type RoleLevel } from "@/lib/role-level"
 import { seedDemoDatabase } from "@/lib/seed-demo"
+import { seedRoleCmsExtras } from "@/lib/seed-role-cms"
 import { decryptSecret, encryptSecret, secretLast4 } from "@/lib/shop-crypto"
 import { resolveShopPaymentProvider } from "@/lib/shop-payments"
 import {
@@ -52,7 +53,7 @@ import {
   type RewardStatus,
 } from "@/lib/referrals"
 
-const SEED_VERSION = "19"
+const SEED_VERSION = "20"
 
 function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
@@ -787,6 +788,54 @@ function createSchema(db: Sql) {
     );
     CREATE INDEX idx_partner_apps_status ON partner_applications(status, track);
     CREATE INDEX idx_partner_areas_app ON partner_service_areas(application_id);
+
+    CREATE TABLE tickets (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      property_id TEXT NOT NULL,
+      unit_id TEXT,
+      user_id TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      body TEXT NOT NULL,
+      status TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE rental_agreements (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      unit_id TEXT NOT NULL,
+      application_id TEXT,
+      landlord_name TEXT NOT NULL,
+      tenant_party_name TEXT NOT NULL,
+      property_label TEXT NOT NULL,
+      unit_code TEXT NOT NULL,
+      rent_inr_cents INTEGER NOT NULL,
+      deposit_inr_cents INTEGER NOT NULL,
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      lock_in_months INTEGER NOT NULL,
+      notice_days INTEGER NOT NULL,
+      extras TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL,
+      body_text TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      signed_at TEXT,
+      esign_request_id TEXT
+    );
+    CREATE TABLE user_notification_prefs (
+      user_id TEXT PRIMARY KEY,
+      applications INTEGER NOT NULL DEFAULT 1,
+      visits INTEGER NOT NULL DEFAULT 1,
+      tickets INTEGER NOT NULL DEFAULT 1,
+      ledger INTEGER NOT NULL DEFAULT 1,
+      shop INTEGER NOT NULL DEFAULT 1,
+      marketing INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX idx_tickets_user ON tickets(user_id, status);
+    CREATE INDEX idx_tickets_tenant ON tickets(tenant_id, status);
+    CREATE INDEX idx_rental_agreements_tenant ON rental_agreements(tenant_id, status);
     CREATE INDEX idx_units_tenant ON units(tenant_id);
     CREATE INDEX idx_units_property ON units(property_id);
     CREATE INDEX idx_floors_property ON floors(property_id);
@@ -817,7 +866,10 @@ function createSchema(db: Sql) {
 
 function reset(db: Sql) {
   db.exec("PRAGMA foreign_keys = OFF")
-  for (const table of [
+  for (const table of ["user_notification_prefs",
+    "rental_agreements",
+    "tickets",
+
     "agent_audit_events",
     "agent_proposals",
     "lease_agreements",
@@ -873,6 +925,7 @@ function seed(db: Sql) {
   seedDemoDatabase(db)
   seedReferEarn(db)
   seedPartnerNetwork(db)
+  seedRoleCmsExtras(db)
 }
 
 function seedReferEarn(db: Sql) {

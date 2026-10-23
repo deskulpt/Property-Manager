@@ -1,9 +1,9 @@
 import type { Metadata, Viewport } from "next"
 import { IBM_Plex_Mono, Source_Sans_3, Source_Serif_4 } from "next/font/google"
-import Link from "next/link"
 import "./globals.css"
 import { AdminSessionBar } from "@/components/admin/admin-session-bar"
 import { BrandLogo } from "@/components/brand-logo"
+import { SiteFooter } from "@/components/site-footer"
 import { SiteHeader } from "@/components/site-header"
 import { PwaRegister } from "@/components/pwa-register"
 import { Toaster } from "@/components/ui/sonner"
@@ -87,53 +87,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           demoSwitcher={false}
         />
         <div className="flex-1">{children}</div>
-        <footer className="border-t border-white/10 bg-brand-deep px-4 py-12 text-paper/65 md:px-8">
-          <div className="mx-auto flex max-w-[1200px] flex-col gap-8 md:flex-row md:items-end md:justify-between">
-            <div>
-              <BrandLogo variant="white" />
-              <p className="mt-3 max-w-sm font-mono text-xs leading-relaxed">{t("app.tagline")}</p>
-              <p className="mt-2 max-w-sm text-sm text-paper/80">{t("app.legal")}</p>
-            </div>
-            <nav
-              className="flex flex-wrap gap-x-5 gap-y-2 font-mono text-xs uppercase tracking-[0.12em]"
-              aria-label="Legal and help"
-            >
-              <Link href="/listings" className="text-[#9ed0e0] transition-colors hover:text-paper">
-                {t("nav.listings")}
-              </Link>
-              <Link href="/refer" className="text-[#9ed0e0] transition-colors hover:text-paper">
-                {t("nav.refer")}
-              </Link>
-              <Link href="/partners" className="text-[#9ed0e0] transition-colors hover:text-paper">
-                {t("nav.partners")}
-              </Link>
-              <Link href="/ask" className="text-[#9ed0e0] transition-colors hover:text-paper">
-                Ask
-              </Link>
-              <Link href="/help/faq" className="text-[#9ed0e0] transition-colors hover:text-paper">
-                FAQ
-              </Link>
-              <Link href="/help/landlord" className="text-[#9ed0e0] transition-colors hover:text-paper">
-                Landlord help
-              </Link>
-              <Link href="/help/tenant" className="text-[#9ed0e0] transition-colors hover:text-paper">
-                Tenant help
-              </Link>
-              <Link href="/legal/terms" className="text-[#9ed0e0] transition-colors hover:text-paper">
-                {t("nav.legal.terms")}
-              </Link>
-              <Link
-                href="/legal/privacy"
-                className="text-[#9ed0e0] transition-colors hover:text-paper"
-              >
-                {t("nav.legal.privacy")}
-              </Link>
-              <Link href="/inbox" className="text-[#9ed0e0] transition-colors hover:text-paper">
-                {t("nav.inbox")}
-              </Link>
-            </nav>
-          </div>
-        </footer>
+        <SiteFooter />
         {showAdminBar ? (
           <AdminSessionBar
             users={switchUsers}

@@ -59,5 +59,8 @@
     "typescript": "^5",
     "vitest": "^3.2.4"
   },
-  "description": "Easy Rental (easyrental.space) — industrial leasing desk. A product of DeSkulpt Inc."
+  "description": "Easy Rental (easyrental.space) — industrial leasing desk. A product of DeSkulpt Inc.",
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
 }
