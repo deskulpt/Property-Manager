@@ -43,9 +43,15 @@ export type FloorStackMarker = {
 
 const VISIBLE_CHIPS = 5
 const HOLD_MS = 420
-const STACK_GAP = 28
-const STACK_SKEW_X = -18
-const STACK_ROTATE_X = 58
+const SETTLE_MS = 180
+const STACK_GAP = 32
+const STACK_SKEW_X = -20
+const STACK_ROTATE_X = 60
+/** Soft custom ease (GSAP core string) — smooth settle without Club plugins. */
+const EASE_SETTLE = "cubic-bezier(0.22, 1, 0.36, 1)"
+const EASE_LIFT = "back.out(1.35)"
+const EASE_OPEN = "back.out(1.2)"
+const EASE_ENTER = "expo.out"
 
 /** Only same-origin plan paths already used by the app. Never inject as HTML. */
 function safePlanSrc(src: string | null | undefined): string | null {
@@ -93,10 +99,12 @@ export function FloorStackViewer({
   const ground = ordered[0]
   const [focusId, setFocusId] = useState<string | null>(null)
   const [openId, setOpenId] = useState<string | null>(null)
+  const [pressedId, setPressedId] = useState<string | null>(null)
   const [zoom, setZoom] = useState(1)
   const stageRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const reducedMotion = usePrefersReducedMotion()
 
   const openFloor = ordered.find((f) => f.id === openId) ?? null
@@ -125,7 +133,13 @@ export function FloorStackViewer({
   const closeOpen = useCallback(() => {
     setOpenId(null)
     setZoom(1)
-  }, [])
+    // Short settle wait before stack returns to idle focus
+    if (settleTimer.current) clearTimeout(settleTimer.current)
+    settleTimer.current = setTimeout(() => {
+      setFocusId(null)
+      settleTimer.current = null
+    }, reducedMotion ? 0 : SETTLE_MS)
+  }, [reducedMotion])
 
   const selectFloor = useCallback(
     (id: string) => {
@@ -183,7 +197,7 @@ export function FloorStackViewer({
 
   const enteredRef = useRef(false)
 
-  // GSAP core only: enter settle + hover focus layout (kill on unmount via context)
+  // GSAP core only: staggered enter + hover lift (kill on unmount via context)
   useEffect(() => {
     const root = stageRef.current
     if (!root || openId) return
@@ -193,8 +207,6 @@ export function FloorStackViewer({
       if (!plates.length) return
 
       const mid = (ordered.length - 1) / 2
-      const duration = reducedMotion ? 0 : 0.45
-      const ease = "power3.out"
       const entering = !enteredRef.current && !reducedMotion
       enteredRef.current = true
 
@@ -202,17 +214,30 @@ export function FloorStackViewer({
         const idx = Number(plate.dataset.index ?? 0)
         const id = plate.dataset.floorId ?? ""
         const isFocus = focusId === id
+        const isPressed = pressedId === id
         const delta = idx - mid
-        const y = -delta * STACK_GAP + (isFocus ? -36 : 0)
-        const x = isFocus ? 72 : delta * 4
-        const z = isFocus ? 120 : idx * 8
-        const scale = isFocus ? 1.06 : 0.92 - Math.min(Math.abs(delta), 4) * 0.015
-        const opacity = isFocus ? 1 : Math.max(0.35, 0.85 - Math.abs(delta) * 0.08)
+        const y = -delta * STACK_GAP + (isFocus ? -48 : 0) + (isPressed ? 6 : 0)
+        const x = isFocus ? 88 : delta * 5
+        const z = isFocus ? 160 : idx * 10
+        const scale = isFocus
+          ? isPressed
+            ? 1.04
+            : 1.1
+          : 0.9 - Math.min(Math.abs(delta), 4) * 0.018
+        const opacity = isFocus ? 1 : Math.max(0.28, 0.82 - Math.abs(delta) * 0.09)
 
         if (entering) {
           gsap.fromTo(
             plate,
-            { opacity: 0, y: y + 36, x, z, scale, rotateX: STACK_ROTATE_X, rotateZ: STACK_SKEW_X },
+            {
+              opacity: 0,
+              y: y + 56,
+              x: x - 12,
+              z: z - 40,
+              scale: scale * 0.88,
+              rotateX: STACK_ROTATE_X + 8,
+              rotateZ: STACK_SKEW_X,
+            },
             {
               opacity,
               x,
@@ -221,9 +246,9 @@ export function FloorStackViewer({
               scale,
               rotateX: STACK_ROTATE_X,
               rotateZ: STACK_SKEW_X,
-              duration: 0.55,
-              delay: plateIndex * 0.04,
-              ease: "power2.out",
+              duration: 0.75,
+              delay: plateIndex * 0.055,
+              ease: EASE_ENTER,
               overwrite: "auto",
             },
           )
@@ -236,8 +261,8 @@ export function FloorStackViewer({
             opacity,
             rotateX: STACK_ROTATE_X,
             rotateZ: STACK_SKEW_X,
-            duration,
-            ease,
+            duration: reducedMotion ? 0 : isFocus ? 0.55 : 0.48,
+            ease: reducedMotion ? "none" : isFocus ? EASE_LIFT : EASE_SETTLE,
             overwrite: "auto",
           })
         }
@@ -245,9 +270,9 @@ export function FloorStackViewer({
     }, root)
 
     return () => ctx.revert()
-  }, [focusId, openId, ordered.length, reducedMotion])
+  }, [focusId, openId, ordered.length, pressedId, reducedMotion])
 
-  // GSAP: flip-open / close the full plan layer
+  // GSAP: springy flip-open / soft close of the full plan layer
   useEffect(() => {
     const root = stageRef.current
     if (!root) return
@@ -256,22 +281,36 @@ export function FloorStackViewer({
 
     const ctx = gsap.context(() => {
       if (!openId) {
-        gsap.set(openEl, { autoAlpha: 0, pointerEvents: "none" })
+        if (reducedMotion) {
+          gsap.set(openEl, { autoAlpha: 0, pointerEvents: "none", rotateX: 0, y: 0, scale: 1 })
+          return
+        }
+        gsap.to(openEl, {
+          autoAlpha: 0,
+          rotateX: 28,
+          y: 36,
+          scale: 0.96,
+          duration: 0.38,
+          ease: EASE_SETTLE,
+          pointerEvents: "none",
+          overwrite: "auto",
+        })
         return
       }
       if (reducedMotion) {
-        gsap.set(openEl, { autoAlpha: 1, rotateX: 0, y: 0, pointerEvents: "auto" })
+        gsap.set(openEl, { autoAlpha: 1, rotateX: 0, y: 0, scale: 1, pointerEvents: "auto" })
         return
       }
       gsap.fromTo(
         openEl,
-        { autoAlpha: 0, rotateX: 55, y: 48, transformOrigin: "50% 100%" },
+        { autoAlpha: 0, rotateX: 62, y: 64, scale: 0.9, transformOrigin: "50% 100%" },
         {
           autoAlpha: 1,
           rotateX: 0,
           y: 0,
-          duration: 0.5,
-          ease: "power3.out",
+          scale: 1,
+          duration: 0.62,
+          ease: EASE_OPEN,
           pointerEvents: "auto",
           overwrite: "auto",
         },
@@ -281,7 +320,13 @@ export function FloorStackViewer({
     return () => ctx.revert()
   }, [openId, reducedMotion])
 
-  useEffect(() => () => clearHold(), [clearHold])
+  useEffect(
+    () => () => {
+      clearHold()
+      if (settleTimer.current) clearTimeout(settleTimer.current)
+    },
+    [clearHold],
+  )
 
   if (!ordered.length || !ground) {
     return null
@@ -299,15 +344,23 @@ export function FloorStackViewer({
 
   function onPlatePointerDown(id: string, event: ReactPointerEvent) {
     if (event.button !== 0) return
+    setPressedId(id)
     clearHold()
     holdTimer.current = setTimeout(() => {
       openLevel(id)
+      setPressedId(null)
       holdTimer.current = null
     }, HOLD_MS)
   }
 
+  function onPlatePointerUp() {
+    clearHold()
+    setPressedId(null)
+  }
+
   function onPlateClick(id: string) {
     clearHold()
+    setPressedId(null)
     if (openId === id) return
     openLevel(id)
   }
@@ -315,7 +368,13 @@ export function FloorStackViewer({
   function onScenePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     if (event.target === event.currentTarget || (event.target as HTMLElement).classList.contains("fs-scene-inner")) {
       if (openId) closeOpen()
-      else setFocusId(null)
+      else {
+        if (settleTimer.current) clearTimeout(settleTimer.current)
+        settleTimer.current = setTimeout(() => {
+          setFocusId(null)
+          settleTimer.current = null
+        }, reducedMotion ? 0 : SETTLE_MS)
+      }
     }
   }
 
@@ -345,14 +404,18 @@ export function FloorStackViewer({
                 data-floor-id={floor.id}
                 data-index={idx}
                 data-focused={focused ? "true" : "false"}
+                data-pressed={pressedId === floor.id ? "true" : "false"}
                 style={{ zIndex: focused ? 50 : 10 + idx }}
                 aria-label={`${floor.label} floor plate`}
                 aria-pressed={openId === floor.id}
                 onPointerEnter={() => onPlatePointerEnter(floor.id)}
-                onPointerLeave={() => onPlatePointerLeave(floor.id)}
+                onPointerLeave={() => {
+                  onPlatePointerLeave(floor.id)
+                  setPressedId((p) => (p === floor.id ? null : p))
+                }}
                 onPointerDown={(e) => onPlatePointerDown(floor.id, e)}
-                onPointerUp={clearHold}
-                onPointerCancel={clearHold}
+                onPointerUp={onPlatePointerUp}
+                onPointerCancel={onPlatePointerUp}
                 onClick={() => onPlateClick(floor.id)}
                 onFocus={() => onPlatePointerEnter(floor.id)}
               >
@@ -524,7 +587,7 @@ export function FloorStackViewer({
             </button>
           ) : null}
         </div>
-        <div className="flex flex-col gap-2 items-end">
+        <div className="fs-meta">
           <div className="fs-legend" aria-label="Unit status colours">
             <span>
               <i className="fs-swatch" data-status="available" /> Available

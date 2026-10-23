@@ -120,11 +120,16 @@ export function UnitPlanCreator({
     const ctx = gsap.context(() => {
       gsap.fromTo(
         node,
-        { autoAlpha: 0.55 },
-        { autoAlpha: 0, duration: 0.35, ease: "power2.out" },
+        { autoAlpha: 0.45, scale: 1.02 },
+        {
+          autoAlpha: 0,
+          scale: 1,
+          duration: 0.48,
+          ease: "cubic-bezier(0.22, 1, 0.36, 1)",
+        },
       )
     }, node)
-    window.setTimeout(() => ctx.revert(), 400)
+    window.setTimeout(() => ctx.revert(), 520)
   }
 
   function addRectElement(kind: "room" | "bathroom" | "lift" | "unit", x: number, y: number) {
