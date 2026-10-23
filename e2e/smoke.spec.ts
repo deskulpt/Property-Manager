@@ -97,20 +97,11 @@ test.describe("Easy Rental critical paths (India demo)", () => {
     }
   })
 
-  test("demo role switcher smoke", async ({ page }) => {
+  test("public header has no demo switcher (L0/L1 sticky bar only)", async ({ page }) => {
     await page.goto("/", { waitUntil: "domcontentloaded" })
     await expectPageOk(page)
-
-    const switcher = page.getByTestId("demo-identity")
-    test.skip((await switcher.count()) === 0, "demo identity switcher not present")
-
-    await expect(switcher).toBeVisible()
-    // Smoke only: options exist; do not assert brittle option labels.
-    const options = switcher.locator("option")
-    expect(await options.count()).toBeGreaterThan(1)
-
-    await setDemoIdentity(page, "u_nadia")
-    await page.goto("/", { waitUntil: "domcontentloaded" })
-    await expect(page.getByTestId("demo-identity")).toHaveValue("u_nadia")
+    await expect(page.getByTestId("demo-identity")).toHaveCount(0)
+    await expect(page.getByTestId("admin-session-bar")).toHaveCount(0)
   })
 })
+

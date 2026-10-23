@@ -10,13 +10,14 @@ export default async function LoginPage() {
   const session = await getSessionUser()
   if (session?.role === "landlord_admin" && session.hasPassword) redirect("/landlord")
   if (session?.role === "landlord_admin") redirect("/landlord")
+  if (session?.roleLevel != null && session.roleLevel <= 1) redirect("/console")
 
   return (
     <div className="mx-auto max-w-lg px-4 py-12 md:px-8">
       <PageHeader
         kicker="Account"
         title="Log in"
-        lede="Sign in with the email and password from signup. Fixture demo users keep using the Demo identity switcher."
+        lede="Sign in with your email and password. Platform L0/L1 staff land on /console; impersonation lives on the sticky staff bar after login."
       />
       <div className="mt-8 border border-ink/10 bg-card p-5 md:p-6">
         <LoginForm />

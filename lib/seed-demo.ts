@@ -25,7 +25,7 @@ type Sql = {
 
 export function seedDemoDatabase(db: Sql) {
   const tenant = db.prepare(
-    "INSERT INTO tenants (id, name, slug, city, kind, display_currency, package, is_demo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO tenants (id, name, slug, city, kind, display_currency, package, status, is_demo) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?)",
   )
   tenant.run("t_deskulpt", "DeSkulpt India Pvt Ltd", "deskulpt", "Hyderabad", "platform", "INR", "pro", 1)
   tenant.run(
@@ -39,31 +39,70 @@ export function seedDemoDatabase(db: Sql) {
     1,
   )
 
+  // L0 SuperAdmin — password bcrypt for local/e2e only (see .env.example EASYRENTAL_L0_PASSWORD).
+  const SEED_L0_PASSWORD_HASH =
+    "$2b$10$QbU5hqsjma4Al470O19yIuTkWH84LP3909yx/HLEKtTP3GpvVYn2G"
+
   const user = db.prepare(
-    `INSERT INTO users (id, name, email, role, tenant_id, company, trade, service_area, provider_verified, phone, password_hash, is_demo)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)`,
+    `INSERT INTO users (id, name, email, role, role_level, tenant_id, company, trade, service_area, provider_verified, phone, password_hash, is_demo)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
-  user.run("u_avery", "Avery Quinn", "avery@deskulpt.example", "super_admin", "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+918012345678")
-  user.run("u_chris", "Chris Vogel", "chris@deskulpt.example", "property_manager", "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+918022334455")
-  user.run("u_jordan", "Jordan Blake", "jordan@deskulpt.example", "merchandiser", "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+919900112233")
-  user.run("u_maya", "Maya Chen", "maya@apexlogistics.example", "applicant", null, "Apex Logistics India", null, null, 0, "+919876543210")
-  user.run("u_devon", "Devon Hale", "devon@northline.example", "applicant", null, "Northline Distribution India", null, null, 0, "+919811223344")
-  user.run("u_ravi", "Ravi Menon", "ravi@menon.example", "applicant", null, null, null, null, 0, "+919900778899")
-  user.run("u_nadia", "Nadia Okonkwo", "nadia@demo.easyrent.example", "landlord_admin", "t_bbm", null, null, null, 0, "+914040012345")
+  // Real staff login (not a public demo hop target).
+  user.run(
+    "u_platform_admin",
+    "DeSkulpt SuperAdmin",
+    "admindeskulpt@gmail.com",
+    "super_admin",
+    0,
+    "t_deskulpt",
+    "DeSkulpt Inc",
+    null,
+    null,
+    0,
+    "+918012345670",
+    SEED_L0_PASSWORD_HASH,
+    0,
+  )
+  // L1 staff login (DeSkulpt Inc admin).
+  user.run(
+    "u_platform_l1",
+    "DeSkulpt Staff Admin",
+    "staff@deskulpt.example",
+    "account_manager",
+    1,
+    "t_deskulpt",
+    "DeSkulpt Inc",
+    null,
+    null,
+    0,
+    "+918012345671",
+    SEED_L0_PASSWORD_HASH,
+    0,
+  )
+  user.run("u_avery", "Avery Quinn", "avery@deskulpt.example", "super_admin", 0, "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+918012345678", null, 1)
+  user.run("u_chris", "Chris Vogel", "chris@deskulpt.example", "property_manager", 1, "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+918022334455", null, 1)
+  user.run("u_jordan", "Jordan Blake", "jordan@deskulpt.example", "merchandiser", 1, "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+919900112233", null, 1)
+  user.run("u_maya", "Maya Chen", "maya@apexlogistics.example", "applicant", 4, null, "Apex Logistics India", null, null, 0, "+919876543210", null, 1)
+  user.run("u_devon", "Devon Hale", "devon@northline.example", "applicant", 4, null, "Northline Distribution India", null, null, 0, "+919811223344", null, 1)
+  user.run("u_ravi", "Ravi Menon", "ravi@menon.example", "applicant", 4, null, null, null, null, 0, "+919900778899", null, 1)
+  user.run("u_nadia", "Nadia Okonkwo", "nadia@demo.easyrent.example", "landlord_admin", 2, "t_bbm", null, null, null, 0, "+914040012345", null, 1)
   // Managing agent — listing URL import desk; not platform staff Property Manager.
   user.run(
     "u_riya",
     "Riya Kapoor",
     "riya@deskulpt.example",
     "managing_agent",
+    3,
     null,
     "Kapoor Portfolio Desk",
     null,
     null,
     0,
     "+919820099001",
+    null,
+    1,
   )
-  user.run("u_luis", "Luis Ortega", "luis@ortegaelectric.example", "service_provider", null, null, "electrician", "Bhiwandi", 1, "+919820011122")
+  user.run("u_luis", "Luis Ortega", "luis@ortegaelectric.example", "service_provider", 5, null, null, "electrician", "Bhiwandi", 1, "+919820011122", null, 1)
 
   db.prepare("INSERT INTO agent_landlord_access (agent_user_id, tenant_id) VALUES (?, ?)").run(
     "u_riya",

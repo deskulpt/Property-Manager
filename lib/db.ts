@@ -32,11 +32,12 @@ import {
   MARKET_CHECKLIST_LABELS,
   type MarketChecklistKey,
 } from "@/lib/market-checklist"
+import { normalizeRoleLevel, type RoleLevel } from "@/lib/role-level"
 import { seedDemoDatabase } from "@/lib/seed-demo"
 import { decryptSecret, encryptSecret, secretLast4 } from "@/lib/shop-crypto"
 import { resolveShopPaymentProvider } from "@/lib/shop-payments"
 
-const SEED_VERSION = "15"
+const SEED_VERSION = "16"
 
 function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
@@ -77,6 +78,8 @@ export type SessionUser = {
   name: string
   email: string
   role: Role
+  /** L0–L5 privilege ladder (see lib/role-level.ts). */
+  roleLevel: RoleLevel
   tenantId: string | null
   company: string | null
   trade: string | null
@@ -88,7 +91,7 @@ export type SessionUser = {
   phone: string | null
   displayCurrency: DisplayCurrency
   hasPassword: boolean
-  /** Fixture identity; only these appear in the demo switcher. */
+  /** Fixture identity; only these appear in the staff impersonation switcher. */
   isDemo: boolean
   tenantIsDemo: boolean
 }
@@ -185,11 +188,13 @@ function num(row: Record<string, unknown>, key: string) {
 
 function mapUser(row: Record<string, unknown>): SessionUser {
   const pkg = str(row, "tenant_package")
+  const role = String(row.role) as Role
   return {
     id: String(row.id),
     name: String(row.name),
     email: String(row.email),
-    role: String(row.role) as Role,
+    role,
+    roleLevel: normalizeRoleLevel(row.role_level, role),
     tenantId: str(row, "tenant_id"),
     company: str(row, "company"),
     trade: str(row, "trade"),
@@ -249,9 +254,11 @@ const USER_SQL = `
   SELECT u.id, u.name, u.email, u.role, u.tenant_id, u.company, u.trade,
          u.service_area, u.provider_verified, u.phone, u.password_hash,
          COALESCE(u.is_demo, 0) AS is_demo,
+         COALESCE(u.role_level, 5) AS role_level,
          t.name AS tenant_name, t.kind AS tenant_kind,
          COALESCE(t.display_currency, 'INR') AS display_currency,
          COALESCE(t.package, 'starter') AS tenant_package,
+         COALESCE(t.status, 'active') AS tenant_status,
          COALESCE(t.is_demo, 0) AS tenant_is_demo
   FROM users u
   LEFT JOIN tenants t ON t.id = u.tenant_id
@@ -267,6 +274,7 @@ function createSchema(db: Sql) {
       kind TEXT NOT NULL DEFAULT 'landlord',
       display_currency TEXT NOT NULL DEFAULT 'INR',
       package TEXT NOT NULL DEFAULT 'starter',
+      status TEXT NOT NULL DEFAULT 'active',
       is_demo INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE users (
@@ -274,6 +282,7 @@ function createSchema(db: Sql) {
       name TEXT NOT NULL,
       email TEXT NOT NULL UNIQUE,
       role TEXT NOT NULL,
+      role_level INTEGER NOT NULL DEFAULT 5,
       tenant_id TEXT,
       company TEXT,
       trade TEXT,
@@ -1471,13 +1480,13 @@ export function createLandlordAccount(input: {
   const pkg: PackageTier = input.packageTier ?? "starter"
   transaction((tx) => {
     tx.prepare(
-      `INSERT INTO tenants (id, name, slug, city, kind, display_currency, package, is_demo)
-       VALUES (?, ?, ?, ?, 'landlord', 'INR', ?, 0)`,
+      `INSERT INTO tenants (id, name, slug, city, kind, display_currency, package, status, is_demo)
+       VALUES (?, ?, ?, ?, 'landlord', 'INR', ?, 'active', 0)`,
     ).run(tenantId, company, slug, "India", pkg)
     tx.prepare(
       `INSERT INTO users (
-        id, name, email, role, tenant_id, company, trade, service_area, provider_verified, phone, password_hash, is_demo
-      ) VALUES (?, ?, ?, 'landlord_admin', ?, ?, NULL, NULL, 0, NULL, ?, 0)`,
+        id, name, email, role, role_level, tenant_id, company, trade, service_area, provider_verified, phone, password_hash, is_demo
+      ) VALUES (?, ?, ?, 'landlord_admin', 2, ?, ?, NULL, NULL, 0, NULL, ?, 0)`,
     ).run(userId, input.name.trim(), email, tenantId, company, input.passwordHash)
     tx.prepare(
       "INSERT INTO late_fee_rules (tenant_id, grace_days, flat_cents, percent_bps) VALUES (?, 5, 1500000, 150)",
@@ -2827,11 +2836,11 @@ export function inviteLandlord(input: {
   const tenantId = `t_${slug}`.slice(0, 40)
   const userId = crypto.randomUUID()
   db.prepare(
-    "INSERT INTO tenants (id, name, slug, city, kind, is_demo) VALUES (?, ?, ?, ?, 'landlord', 0)",
+    "INSERT INTO tenants (id, name, slug, city, kind, status, is_demo) VALUES (?, ?, ?, ?, 'landlord', 'active', 0)",
   ).run(tenantId, input.companyName, slug, input.city)
   db.prepare(
-    `INSERT INTO users (id, name, email, role, tenant_id, company, trade, service_area, provider_verified, is_demo)
-     VALUES (?, ?, ?, 'landlord_admin', ?, NULL, NULL, NULL, 0, 0)`,
+    `INSERT INTO users (id, name, email, role, role_level, tenant_id, company, trade, service_area, provider_verified, is_demo)
+     VALUES (?, ?, ?, 'landlord_admin', 2, ?, NULL, NULL, NULL, 0, 0)`,
   ).run(userId, input.adminName, input.adminEmail, tenantId)
   db.prepare(
     "INSERT INTO late_fee_rules (tenant_id, grace_days, flat_cents, percent_bps) VALUES (?, 5, 1500000, 150)",
@@ -3598,5 +3607,121 @@ export function forceBookRentalSlot(input: {
       input.slotStart,
       input.userId,
     )
+}
+
+/** Platform console — L0/L1 analytics across all landlord tenants. */
+export function platformAnalytics() {
+  const db = getDb()
+  const count = (sql: string) => Number(asRow(db.prepare(sql).get())?.c ?? 0)
+  const listings = count("SELECT COUNT(*) AS c FROM units")
+  const available = count("SELECT COUNT(*) AS c FROM units WHERE status = 'available'")
+  const applications = count("SELECT COUNT(*) AS c FROM applications")
+  const visits = count("SELECT COUNT(*) AS c FROM visit_requests")
+  const landlords = count("SELECT COUNT(*) AS c FROM tenants WHERE kind = 'landlord'")
+  const providers = count("SELECT COUNT(*) AS c FROM users WHERE role = 'service_provider'")
+  const gmvRow = asRow(
+    db
+      .prepare(
+        `SELECT COALESCE(SUM(amount_cents), 0) AS c FROM ledger_entries WHERE kind = 'payment' AND status = 'paid'`,
+      )
+      .get(),
+  )
+  const shopGmvRow = asRow(
+    db
+      .prepare(
+        `SELECT COALESCE(SUM(amount_cents), 0) AS c FROM shop_orders WHERE status IN ('paid', 'fulfilled')`,
+      )
+      .get(),
+  )
+  return {
+    landlords,
+    listings,
+    available,
+    applications,
+    visits,
+    providers,
+    ledgerGmvCents: Number(gmvRow?.c ?? 0),
+    shopGmvCents: Number(shopGmvRow?.c ?? 0),
+  }
+}
+
+export type PlatformTenantRow = {
+  id: string
+  name: string
+  slug: string
+  city: string
+  package: PackageTier
+  status: "active" | "suspended"
+  propertyCount: number
+  adminId: string | null
+  adminName: string | null
+}
+
+export function platformLandlordDirectory(): PlatformTenantRow[] {
+  const db = getDb()
+  return asRows(
+    db
+      .prepare(
+        `SELECT t.id, t.name, t.slug, t.city,
+                COALESCE(t.package, 'starter') AS package,
+                COALESCE(t.status, 'active') AS status,
+                (SELECT COUNT(*) FROM properties p WHERE p.tenant_id = t.id) AS property_count,
+                (SELECT u.id FROM users u WHERE u.tenant_id = t.id AND u.role = 'landlord_admin' ORDER BY u.name LIMIT 1) AS admin_id,
+                (SELECT u.name FROM users u WHERE u.tenant_id = t.id AND u.role = 'landlord_admin' ORDER BY u.name LIMIT 1) AS admin_name
+         FROM tenants t
+         WHERE t.kind = 'landlord'
+         ORDER BY t.name`,
+      )
+      .all(),
+  ).map((row) => ({
+    id: String(row.id),
+    name: String(row.name),
+    slug: String(row.slug),
+    city: String(row.city),
+    package: (String(row.package) === "pro" ? "pro" : "starter") as PackageTier,
+    status: String(row.status) === "suspended" ? "suspended" : "active",
+    propertyCount: Number(row.property_count),
+    adminId: str(row, "admin_id"),
+    adminName: str(row, "admin_name"),
+  }))
+}
+
+export function setTenantStatus(tenantId: string, status: "active" | "suspended") {
+  const row = asRow(
+    getDb().prepare("SELECT id FROM tenants WHERE id = ? AND kind = 'landlord'").get(tenantId),
+  )
+  if (!row) return { ok: false as const }
+  getDb().prepare("UPDATE tenants SET status = ? WHERE id = ?").run(status, tenantId)
+  return { ok: true as const }
+}
+
+export function setTenantPackage(tenantId: string, pkg: PackageTier) {
+  const row = asRow(
+    getDb().prepare("SELECT id FROM tenants WHERE id = ? AND kind = 'landlord'").get(tenantId),
+  )
+  if (!row) return { ok: false as const }
+  getDb().prepare("UPDATE tenants SET package = ? WHERE id = ?").run(pkg, tenantId)
+  return { ok: true as const }
+}
+
+export function platformShopCatalog() {
+  return asRows(
+    getDb()
+      .prepare(
+        `SELECT s.id, s.tenant_id, s.name, s.kind, s.price_cents, s.enabled, t.name AS tenant_name
+         FROM shop_skus s
+         JOIN tenants t ON t.id = s.tenant_id
+         ORDER BY t.name, s.name`,
+      )
+      .all(),
+  ).map((row) => ({
+    id: String(row.id),
+    tenantId: String(row.tenant_id),
+    tenantName: String(row.tenant_name),
+    name: String(row.name),
+    kind: String(row.kind),
+    priceCents: Number(row.price_cents),
+    enabled: Number(row.enabled) === 1,
+  }))
 }
 

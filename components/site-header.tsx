@@ -17,6 +17,7 @@ import {
   whatsappHref,
 } from "@/lib/brand-contact"
 import { isStaffRole, roleLabel, type Role } from "@/lib/format"
+import { canOpenConsole, roleToLevel } from "@/lib/role-level"
 import { t } from "@/lib/i18n"
 
 type NavLink = { href: string; label: string; badge?: number }
@@ -42,6 +43,9 @@ function deskLinks(role: Role | null | undefined, unread: number): NavLink[] {
   } else if (role === "service_provider") {
     links.push({ href: "/provider", label: t("nav.desk.provider") })
   } else if (role && isStaffRole(role)) {
+    if (canOpenConsole(roleToLevel(role))) {
+      links.push({ href: "/console", label: "Console" })
+    }
     links.push({ href: "/cms", label: t("nav.desk.cms") })
   }
   links.push({

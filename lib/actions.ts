@@ -56,6 +56,8 @@ import {
   saveShopRazorpaySettings,
   setShopSkuEnabled,
   getShopSettingsPublic,
+  setTenantStatus,
+  setTenantPackage,
 } from "@/lib/db"
 import { TRADES } from "@/lib/format"
 import { t } from "@/lib/i18n"
@@ -74,13 +76,19 @@ import { demoOtpCode, requestDemoOtp, verifyDemoOtp } from "@/lib/otp"
 import { demoPayments } from "@/lib/payments"
 import { staffCapabilities } from "@/lib/permissions"
 import { agentCanAccessTenant } from "@/lib/agent-context"
-import { isDemoSwitcherEnabled, sessionCookieOptions } from "@/lib/env"
+import { canImpersonate, canOpenConsole } from "@/lib/role-level"
+import { sessionCookieOptions } from "@/lib/env"
 import {
+  ADMIN_SESSION_COOKIE,
   clearAgentTenantCookie,
+  clearSessionCookies,
+  getAdminSessionUser,
   getSessionUser,
   mintSessionValue,
   SESSION_COOKIE,
+  setAdminSessionCookie,
   setAgentTenantCookie,
+  setSessionCookie,
 } from "@/lib/session"
 import { translateEnglishCatalog, writeLocaleFile } from "@/lib/translate"
 import { simulateMatch } from "@/lib/verification"
@@ -147,8 +155,11 @@ export async function signupLandlord(
     purpose: "signup_privacy_terms",
     version: "dpdp-2023-v1",
   })
-  const jar = await cookies()
-  jar.set(SESSION_COOKIE, mintSessionValue(result.userId), sessionCookieOptions())
+  await setSessionCookie(result.userId)
+  {
+    const jar = await cookies()
+    jar.delete(ADMIN_SESSION_COOKIE)
+  }
   notify({
     userId: result.userId,
     title: "Welcome to Easy Rental",
@@ -186,16 +197,21 @@ export async function loginWithPassword(
   if (!ok) return generic
   const account = getUserByEmail(parsed.data.email)
   if (!account) return generic
-  const jar = await cookies()
-  jar.set(SESSION_COOKIE, mintSessionValue(account.id), sessionCookieOptions())
-  refresh(["/", "/landlord", "/inbox"])
+  await setSessionCookie(account.id)
+  if (canImpersonate(account.roleLevel)) {
+    await setAdminSessionCookie(account.id)
+  } else {
+    const jar = await cookies()
+    jar.delete(ADMIN_SESSION_COOKIE)
+  }
+  refresh(["/", "/landlord", "/inbox", "/cms", "/console"])
   if (account.role === "landlord_admin") redirect("/landlord")
+  if (canOpenConsole(account.roleLevel)) redirect("/console")
   redirect("/")
 }
 
 export async function logoutSession() {
-  const jar = await cookies()
-  jar.delete(SESSION_COOKIE)
+  await clearSessionCookies()
   revalidatePath("/", "layout")
   redirect("/")
 }
@@ -243,14 +259,14 @@ export async function removeLandlordDomain(formData: FormData) {
 }
 
 export async function switchSession(userId: string) {
+  const admin = await getAdminSessionUser()
+  if (!admin || !canImpersonate(admin.roleLevel)) return
   const jar = await cookies()
   if (!userId || userId === "visitor") {
-    jar.delete(SESSION_COOKIE)
+    // Restore L0/L1 staff identity; keep sticky bar unlocked.
+    jar.set(SESSION_COOKIE, mintSessionValue(admin.id), sessionCookieOptions())
     await clearAgentTenantCookie()
     revalidatePath("/", "layout")
-    return
-  }
-  if (!isDemoSwitcherEnabled()) {
     return
   }
   const user = getUser(userId)
@@ -260,6 +276,51 @@ export async function switchSession(userId: string) {
     await clearAgentTenantCookie()
   }
   revalidatePath("/", "layout")
+}
+
+async function requireConsoleAdmin() {
+  const session = await getSessionUser()
+  if (!session || !canOpenConsole(session.roleLevel)) return null
+  return session
+}
+
+export async function consoleSetTenantStatus(formData: FormData) {
+  if (!(await requireConsoleAdmin())) return
+  const tenantId = String(formData.get("tenantId") ?? "")
+  const status = String(formData.get("status") ?? "")
+  if (status !== "active" && status !== "suspended") return
+  setTenantStatus(tenantId, status)
+  refresh(["/console", "/console/tenants", "/console/pricing"])
+}
+
+export async function consoleSetTenantPackage(formData: FormData) {
+  if (!(await requireConsoleAdmin())) return
+  const tenantId = String(formData.get("tenantId") ?? "")
+  const pkg = String(formData.get("package") ?? "")
+  if (pkg !== "starter" && pkg !== "pro") return
+  setTenantPackage(tenantId, pkg)
+  refresh(["/console", "/console/tenants", "/console/pricing"])
+}
+
+export async function consoleImpersonateTenant(formData: FormData) {
+  const session = await getSessionUser()
+  const admin = await getAdminSessionUser()
+  if (!admin && !(session && canImpersonate(session.roleLevel))) return
+  if (session && canImpersonate(session.roleLevel)) {
+    await setAdminSessionCookie(session.id)
+  }
+  const userId = String(formData.get("userId") ?? "")
+  await switchSession(userId)
+  redirect("/landlord")
+}
+
+export async function consoleToggleShopSku(formData: FormData) {
+  if (!(await requireConsoleAdmin())) return
+  const tenantId = String(formData.get("tenantId") ?? "")
+  const skuId = String(formData.get("skuId") ?? "")
+  const enabled = String(formData.get("enabled") ?? "") === "1"
+  setShopSkuEnabled(tenantId, skuId, enabled)
+  refresh(["/console/shops"])
 }
 
 export async function setAgentLandlordForm(formData: FormData) {
