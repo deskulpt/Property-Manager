@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "next dev -H :: -p 43123",
     "dev:3506": "next dev -H 127.0.0.1 -p 3506",
+    "dev:3512": "next dev -H 127.0.0.1 -p 3512",
     "build": "next build",
     "start": "next start -H :: -p ${PORT:-43123}",
     "lint": "eslint",

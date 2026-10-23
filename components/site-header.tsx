@@ -27,6 +27,7 @@ function publicLinks(): NavLink[] {
     { href: "/listings", label: t("nav.listings") },
     { href: "/#map", label: t("nav.map") },
     { href: "/properties", label: t("nav.portfolio") },
+    { href: "/pricing", label: t("nav.pricing") },
   ]
 }
 
@@ -186,11 +187,11 @@ export function SiteHeader({
           <Link href="/" className="group flex shrink-0 items-center gap-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/logo.png"
+              src="/logo.svg"
               alt=""
               width={140}
               height={48}
-              className="h-7 w-auto object-contain md:h-8"
+              className="h-8 w-auto object-contain md:h-9"
             />
             <span className="sr-only">{t("app.name")}</span>
           </Link>
