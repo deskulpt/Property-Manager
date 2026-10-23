@@ -1292,7 +1292,116 @@ export async function listPublicFormCountriesAction() {
   return publicFormCountries()
 }
 
-/* ── Ask Easy · Slice L.0 (PRD §21) ───────────────────────────── */
+/* ── Ask Easy · ADK desk (Slice L) ────────────────────────────── */
+
+export type AskEasyState = {
+  error: string | null
+  message: string | null
+  fieldErrors: Record<string, string[]>
+  citations: import("@/lib/agentic").AttributeCitation[]
+  toolName: string | null
+  reply: string | null
+}
+
+const askEasyInitial: AskEasyState = {
+  error: null,
+  message: null,
+  fieldErrors: {},
+  citations: [],
+  toolName: null,
+  reply: null,
+}
+
+export async function submitAskEasyPrompt(
+  _prev: AskEasyState,
+  formData: FormData,
+): Promise<AskEasyState> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) {
+    return { ...askEasyInitial, error: "Switch to a landlord admin to use Ask Easy." }
+  }
+  const { askEasyGateReason, runAskEasy } = await import("@/lib/agentic")
+  if (askEasyGateReason(user.tenantId) === "upgrade") {
+    return {
+      ...askEasyInitial,
+      error: "Ask Easy requires Pro or higher. Upgrade from Settings.",
+    }
+  }
+  const prompt = String(formData.get("prompt") ?? "")
+  const propertyId = String(formData.get("propertyId") ?? "") || null
+  const unitId = String(formData.get("unitId") ?? "") || null
+  const onboard = String(formData.get("onboard") ?? "") === "1"
+  const result = await runAskEasy({
+    tenantId: user.tenantId,
+    userId: user.id,
+    prompt,
+    propertyId,
+    unitId,
+    onboard,
+  })
+  refresh(["/landlord/ask-easy", "/landlord/ask", "/landlord", "/landlord/jobs", "/provider", "/inbox"])
+  if (result.kind === "error") {
+    return { ...askEasyInitial, error: result.error, toolName: result.toolName ?? null }
+  }
+  const mode = result.modelProvider === "live" ? "Live model" : "Stub"
+  const reply = "reply" in result ? result.reply : ""
+  return {
+    ...askEasyInitial,
+    message: `${reply} · ${mode}`,
+    reply,
+    citations: result.citations ?? [],
+    toolName:
+      result.toolName ??
+      ("toolName" in result ? String((result as { toolName?: string }).toolName) : result.kind),
+  }
+}
+
+export async function decideAskEasyProposal(
+  _prev: AskEasyState,
+  formData: FormData,
+): Promise<AskEasyState> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) {
+    return { ...askEasyInitial, error: "Switch to a landlord admin to decide proposals." }
+  }
+  const { askEasyGateReason, approveProposal, rejectProposal } = await import("@/lib/agentic")
+  if (askEasyGateReason(user.tenantId) === "upgrade") {
+    return { ...askEasyInitial, error: "Ask Easy requires Pro or higher." }
+  }
+  const proposalId = String(formData.get("proposalId") ?? "")
+  const decision = String(formData.get("decision") ?? "")
+  if (!proposalId) return { ...askEasyInitial, error: "Missing proposal." }
+  if (decision === "reject") {
+    const result = rejectProposal({
+      tenantId: user.tenantId,
+      proposalId,
+      actorUserId: user.id,
+    })
+    refresh(["/landlord/ask-easy", "/landlord/ask", "/landlord/jobs", "/provider", "/inbox"])
+    if (!result.ok) return { ...askEasyInitial, error: result.error }
+    return {
+      ...askEasyInitial,
+      message: "Proposal rejected. No job or notify was created.",
+      reply: "Proposal rejected. No job or notify was created.",
+    }
+  }
+  if (decision === "approve") {
+    const result = approveProposal({
+      tenantId: user.tenantId,
+      proposalId,
+      actorUserId: user.id,
+    })
+    refresh(["/landlord/ask-easy", "/landlord/ask", "/landlord/jobs", "/landlord", "/provider", "/inbox"])
+    if (!result.ok) return { ...askEasyInitial, error: result.error }
+    const msg = result.jobId
+      ? `Approved and executed. Concierge job ${result.jobId} created.`
+      : "Approved and executed."
+    return { ...askEasyInitial, message: msg, reply: msg }
+  }
+  return { ...askEasyInitial, error: "Choose Approve or Reject." }
+}
+
+/* ── Ask Easy · Slice L.0 in-memory queue (kept for main stubs) ─ */
 
 export async function approveAgenticProposal(
   proposalId: string,
