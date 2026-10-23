@@ -65,7 +65,7 @@ import {
   type RewardStatus,
 } from "@/lib/referrals"
 
-const SEED_VERSION = "21"
+const SEED_VERSION = "22"
 
 function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
@@ -212,6 +212,11 @@ export type PropertyRecord = {
   latitude: number | null
   longitude: number | null
   pinCode: string | null
+  entranceLatitude: number | null
+  entranceLongitude: number | null
+  entranceLabel: string | null
+  hideExactPin: boolean
+  visitsEnabled: boolean
   floors: FloorRecord[]
   units: UnitRecord[]
   meshBindings: MeshBindingRecord[]
@@ -440,7 +445,12 @@ function createSchema(db: Sql) {
       model_kind TEXT,
       latitude REAL,
       longitude REAL,
-      pin_code TEXT
+      pin_code TEXT,
+      entrance_latitude REAL,
+      entrance_longitude REAL,
+      entrance_label TEXT,
+      hide_exact_pin INTEGER NOT NULL DEFAULT 0,
+      visits_enabled INTEGER NOT NULL DEFAULT 1
     );
     CREATE TABLE floors (
       id TEXT PRIMARY KEY,
@@ -585,7 +595,46 @@ function createSchema(db: Sql) {
       href TEXT,
       read_at TEXT,
       created_at TEXT NOT NULL,
-      channel TEXT NOT NULL
+      channel TEXT NOT NULL,
+      source_id TEXT
+    );
+    CREATE TABLE appointment_types (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      code TEXT NOT NULL,
+      name TEXT NOT NULL,
+      duration_minutes INTEGER NOT NULL DEFAULT 30,
+      buffer_minutes INTEGER NOT NULL DEFAULT 15,
+      requires_meeting_url INTEGER NOT NULL DEFAULT 0,
+      UNIQUE (tenant_id, code)
+    );
+    CREATE TABLE availability_windows (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      property_id TEXT NOT NULL,
+      weekday INTEGER NOT NULL,
+      start_time TEXT NOT NULL,
+      end_time TEXT NOT NULL,
+      timezone TEXT NOT NULL DEFAULT 'Asia/Kolkata'
+    );
+    CREATE TABLE appointments (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      property_id TEXT NOT NULL,
+      unit_id TEXT,
+      appointment_type_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      starts_at TEXT NOT NULL,
+      ends_at TEXT NOT NULL,
+      guest_name TEXT NOT NULL,
+      guest_email TEXT NOT NULL,
+      guest_phone TEXT NOT NULL,
+      notes TEXT NOT NULL DEFAULT '',
+      meeting_url TEXT,
+      applicant_id TEXT,
+      replaces_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
     );
     CREATE TABLE market_drafts (
       id TEXT PRIMARY KEY,
@@ -941,6 +990,10 @@ function createSchema(db: Sql) {
     CREATE INDEX idx_ledger_tenant ON ledger_entries(tenant_id);
     CREATE INDEX idx_ledger_user ON ledger_entries(user_id);
     CREATE INDEX idx_notes_user ON notifications(user_id, created_at);
+    CREATE INDEX idx_notes_source ON notifications(source_id);
+    CREATE INDEX idx_appt_tenant ON appointments(tenant_id, status);
+    CREATE INDEX idx_appt_property ON appointments(property_id, starts_at);
+    CREATE INDEX idx_windows_property ON availability_windows(property_id, weekday);
     CREATE INDEX idx_properties_tenant ON properties(tenant_id);
     CREATE INDEX idx_media_unit ON unit_media(unit_id, sort_order);
     CREATE INDEX idx_shop_skus_tenant ON shop_skus(tenant_id);
@@ -984,6 +1037,9 @@ function reset(db: Sql) {
     "jobs",
     "verifications",
     "applications",
+    "appointments",
+    "availability_windows",
+    "appointment_types",
     "visit_requests",
     "custom_domains",
     "shop_rental_bookings",
@@ -1037,6 +1093,98 @@ function seed(db: Sql) {
   seedReferEarn(db)
   seedPartnerNetwork(db)
   seedRoleCmsExtras(db)
+  seedVisitCalendar(db)
+}
+
+/** Slice F residual: appointment types, Waterman windows, Maya sample request. */
+function seedVisitCalendar(db: Sql) {
+  // Isolation desk: Harbourline types only (no windows / appointments).
+  db.prepare(
+    "INSERT INTO tenants (id, name, slug, city, kind, display_currency, package, status, is_demo) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?)",
+  ).run(
+    "t_harbour",
+    "Harbourline Yards India",
+    "harbourline",
+    "Sriperumbudur",
+    "landlord",
+    "INR",
+    "starter",
+    1,
+  )
+  db.prepare(
+    `INSERT INTO users (id, name, email, role, role_level, tenant_id, company, trade, service_area, provider_verified, phone, password_hash, is_demo)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    "u_jonah",
+    "Jonah Reeves",
+    "jonah@harbourline.example",
+    "landlord_admin",
+    2,
+    "t_harbour",
+    null,
+    null,
+    null,
+    0,
+    "+914440012345",
+    null,
+    1,
+  )
+
+  const apptType = db.prepare(
+    `INSERT INTO appointment_types (id, tenant_id, code, name, duration_minutes, buffer_minutes, requires_meeting_url)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  )
+  apptType.run("atype_bbm_inperson", "t_bbm", "in_person", "In-person tour", 30, 15, 0)
+  apptType.run("atype_bbm_virtual", "t_bbm", "virtual", "Virtual tour", 30, 15, 1)
+  apptType.run("atype_harbour_inperson", "t_harbour", "in_person", "In-person tour", 30, 15, 0)
+  apptType.run("atype_harbour_virtual", "t_harbour", "virtual", "Virtual tour", 30, 15, 1)
+
+  const windowIns = db.prepare(
+    `INSERT INTO availability_windows (id, tenant_id, property_id, weekday, start_time, end_time, timezone)
+     VALUES (?, ?, ?, ?, ?, ?, 'Asia/Kolkata')`,
+  )
+  for (const weekday of [1, 2, 3, 4, 5]) {
+    windowIns.run(`aw_waterman_am_${weekday}`, "t_bbm", "p_waterman", weekday, "10:00", "12:00")
+    windowIns.run(`aw_waterman_pm_${weekday}`, "t_bbm", "p_waterman", weekday, "14:00", "17:00")
+  }
+
+  db.prepare(
+    `INSERT INTO appointments (
+      id, tenant_id, property_id, unit_id, appointment_type_id, status,
+      starts_at, ends_at, guest_name, guest_email, guest_phone, notes,
+      meeting_url, applicant_id, replaces_id, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, NULL, ?, ?)`,
+  ).run(
+    "appt_maya_waterman",
+    "t_bbm",
+    "p_waterman",
+    "u_waterman_b1",
+    "atype_bbm_inperson",
+    "requested",
+    "2026-10-27T10:00:00+05:30",
+    "2026-10-27T10:30:00+05:30",
+    "Maya Chen",
+    "maya@apexlogistics.example",
+    "+919876501234",
+    "Want to walk B1 before we finalise the application.",
+    "u_maya",
+    "2026-10-20T09:00:00.000Z",
+    "2026-10-20T09:00:00.000Z",
+  )
+
+  const note = db.prepare(
+    `INSERT INTO notifications (id, user_id, title, body, href, read_at, created_at, channel, source_id)
+     VALUES (?, ?, ?, ?, ?, NULL, ?, ?, NULL)`,
+  )
+  note.run(
+    "n_visit_maya",
+    "u_nadia",
+    "Visit requested",
+    "Maya Chen asked for an In-person tour at Demo Bhiwandi Hub · Mon, 27 Oct · 10:00–10:30 am IST.",
+    "/landlord/visits",
+    "2026-10-20T09:01:00.000Z",
+    "in_app",
+  )
 }
 
 function seedReferEarn(db: Sql) {
@@ -1725,6 +1873,11 @@ function mapProperty(row: Record<string, unknown>): PropertyRecord {
     latitude: num(row, "latitude"),
     longitude: num(row, "longitude"),
     pinCode: str(row, "pin_code"),
+    entranceLatitude: num(row, "entrance_latitude"),
+    entranceLongitude: num(row, "entrance_longitude"),
+    entranceLabel: str(row, "entrance_label"),
+    hideExactPin: Number(row.hide_exact_pin) === 1,
+    visitsEnabled: Number(row.visits_enabled ?? 1) === 1,
     floors: floorsFor(id),
     units: unitsFor(id, segment),
     meshBindings: meshBindingsFor(id),
@@ -3008,6 +3161,41 @@ export function saveHotspots(
       update.run(spot.x, spot.y, spot.id, propertyId, tenantId)
     }
   })
+  return { ok: true as const, slug: property.slug }
+}
+
+export function savePropertyPin(
+  tenantId: string,
+  propertyId: string,
+  pin: {
+    latitude: number | null
+    longitude: number | null
+    entranceLatitude: number | null
+    entranceLongitude: number | null
+    entranceLabel: string | null
+    hideExactPin: boolean
+  },
+) {
+  const property = propertyForLandlord(tenantId, propertyId)
+  if (!property) return { ok: false as const, error: "Property not found for this organisation." }
+  getDb()
+    .prepare(
+      `UPDATE properties SET
+         latitude = ?, longitude = ?,
+         entrance_latitude = ?, entrance_longitude = ?, entrance_label = ?,
+         hide_exact_pin = ?
+       WHERE id = ? AND tenant_id = ?`,
+    )
+    .run(
+      pin.latitude,
+      pin.longitude,
+      pin.entranceLatitude,
+      pin.entranceLongitude,
+      pin.entranceLabel,
+      pin.hideExactPin ? 1 : 0,
+      propertyId,
+      tenantId,
+    )
   return { ok: true as const, slug: property.slug }
 }
 

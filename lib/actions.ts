@@ -47,6 +47,7 @@ import {
   saveFloorPlan,
   saveFloorPlanDraft,
   saveHotspots,
+  savePropertyPin,
   saveUnitMatterportUrl,
   unbindUnitMesh,
   saveLateFeeRule,
@@ -128,6 +129,7 @@ import {
   setSessionUserId,
 } from "@/lib/session"
 import { translateEnglishCatalog, writeLocaleFile } from "@/lib/translate"
+import { validateMapPin } from "@/lib/maps"
 import { simulateMatch } from "@/lib/verification"
 
 function refresh(paths: string[]) {
@@ -753,6 +755,199 @@ export async function requestVisit(
   return { ok: true }
 }
 
+const visitRequestSchema = z.object({
+  propertyId: z.string().min(1),
+  unitId: z.string().optional(),
+  appointmentTypeId: z.string().min(1),
+  startsAt: z.string().min(1),
+  guestName: z.string().trim().min(2, "Enter your name"),
+  guestEmail: z.string().trim().regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Enter a work email"),
+  guestPhone: z.string().trim().min(8, "Enter a mobile number"),
+  notes: z.string().trim().max(1000).optional(),
+  meetingUrl: z.string().trim().optional(),
+})
+
+export type VisitBookState = {
+  error: string | null
+  fieldErrors: Record<string, string>
+  ok?: boolean
+}
+
+export async function submitVisitRequest(
+  _prev: VisitBookState,
+  formData: FormData,
+): Promise<VisitBookState> {
+  const user = await getSessionUser()
+  const phoneRaw = String(formData.get("guestPhone") ?? "").trim()
+  const phone = phoneRaw.startsWith("+") ? phoneRaw : toE164("+91", phoneRaw) ?? phoneRaw
+  const parsed = visitRequestSchema.safeParse({
+    propertyId: formData.get("propertyId"),
+    unitId: String(formData.get("unitId") ?? "") || undefined,
+    appointmentTypeId: formData.get("appointmentTypeId"),
+    startsAt: formData.get("startsAt"),
+    guestName: formData.get("guestName"),
+    guestEmail: formData.get("guestEmail"),
+    guestPhone: phone,
+    notes: formData.get("notes") ?? "",
+    meetingUrl: String(formData.get("meetingUrl") ?? ""),
+  })
+  if (!parsed.success) {
+    return { error: "Check the highlighted fields.", fieldErrors: issues(parsed.error) }
+  }
+
+  const { requestAppointment, visitNoticeForRequest } = await import("@/lib/visits")
+  const result = requestAppointment({
+    propertyId: parsed.data.propertyId,
+    unitId: parsed.data.unitId ?? null,
+    appointmentTypeId: parsed.data.appointmentTypeId,
+    startsAt: parsed.data.startsAt,
+    guestName: parsed.data.guestName,
+    guestEmail: parsed.data.guestEmail,
+    guestPhone: parsed.data.guestPhone,
+    notes: parsed.data.notes ?? "",
+    meetingUrl: parsed.data.meetingUrl || null,
+    applicantId: user?.role === "applicant" ? user.id : null,
+  })
+  if (!result.ok) return { error: result.error, fieldErrors: {} }
+
+  notifyMany(
+    visitNoticeForRequest({
+      tenantId: result.tenantId,
+      propertyName: result.propertyName,
+      propertySlug: result.propertySlug,
+      typeName: result.typeName,
+      startsAt: result.startsAt,
+      endsAt: result.endsAt,
+      guestName: parsed.data.guestName,
+    }),
+  )
+  if (user?.role === "applicant") {
+    notify({
+      userId: user.id,
+      title: "Visit requested",
+      body: `Your ${result.typeName} at ${result.propertyName} is waiting for landlord confirmation.`,
+      href: "/account",
+    })
+  }
+  refresh([
+    `/properties/${result.propertySlug}`,
+    `/properties/${result.propertySlug}/book`,
+    "/landlord/visits",
+    "/landlord",
+    "/inbox",
+    "/account",
+  ])
+  redirect(
+    `/properties/${result.propertySlug}/book?notice=${encodeURIComponent("Visit requested. The landlord will confirm or propose another slot.")}`,
+  )
+}
+
+export async function reviewVisit(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) return
+  const appointmentId = String(formData.get("appointmentId") ?? "")
+  const decision = String(formData.get("decision") ?? "")
+  const allowed = ["confirmed", "declined", "cancelled", "completed", "no_show"] as const
+  if (!allowed.includes(decision as (typeof allowed)[number])) return
+
+  const { transitionAppointment } = await import("@/lib/visits")
+  const result = transitionAppointment(
+    user.tenantId,
+    appointmentId,
+    decision as (typeof allowed)[number],
+    "landlord",
+  )
+  if (!result.ok) return
+
+  const appt = result.appointment
+  const verb =
+    decision === "confirmed"
+      ? "confirmed"
+      : decision === "declined"
+        ? "declined"
+        : decision === "cancelled"
+          ? "cancelled"
+          : decision === "completed"
+            ? "marked completed"
+            : "marked no-show"
+  if (appt.applicantId) {
+    notify({
+      userId: appt.applicantId,
+      title: `Visit ${decision === "no_show" ? "no-show" : decision === "completed" ? "completed" : decision}`,
+      body: `${user.tenantName ?? "Landlord"} ${verb} your ${appt.typeName} at ${appt.propertyName}.`,
+      href: `/properties/${appt.propertySlug}`,
+    })
+  }
+  notifyMany(
+    landlordIds(user.tenantId)
+      .filter((id) => id !== user.id)
+      .map((id) => ({
+        userId: id,
+        title: `Visit ${decision}`,
+        body: `${appt.guestName} · ${appt.typeName} · ${appt.propertyName}.`,
+        href: "/landlord/visits",
+      })),
+  )
+  refresh(["/landlord/visits", "/landlord", "/inbox", `/properties/${appt.propertySlug}/book`])
+}
+
+export async function rescheduleVisit(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) return
+  const appointmentId = String(formData.get("appointmentId") ?? "")
+  const startsAt = String(formData.get("startsAt") ?? "")
+  const meetingUrl = String(formData.get("meetingUrl") ?? "") || null
+  if (!appointmentId || !startsAt) return
+
+  const { rescheduleAppointment } = await import("@/lib/visits")
+  const result = rescheduleAppointment(user.tenantId, appointmentId, startsAt, meetingUrl)
+  if (!result.ok) return
+
+  notifyMany(
+    landlordIds(result.tenantId).map((id) => ({
+      userId: id,
+      title: "Visit rescheduled",
+      body: `A visit at ${result.propertyName} moved to a new slot.`,
+      href: "/landlord/visits",
+    })),
+  )
+  refresh(["/landlord/visits", "/inbox", `/properties/${result.propertySlug}/book`])
+}
+
+export async function addAvailabilityWindow(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) return
+  const { upsertAvailabilityWindow } = await import("@/lib/visits")
+  const result = upsertAvailabilityWindow({
+    tenantId: user.tenantId,
+    propertyId: String(formData.get("propertyId") ?? ""),
+    weekday: Number(formData.get("weekday") ?? -1),
+    startTime: String(formData.get("startTime") ?? ""),
+    endTime: String(formData.get("endTime") ?? ""),
+  })
+  if (!result.ok) return
+  refresh(["/landlord/visits"])
+}
+
+export async function removeAvailabilityWindow(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) return
+  const { deleteAvailabilityWindow } = await import("@/lib/visits")
+  deleteAvailabilityWindow(user.tenantId, String(formData.get("windowId") ?? ""))
+  refresh(["/landlord/visits"])
+}
+
+export async function togglePropertyVisits(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) return
+  const { setPropertyVisitsEnabled } = await import("@/lib/visits")
+  const enabled = formData.get("enabled") === "1"
+  const propertyId = String(formData.get("propertyId") ?? "")
+  const result = setPropertyVisitsEnabled(user.tenantId, propertyId, enabled)
+  if (!result.ok) return
+  refresh(["/landlord/visits", "/properties"])
+}
+
 export async function reviewApplication(formData: FormData) {
   const user = await getSessionUser()
   if (!user || user.role !== "landlord_admin" || !user.tenantId) return
@@ -1127,6 +1322,58 @@ export async function submitUnitMatterport(input: {
     ])
   }
   return { ok: true, error: "" }
+}
+
+export async function submitPropertyPin(formData: FormData): Promise<{
+  ok: boolean
+  error: string
+  message: string
+}> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) {
+    return { ok: false, error: "Switch to a landlord admin first.", message: "" }
+  }
+  const propertyId = String(formData.get("propertyId") ?? "")
+  const building = validateMapPin(formData.get("latitude"), formData.get("longitude"))
+  if (!building.ok) return { ok: false, error: building.error, message: "" }
+
+  const entranceRawLat = formData.get("entranceLatitude")
+  const entranceRawLng = formData.get("entranceLongitude")
+  const entranceEmpty =
+    (entranceRawLat == null || String(entranceRawLat).trim() === "") &&
+    (entranceRawLng == null || String(entranceRawLng).trim() === "")
+  let entranceLatitude: number | null = null
+  let entranceLongitude: number | null = null
+  if (!entranceEmpty) {
+    const entrance = validateMapPin(entranceRawLat, entranceRawLng)
+    if (!entrance.ok) {
+      return { ok: false, error: `Entrance pin: ${entrance.error}`, message: "" }
+    }
+    entranceLatitude = entrance.latitude
+    entranceLongitude = entrance.longitude
+  }
+
+  const entranceLabelRaw = String(formData.get("entranceLabel") ?? "").trim()
+  const result = savePropertyPin(user.tenantId, propertyId, {
+    latitude: building.latitude,
+    longitude: building.longitude,
+    entranceLatitude,
+    entranceLongitude,
+    entranceLabel: entranceLabelRaw || null,
+    hideExactPin: formData.get("hideExactPin") === "1",
+  })
+  if (!result.ok) return { ok: false, error: result.error, message: "" }
+  refresh([
+    "/",
+    "/listings",
+    `/properties/${result.slug}`,
+    `/landlord/properties/${propertyId}`,
+  ])
+  return {
+    ok: true,
+    error: "",
+    message: building.latitude == null ? "Map pin cleared." : "Map pin saved.",
+  }
 }
 
 export async function submitLateFeeRule(formData: FormData) {

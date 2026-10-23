@@ -87,12 +87,20 @@ function FeaturedCard({ card }: { card: ListingCard }) {
         <MediaTags card={card} />
         <div className="mt-auto flex flex-wrap items-end justify-between gap-3 pt-5">
           <RateBlock card={card} />
-          <Link
-            href={`/properties/${card.propertySlug}/units/${card.code}`}
-            className="bg-terra px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-terra-dark"
-          >
-            Open unit
-          </Link>
+          <div className="flex flex-col gap-2 items-stretch sm:items-end">
+            <Link
+              href={`/properties/${card.propertySlug}/units/${card.code}`}
+              className="bg-terra px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-terra-dark"
+            >
+              Open unit
+            </Link>
+            <Link
+              href={`/properties/${card.propertySlug}/book?unit=${card.code}`}
+              className="border border-ink/20 px-3 py-2 text-center text-sm font-semibold transition-colors hover:border-terra hover:text-terra"
+            >
+              Book a visit
+            </Link>
+          </div>
         </div>
       </div>
     </article>
@@ -133,12 +141,20 @@ function RowCard({ card }: { card: ListingCard }) {
       </div>
       <div className="flex flex-row items-center justify-between gap-3 sm:flex-col sm:items-end">
         <RateBlock card={card} />
-        <Link
-          href={`/properties/${card.propertySlug}/units/${card.code}`}
-          className="border border-ink/20 px-3 py-1.5 text-sm font-semibold transition-colors hover:border-terra hover:text-terra"
-        >
-          Open
-        </Link>
+        <div className="flex flex-col gap-1.5 items-end">
+          <Link
+            href={`/properties/${card.propertySlug}/units/${card.code}`}
+            className="border border-ink/20 px-3 py-1.5 text-sm font-semibold transition-colors hover:border-terra hover:text-terra"
+          >
+            Open
+          </Link>
+          <Link
+            href={`/properties/${card.propertySlug}/book?unit=${card.code}`}
+            className="text-sm font-semibold text-terra hover:underline"
+          >
+            Book a visit
+          </Link>
+        </div>
       </div>
     </article>
   )
@@ -179,12 +195,20 @@ function TileCard({ card }: { card: ListingCard }) {
         <div className="mt-2">
           <RateBlock card={card} />
         </div>
-        <Link
-          href={`/properties/${card.propertySlug}/units/${card.code}`}
-          className="mt-auto pt-3 text-sm font-semibold text-terra hover:underline"
-        >
-          View unit →
-        </Link>
+        <div className="mt-auto flex flex-wrap items-center gap-3 pt-3 text-sm font-semibold">
+          <Link
+            href={`/properties/${card.propertySlug}/units/${card.code}`}
+            className="text-terra hover:underline"
+          >
+            View unit →
+          </Link>
+          <Link
+            href={`/properties/${card.propertySlug}/book?unit=${card.code}`}
+            className="text-ink-soft hover:text-terra hover:underline"
+          >
+            Book a visit
+          </Link>
+        </div>
       </div>
     </article>
   )

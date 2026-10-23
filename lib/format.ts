@@ -18,6 +18,14 @@ export type Role = MarketRole | StaffRole | PendingRole
 export type UnitStatus = "available" | "pending" | "leased" | "hold"
 export type ApplicationStatus = "submitted" | "approved" | "denied"
 export type JobStatus = "open" | "assigned" | "accepted" | "complete"
+export type AppointmentStatus =
+  | "requested"
+  | "confirmed"
+  | "completed"
+  | "cancelled"
+  | "declined"
+  | "no_show"
+export type AppointmentTypeCode = "in_person" | "virtual"
 export type Trade = "electrician" | "plumber" | "courier" | "cleaning"
 export type TenantKind = "landlord" | "platform"
 
@@ -197,6 +205,10 @@ export function statusLabel(status: string) {
   if (status === "completed") return "Completed"
   if (status === "cancelled") return "Cancelled"
   if (status === "refunded") return "Refunded"
+  if (status === "requested") return "Requested"
+  if (status === "confirmed") return "Confirmed"
+  if (status === "declined") return "Declined"
+  if (status === "no_show") return "No-show"
   return status
 }
 

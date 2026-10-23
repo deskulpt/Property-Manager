@@ -134,8 +134,9 @@ export function seedDemoDatabase(db: Sql) {
   const property = db.prepare(
     `INSERT INTO properties (
       id, tenant_id, name, slug, address, area, city_line, total_sqft, segment, subtype,
-      floor_plan_path, model_path, model_kind, latitude, longitude
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      floor_plan_path, model_path, model_kind, latitude, longitude,
+      entrance_latitude, entrance_longitude, entrance_label, hide_exact_pin
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
   // Waterman ships a Kenney-style seed GLB (CC0-style demo shell) — see CREDITS / docs/seed-3d-models.md.
   property.run(
@@ -154,6 +155,10 @@ export function seedDemoDatabase(db: Sql) {
     "glb",
     19.2813,
     73.0483,
+    19.2805,
+    73.047,
+    "Truck gate 2",
+    0,
   )
   property.run(
     "p_forum",
@@ -171,6 +176,10 @@ export function seedDemoDatabase(db: Sql) {
     null,
     17.4942,
     78.3996,
+    null,
+    null,
+    null,
+    0,
   )
   property.run(
     "p_jubilee",
@@ -188,6 +197,10 @@ export function seedDemoDatabase(db: Sql) {
     null,
     17.4326,
     78.4071,
+    null,
+    null,
+    null,
+    0,
   )
   // Multi-floor stack/peel demo (PRD §4.4) — 8 levels so the selector scrolls (>5).
   property.run(
@@ -206,6 +219,10 @@ export function seedDemoDatabase(db: Sql) {
     null,
     19.1197,
     72.9051,
+    null,
+    null,
+    null,
+    0,
   )
 
   const floorStmt = db.prepare(
