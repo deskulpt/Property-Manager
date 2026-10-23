@@ -17,7 +17,7 @@ test.describe("Slice A hosted signup path", () => {
     const email = `owner-${stamp}@easyrental.example`
     const password = "test-pass-12"
 
-    await page.goto("/signup")
+    await page.goto("/signup?flow=org")
     await expect(page.getByRole("heading", { name: "Sign up" })).toBeVisible()
     await page.getByLabel("Full name").fill("Asha Evaluator")
     await page.getByLabel("Work email").fill(email)
@@ -45,7 +45,7 @@ test.describe("Slice A hosted signup path", () => {
     const email = `login-${stamp}@easyrental.example`
     const password = "test-pass-34"
 
-    await page.goto("/signup")
+    await page.goto("/signup?flow=org")
     await page.getByLabel("Full name").fill("Bala Login")
     await page.getByLabel("Work email").fill(email)
     await page.getByLabel("Password").fill(password)

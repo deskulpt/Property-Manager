@@ -2,7 +2,7 @@ import Link from "next/link"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { AuthShell } from "@/components/auth/auth-shell"
-import { SignUpForm } from "@/components/auth/signup-form"
+import { SignUpForm, SignupForm } from "@/components/auth/signup-form"
 import { ReferralClaimForm } from "@/components/refer/claim-form"
 import { getReferrerByCode } from "@/lib/db"
 import { SUBSCRIBE_PATH } from "@/lib/plans"
@@ -15,7 +15,7 @@ export const metadata = { title: "Sign up" }
 export default async function SignUpPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ref?: string }>
+  searchParams: Promise<{ ref?: string; flow?: string }>
 }) {
   const session = await getSessionUser()
   if (session) {
@@ -39,11 +39,16 @@ export default async function SignUpPage({
   const jar = await cookies()
   const code = (sp.ref || jar.get(REF_COOKIE)?.value || "").trim().toUpperCase()
   const referrer = code ? getReferrerByCode(code) : null
+  const orgFlow = (sp.flow || "").toLowerCase() === "org"
 
   return (
     <AuthShell
       title="Sign up"
-      lede="Create your Easy Rental credentials. Next you create an India landlord organisation (or finish role onboarding), then activate a listing plan — demo purchase, no live charge yet."
+      lede={
+        orgFlow
+          ? "Create credentials, then an India landlord organisation with an owner seat (Slice A self-serve)."
+          : "Create your Easy Rental credentials. Next you choose a role; landlords activate a listing plan — demo purchase, no live charge yet."
+      }
       footer={
         <>
           Already registered?{" "}
@@ -76,7 +81,7 @@ export default async function SignUpPage({
           </p>
         </div>
       ) : null}
-      <SignUpForm />
+      {orgFlow ? <SignUpForm /> : <SignupForm />}
       {referrer ? (
         <div className="mt-10">
           <h2 className="mb-4 font-heading text-xl font-bold">Add your C&I property</h2>
