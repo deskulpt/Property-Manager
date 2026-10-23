@@ -14,6 +14,7 @@ import {
   type Trade,
   type UnitStatus,
 } from "@/lib/format"
+import { normalizeSlug } from "@/lib/rust/money"
 import {
   gstAppliesForUnit,
   isPropertySegment,
@@ -1355,12 +1356,7 @@ function transaction(work: (db: Sql) => void) {
 
 
 export function slugifyOrg(name: string) {
-  const base = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 48)
-  return base || "org"
+  return normalizeSlug(name)
 }
 
 export function createLandlordAccount(input: {

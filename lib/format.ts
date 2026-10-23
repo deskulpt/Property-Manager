@@ -1,4 +1,8 @@
 import { activeMarket, type MarketId } from "@/lib/market"
+import {
+  lateFeeCents as rustLateFeeCents,
+  monthlyRentCents as rustMonthlyRentCents,
+} from "@/lib/rust/money"
 
 export type MarketRole = "applicant" | "landlord_admin" | "service_provider" | "managing_agent"
 export type StaffRole =
@@ -74,12 +78,14 @@ export function rateCaption() {
 /**
  * Monthly rent in minor currency units from the stored asking rate.
  * India stores ₹/SF/month; a later market with annual rates would divide by 12.
+ * Integer math via `easyrent-core` WASM when available (`lib/rust/money`).
  */
 export function monthlyRentCents(ratePsf: number, area: number) {
   const market = activeMarket()
-  const monthlyMajor =
-    market.ratePeriod === "month" ? ratePsf * area : (ratePsf * area) / 12
-  return Math.round(monthlyMajor * market.currencyMinorPerMajor)
+  return rustMonthlyRentCents(ratePsf, area, {
+    currencyMinorPerMajor: market.currencyMinorPerMajor,
+    ratePeriod: market.ratePeriod,
+  })
 }
 
 /** Monthly rent for a unit — supports warehouse ₹/SF and flat monthly asking rents. */
@@ -188,8 +194,7 @@ export function lateFeeCents(
   rentCents: number,
   rule: { flatCents: number; percentBps: number },
 ) {
-  const percent = Math.round((rentCents * rule.percentBps) / 10000)
-  return Math.max(rule.flatCents, percent)
+  return rustLateFeeCents(rentCents, rule)
 }
 
 export function parseClearHeightFeet(value: string) {

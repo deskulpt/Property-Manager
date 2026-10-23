@@ -13,6 +13,10 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "8mb",
     },
   },
+  // Resolve prebuilt easyrent-wasm `.wasm` for the landlord plan creator.
+  turbopack: {
+    resolveExtensions: [".tsx", ".ts", ".jsx", ".js", ".mjs", ".json", ".wasm"],
+  },
   async headers() {
     return [
       {

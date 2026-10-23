@@ -12,6 +12,7 @@ import {
   Zap,
 } from "lucide-react"
 import {
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -32,6 +33,7 @@ import {
   type PlanDraft,
   type PlanElement,
 } from "@/lib/plan-draft"
+import { ensureBrowserRust } from "@/lib/rust/load"
 import "./unit-plan-creator.css"
 
 type Tool = "select" | "wall" | "door" | "room" | "bathroom" | "lift" | "unit"
@@ -98,6 +100,10 @@ export function UnitPlanCreator({
   const [pending, startTransition] = useTransition()
   const canvasRef = useRef<SVGSVGElement>(null)
   const flashRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    void ensureBrowserRust()
+  }, [])
 
   function loadFloor(id: string) {
     const floor = ordered.find((f) => f.id === id)
@@ -209,7 +215,8 @@ export function UnitPlanCreator({
     addRectElement(tool, x, y)
   }
 
-  function runAutoDesign(randomize: boolean) {
+  async function runAutoDesign(randomize: boolean) {
+    await ensureBrowserRust()
     const nextSeed = randomize ? Math.floor(Math.random() * 10000) : seed
     if (randomize) setSeed(nextSeed)
     const areaInUnit = Math.max(1, Number(totalArea) || 1)
