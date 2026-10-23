@@ -54,6 +54,20 @@ The United States, Canada, Brazil, and the United Kingdom (`US`, `CA`, `BR`, `GB
 
 Each future market is meant to plug in through the same seams: currency, phone, address, ID document types, and payment methods. Completing the checklist is required before that country can appear on public forms.
 
+## Hosted vs OSS auth (Slice A)
+
+| Mode | How to run | Session | Demo identity switcher |
+| --- | --- | --- | --- |
+| **OSS / local** (default) | `npm run dev` | Cookie `deskulpt_user` | **On**, with a persistent banner |
+| **Hosted SaaS** | `HOSTED=1 npm run dev` | Same cookie after Sign up / Log in; `Secure` flag | **Off** (Sign up / Log in in the header) |
+| Hosted + demo override | `HOSTED=1 ALLOW_DEMO_AUTH=1` | Either path | On (for staging demos only) |
+
+Public auth routes: `/signup`, `/login`, `/create-account` (India-only landlord org), `/forgot-password` (demo email stub), `/invite/[token]`.
+
+Self-serve Create account provisions a landlord tenant, **owner** seat, default **Basic** (`starter`) package, and late-fee rule. Org invites add `leasing_manager` / `accountant` / `viewer` seats within package seat caps. Passwords use scrypt (`lib/auth/password.ts`). Still SQLite — no Postgres, DocuSign, or live Razorpay in this slice.
+
+Evaluator path (hosted): visitor → Sign up → Create account → `/landlord` empty desk (no seeded identity). OSS evaluator path: keep using the identity switcher as before.
+
 ## Roles and demo identities
 
 **Real landlords** sign up with email/password at `/signup` (`is_demo=0`). Sessions use a signed cookie (`DESKULPT_SECRET_KEY`).
@@ -103,9 +117,18 @@ Unit B1 at BBM Bhiwandi Hub is the rich media example. The gallery tabs are:
 - **Walkthrough:** an interactive iframe. Easy Rental stores a Matterport show URL only (`units.matterport_url`). Seeded demos (PRD SaaS §4.6): B1 `PmWtWjyqpJs`, A2 `VpGQDT9DFjr`, C2 `caFmhpiUXSc`, H1 `7Fdpg6tCFwu`, U1 `U5p62iYcxeY` — all `https://my.matterport.com/show/?m=…`. No Matterport SDK or vendored assets. Other bays show an empty slot until a URL is set
 - **Map:** Leaflet + OpenStreetMap pins from property `latitude` / `longitude`. Clicks open generic Google Maps URLs. No Mapbox key
 
-### Floor plans
+### Floor plans and 3D buildings
 
-Seeded SVG plans live in `public/floorplans/`. A building page plots unit hotspots (available, offer pending, leased) and links through to the bay. Landlord admins upload a replacement plan and edit hotspot positions from the property page. Uploaded files stay on the machine running the server (`data/uploads/`).
+Seeded SVG plans live in `public/floorplans/`. A building page plots unit hotspots (available, offer pending, leased) and links through to the bay. Multi-floor properties (Demo Powai Tower, 8 levels) use a stacked peel viewer with a scrollable floor selector when there are more than five floors.
+
+Landlord **Building visuals** (`/landlord/properties/[id]`) has:
+
+1. **Plan creator** — orthogonal layout drafts (tenant-scoped)
+2. **Floor map (2D)** — hotspot editor (≤5 MB images via `ObjectStore` → `LocalDiskStore`)
+3. **3D model** — GLB / glTF / IFC / OBJ (caps: GLB/OBJ 25 MB, IFC 50 MB). react-three-fiber viewer; bind mesh name / IFC express ID → unit
+4. **Matterport link** — show URL only (Discover `/space/` normalised on save)
+
+Seed GLB: `public/models/seed-commercial.glb` on waterman with unit↔mesh bindings. Kenney CC0 + Duplex CC BY notes: `CREDITS.md`, `docs/seed-3d-models.md`. No xeokit (AGPL). S3 not required yet.
 
 ### Applications
 
@@ -118,7 +141,7 @@ Nadia's inbox is `/landlord/applications`. Approving Maya is the path covered by
 Requires a landlord admin. Demo: Nadia (DEMO · EasyRent Hyderabad). Real signups see only their organisation. Portal chrome uses a left accent rail and desk-scoped side nav.
 
 - `/landlord` overview
-- `/landlord/properties` and `/landlord/properties/[id]` buildings, floor plan, hotspots
+- `/landlord/properties` and `/landlord/properties/[id]` building visuals (plan creator, 2D, 3D, Matterport)
 - `/landlord/applications` inbox
 - `/landlord/jobs` concierge board (open, assigned, accepted, complete)
 - `/landlord/providers` approve a provider for this organisation
@@ -193,7 +216,7 @@ See [`docs/setup.md`](docs/setup.md), [`docs/architecture.md`](docs/architecture
 
 **MIT.** See `LICENSE`. Copyright 2026 DeSkulpt contributors.
 
-Open-source dependencies only, with one stated exception: **GSAP** is used under its no-fee standard licence for commercial and non-commercial use. It is not an OSI licence. Every other direct dependency is under an OSI licence. Pannellum is MIT. Matterport, if you paste a show URL, stays Matterport's service. This app only embeds an iframe.
+Open-source dependencies only, with one stated exception: **GSAP** is used under its no-fee standard licence for commercial and non-commercial use. It is not an OSI licence. Every other direct dependency is under an OSI licence (three.js / R3F MIT; web-ifc MPL-2.0). Pannellum is MIT. **xeokit (AGPL) is not used.** Matterport, if you paste a show URL, stays Matterport's service. This app only embeds an iframe.
 
 No API key is required to run the demo. A Google Cloud Translation key is optional and only used when a Super Admin adds a language.
 
@@ -246,7 +269,7 @@ npm test
 npm run test  # isolation + shop + rust parity
 ```
 
-- `npm test` runs Vitest suites including isolation, shop, segment expansion, listing import, plan-draft, **rust-core-parity** (WASM vs prior TS), and **Ask Easy** (`ask-easy`, `ask-easy-onboard`, `adk-platform`). It checks tenant isolation, approving Maya (rent plus GST, and a second approve fails), late-fee idempotence, CMS email redaction, provider area approval, and that public form countries stay India-only until a draft checklist is complete. Ask Easy asserts stub draft listings stay unpublished, reject leaves no job, approve runs `createJob`/`assignJob`, and execute without approval fails. It does not use `data/deskulpt.sqlite`.
+- `npm test` runs Vitest suites including isolation, shop, segment expansion, listing import, plan-draft, **rust-core-parity** (WASM vs prior TS), and **Ask Easy**, plus **saas-auth** (signup, seats, packages, invites) (`ask-easy`, `ask-easy-onboard`, `ask-easy-memory`, `adk-platform`). It checks tenant isolation, approving Maya (rent plus GST, and a second approve fails), late-fee idempotence, CMS email redaction, provider area approval, and that public form countries stay India-only until a draft checklist is complete. Ask Easy asserts stub draft listings stay unpublished, reject leaves no job, approve runs `createJob`/`assignJob`, execute without approval fails, and L.1 memory refuse Aadhaar / purge by tenant. It does not use `data/deskulpt.sqlite`.
 - `npm run test:watch` runs the same files under Vitest watch.
 - `npm run test:e2e` runs Playwright (`e2e/leasing-path.spec.ts`) against its own Next process on **port 43124** and a throwaway database. It does not reuse the dev server on 43123. The script loads the home page, switches to Nadia, approves Maya's application, and confirms Maya sees approved status and an INR rent row.
 - `npm run lint` runs ESLint.
@@ -260,23 +283,24 @@ Playwright downloads a browser on first use (`npx playwright install` if the run
 | Path | Behaviour |
 | --- | --- |
 | Onboard chat | Text + browser voice (Web Speech); cites real SQLite attributes (SF, rate, docks, floor plan, apps, ledger). |
+| Memory (L.1) | Per-landlord / per-property notes (`agent_memory`); purge UI on `/landlord/ask`. **No Aadhaar images or raw Aadhaar** (DPDP). |
 | Listing autofill | Soft-writes an **unpublished** `listing_drafts` row. Publish stays blocked without explicit approve. |
 | Assign trade | **Pending** proposal. Reject → no job / notify. Approve → `createJob` + `assignJob` + provider inbox (once). |
 | Model | Stub retrieval by default. Optional `GEMINI_API_KEY` / `ASK_EASY_MODEL_*`; failures fall back to stub. |
 | Package gate | Soft-open without `subscription_package`. `ASK_EASY_REQUIRE_PRO=1` forces upgrade CTA. |
 
-Hard rules: `test/ask-easy.test.ts` + `test/ask-easy-onboard.test.ts` + `test/adk-platform.test.ts`.
+Hard rules: `test/ask-easy.test.ts` + `test/ask-easy-onboard.test.ts` + `test/ask-easy-memory.test.ts` + `test/adk-platform.test.ts`.
 
-## MCP M0 (read-only)
+## MCP M0 + M1 (read + propose/approvals)
 
-Personal assistants connect via **Easy Rental MCP** — Phase **M0** is read-only tools scoped by session `tenant_id` + `role_level` (OAuth/PAT stub). No mutations; M1 will add proposals.
+Personal assistants connect via **Easy Rental MCP** — session `tenant_id` + `role_level` (OAuth/PAT stub). **M0** = reads. **M1** = mutating tools return `proposal_id`; `approvals.resolve` is the only never-auto execute path (money / lease send / notify / publish stay blocked without Approve).
 
 | Surface | How |
 | --- | --- |
-| Core | `lib/mcp/` — tool pack + PAT stub (`demo:u_nadia`) |
+| Core | `lib/mcp/` — reads + propose + approvals + never-auto policy |
 | stdio | `npm run mcp:stdio` or `packages/easyrental-mcp` |
 | HTTP | `POST /api/mcp` with `Authorization: Bearer demo:<userId>` |
-| Tests | `test/mcp-m0.test.ts` (isolation + role gates) |
+| Tests | `test/mcp-m0.test.ts` · `test/mcp-m1.test.ts` · `e2e/mcp-m1.spec.ts` |
 
 ```bash
 EASYRENTAL_MCP_DEFAULT_TOKEN=demo:u_nadia npm run mcp:stdio

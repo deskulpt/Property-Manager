@@ -311,6 +311,99 @@ describe("Ask Easy — lease onboard (list/parties/agreement/eSign)", () => {
     ).toBe(1)
   })
 
+  it("Digio env adapter — approve-before-send; dry-run marks sent once", async () => {
+    const prevProvider = process.env.ESIGN_PROVIDER
+    const prevId = process.env.DIGIO_CLIENT_ID
+    const prevSecret = process.env.DIGIO_CLIENT_SECRET
+    const prevLive = process.env.ESIGN_LIVE
+    process.env.ESIGN_PROVIDER = "digio"
+    process.env.DIGIO_CLIENT_ID = "test-digio-client"
+    process.env.DIGIO_CLIENT_SECRET = "test-digio-secret"
+    delete process.env.ESIGN_LIVE
+
+    try {
+      const { setESignProvider } = await import("@/lib/agentic/esign")
+      setESignProvider(null)
+
+      const {
+        runStubAskEasy,
+        approveProposal,
+        executeApprovedProposal,
+        leaseAgreementById,
+      } = await agentic()
+
+      const primary = runStubAskEasy({
+        tenantId: "t_bbm",
+        userId: "u_nadia",
+        prompt:
+          "Add primary lease holder named Priya Sharma priya.digio@example.com +91 98765 43210",
+        propertyId: "p_waterman",
+        unitId: "u_waterman_a1",
+      })
+      expect(primary.kind).toBe("propose_upsert_lease_party")
+      if (primary.kind !== "propose_upsert_lease_party") return
+      expect(
+        approveProposal({
+          tenantId: "t_bbm",
+          proposalId: primary.proposal.id,
+          actorUserId: "u_nadia",
+        }).ok,
+      ).toBe(true)
+
+      const draft = runStubAskEasy({
+        tenantId: "t_bbm",
+        userId: "u_nadia",
+        prompt: "Draft rental agreement for Maharashtra India MH",
+        propertyId: "p_waterman",
+        unitId: "u_waterman_a1",
+      })
+      expect(draft.kind).toBe("draft_rental_agreement")
+      if (draft.kind !== "draft_rental_agreement") return
+      const agreementId = draft.agreement.id
+
+      const propose = runStubAskEasy({
+        tenantId: "t_bbm",
+        userId: "u_nadia",
+        prompt: "Send the agreement via Digio eSign",
+        propertyId: "p_waterman",
+        unitId: "u_waterman_a1",
+      })
+      expect(propose.kind).toBe("propose_esign_send")
+      if (propose.kind !== "propose_esign_send") return
+
+      expect(
+        executeApprovedProposal({
+          tenantId: "t_bbm",
+          proposalId: propose.proposal.id,
+          actorUserId: "u_nadia",
+        }).ok,
+      ).toBe(false)
+      expect(leaseAgreementById("t_bbm", agreementId)?.status).toBe("draft")
+
+      const approved = approveProposal({
+        tenantId: "t_bbm",
+        proposalId: propose.proposal.id,
+        actorUserId: "u_nadia",
+      })
+      expect(approved.ok).toBe(true)
+      if (!approved.ok) return
+      expect(approved.envelopeId).toMatch(/^digio-dry-/)
+      expect(leaseAgreementById("t_bbm", agreementId)?.status).toBe("sent")
+      expect(leaseAgreementById("t_bbm", agreementId)?.esignProvider).toBe("digio")
+    } finally {
+      const { setESignProvider } = await import("@/lib/agentic/esign")
+      setESignProvider(null)
+      if (prevProvider === undefined) delete process.env.ESIGN_PROVIDER
+      else process.env.ESIGN_PROVIDER = prevProvider
+      if (prevId === undefined) delete process.env.DIGIO_CLIENT_ID
+      else process.env.DIGIO_CLIENT_ID = prevId
+      if (prevSecret === undefined) delete process.env.DIGIO_CLIENT_SECRET
+      else process.env.DIGIO_CLIENT_SECRET = prevSecret
+      if (prevLive === undefined) delete process.env.ESIGN_LIVE
+      else process.env.ESIGN_LIVE = prevLive
+    }
+  })
+
   it("registry marks list/unlist/party/ledger/esign as approval-required", async () => {
     const { getTool } = await agentic()
     for (const name of [

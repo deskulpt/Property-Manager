@@ -3,8 +3,8 @@ import { createEasyRentalMcpServer } from "@/lib/mcp/server"
 import { resolveMcpToken } from "@/lib/mcp/session"
 
 /**
- * Start M0 MCP over stdio. Session from EASYRENTAL_MCP_DEFAULT_TOKEN
- * (e.g. demo:u_nadia) or anonymous when unset.
+ * Start M1 MCP over stdio (reads + propose/approvals). Session from
+ * EASYRENTAL_MCP_DEFAULT_TOKEN (e.g. demo:u_nadia) or anonymous when unset.
  */
 export async function startStdioMcp() {
   const token = process.env.EASYRENTAL_MCP_DEFAULT_TOKEN ?? process.env.EASYRENTAL_MCP_TOKEN ?? null

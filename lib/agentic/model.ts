@@ -46,6 +46,9 @@ const ALL_TOOLS = new Set<AgentToolName>([
   "propose_upsert_lease_party",
   "draft_rental_agreement",
   "propose_esign_send",
+  "memory_list",
+  "memory_remember",
+  "memory_purge",
 ])
 
 function detectIntent(prompt: string, onboard?: boolean): AgentToolName {
@@ -59,6 +62,26 @@ function detectIntent(prompt: string, onboard?: boolean): AgentToolName {
     }
   }
 
+
+  // L.1 durable memory (list before remember — "what do you remember" is a read)
+  if (/\b(purge|erase|forget|delete)\b/.test(lower) && /\b(memory|memories|notes?)\b/.test(lower)) {
+    return "memory_purge"
+  }
+  if (
+    /\b(what do you (know|remember)|show (my |the )?memory|list (my |the )?memory|saved notes?|complaint themes?|preferred vendors?)\b/.test(
+      lower,
+    ) ||
+    (/\bmemory\b/.test(lower) && /\b(list|show|view|recall|about)\b/.test(lower))
+  ) {
+    return "memory_list"
+  }
+  if (
+    /\b(remember|memorise|memorize|save (this|that) note|don't forget|do not forget)\b/.test(lower) ||
+    (/\b(preferred vendor|complaint theme|recurring issue|escalation note|tone pref)\b/.test(lower) &&
+      /\b(note|save|store|add)\b/.test(lower))
+  ) {
+    return "memory_remember"
+  }
 
   // Lease onboard intents (never-auto mutators)
   if (
@@ -228,6 +251,7 @@ export async function planLiveTurn(input: PlanTurnInput): Promise<ModelPlan> {
           "Prefer read tools for onboarding and attribute questions.",
           "Never invent side effects. Mutating tools only propose; landlord must approve.",
           "Lease onboard order: list/unlist → occupant ledger → parties → draft_rental_agreement → propose_esign_send.",
+          "Memory (L.1): memory_list / memory_remember / memory_purge. Never store Aadhaar images or raw Aadhaar numbers.",
           "Tools:",
           ...catalog.map((t) => `- ${t.name}: ${t.description}`),
         ].join("\n"),

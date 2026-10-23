@@ -212,7 +212,7 @@ export function SiteHeader({
 
           <div className="flex items-center gap-2">
             {visitor ? (
-              <div className="hidden items-center gap-2 sm:flex">
+              <div className="hidden items-center gap-2 sm:flex" data-testid="auth-nav">
                 <Link
                   href="/login"
                   className="px-2 py-1.5 text-[13px] font-medium text-ink-soft hover:text-brand"
@@ -220,8 +220,15 @@ export function SiteHeader({
                   Log in
                 </Link>
                 <Link
+                  href="/forgot-password"
+                  className="px-2 py-1.5 text-[13px] font-medium text-ink-soft hover:text-brand"
+                >
+                  Forgot password
+                </Link>
+                <Link
                   href="/signup"
                   className="bg-brand px-3 py-1.5 text-[13px] font-semibold text-paper hover:bg-brand-deep"
+                  data-testid="auth-signup"
                 >
                   Sign up
                 </Link>
@@ -231,6 +238,7 @@ export function SiteHeader({
                 <button
                   type="submit"
                   className="px-2 py-1.5 text-[13px] font-medium text-ink-soft hover:text-brand"
+                  data-testid="auth-logout"
                 >
                   Log out
                 </button>

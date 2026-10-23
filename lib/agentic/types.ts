@@ -17,6 +17,32 @@ export type AgentToolName =
   | "propose_upsert_lease_party"
   | "draft_rental_agreement"
   | "propose_esign_send"
+  | "memory_list"
+  | "memory_remember"
+  | "memory_purge"
+
+export type AgentMemoryKind =
+  | "issue"
+  | "complaint_theme"
+  | "preferred_vendor"
+  | "tone_pref"
+  | "escalation_note"
+  | "dock_quirk"
+  | "job_outcome"
+  | "other"
+
+export type AgentMemoryEntry = {
+  id: string
+  tenantId: string
+  /** null = landlord-scoped (org-wide). */
+  propertyId: string | null
+  kind: AgentMemoryKind
+  title: string
+  body: string
+  createdAt: string
+  updatedAt: string
+  createdBy: string | null
+}
 
 export type ProposalStatus =
   | "pending"
@@ -34,6 +60,8 @@ export type AuditKind =
   | "fail"
   | "draft_apply"
   | "read"
+  | "memory_write"
+  | "memory_purge"
 
 export type AttributeCitation = {
   entity:

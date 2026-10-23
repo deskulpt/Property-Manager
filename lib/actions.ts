@@ -1,11 +1,12 @@
 "use server"
 
-import fs from "node:fs/promises"
-import path from "node:path"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
+import { getAuthProvider } from "@/lib/auth/provider"
+import { isSeatRole, seatCapabilities } from "@/lib/auth/seats"
+import { DEFAULT_PACKAGE, parsePackage } from "@/lib/auth/packages"
 import {
   decideProposal,
   stubAutofillListing,
@@ -32,6 +33,7 @@ import {
   createJob,
   createMarketDraft,
   decideApplication,
+  getInviteByToken,
   getUser,
   inviteLandlord,
   isPublicFormCountry,
@@ -40,9 +42,13 @@ import {
   payDue,
   publicFormCountries,
   addFloorLevel,
+  bindUnitMesh,
+  saveBuildingModel,
   saveFloorPlan,
   saveFloorPlanDraft,
   saveHotspots,
+  saveUnitMatterportUrl,
+  unbindUnitMesh,
   saveLateFeeRule,
   saveVerification,
   setAutopay,
@@ -119,6 +125,7 @@ import {
   setAdminSessionCookie,
   setAgentTenantCookie,
   setSessionCookie,
+  setSessionUserId,
 } from "@/lib/session"
 import { translateEnglishCatalog, writeLocaleFile } from "@/lib/translate"
 import { simulateMatch } from "@/lib/verification"
@@ -139,6 +146,7 @@ function issues(error: z.ZodError) {
 
 export type AuthFormState = {
   error?: string | null
+  message?: string | null
   fieldErrors?: Record<string, string>
 }
 
@@ -983,6 +991,7 @@ const TYPES = new Map([
   ["image/jpeg", "jpg"],
   ["image/webp", "webp"],
   ["image/gif", "gif"],
+  ["image/svg+xml", "svg"],
 ])
 
 export async function submitFloorPlan(formData: FormData) {
@@ -997,16 +1006,127 @@ export async function submitFloorPlan(formData: FormData) {
   if (file.size > 5_000_000) return
   const ext = TYPES.get(file.type)
   if (!ext) return
-  const name = `${propertyId}-${Date.now()}.${ext}`
-  const dir = path.join(process.cwd(), "data", "uploads")
-  await fs.mkdir(dir, { recursive: true })
-  const target = path.join(dir, name)
-  const resolved = path.resolve(target)
-  if (!resolved.startsWith(path.resolve(dir) + path.sep)) return
-  await fs.writeFile(resolved, Buffer.from(await file.arrayBuffer()))
-  const result = saveFloorPlan(user.tenantId, propertyId, `/files/${name}`)
+  const { getObjectStore } = await import("@/lib/object-store")
+  const bytes = Buffer.from(await file.arrayBuffer())
+  const stored = await getObjectStore().put({
+    tenantId: user.tenantId,
+    kind: "floorplans",
+    ext,
+    bytes,
+    contentType: file.type || "application/octet-stream",
+  })
+  const result = saveFloorPlan(user.tenantId, propertyId, stored.publicPath)
   if (!result.ok) return
   refresh([`/properties/${result.slug}`, `/landlord/properties/${propertyId}`])
+}
+
+export async function submitBuildingModel(formData: FormData): Promise<{
+  ok: boolean
+  error: string
+}> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) {
+    return { ok: false, error: "Switch to a landlord admin first." }
+  }
+  const propertyId = String(formData.get("propertyId") ?? "")
+  if (!/^[a-zA-Z0-9_-]+$/.test(propertyId)) {
+    return { ok: false, error: "Building not found in this organisation." }
+  }
+  const owned = propertyForLandlord(user.tenantId, propertyId)
+  if (!owned) return { ok: false, error: "Building not found in this organisation." }
+  const file = formData.get("buildingModel")
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: "Choose a GLB, glTF, IFC, or OBJ file." }
+  }
+  const bytes = Buffer.from(await file.arrayBuffer())
+  const { rejectReasonForModel, sniffModelKind, MODEL_CONTENT_TYPES } = await import(
+    "@/lib/model-sniff"
+  )
+  const reject = rejectReasonForModel(bytes, file.size)
+  if (reject) return { ok: false, error: reject }
+  const kind = sniffModelKind(bytes)!
+  const { getObjectStore } = await import("@/lib/object-store")
+  const stored = await getObjectStore().put({
+    tenantId: user.tenantId,
+    kind: "models",
+    ext: kind,
+    bytes,
+    contentType: MODEL_CONTENT_TYPES[kind],
+  })
+  const result = saveBuildingModel(
+    user.tenantId,
+    propertyId,
+    stored.publicPath,
+    kind === "gltf" ? "gltf" : kind,
+  )
+  if (!result.ok) return { ok: false, error: result.error }
+  refresh([`/properties/${result.slug}`, `/landlord/properties/${propertyId}`])
+  return { ok: true, error: "" }
+}
+
+export async function bindMeshAction(input: {
+  propertyId: string
+  unitId: string
+  meshKey: string
+  meshKind: "gltf_name" | "ifc_express_id" | "obj_name"
+}): Promise<{ ok: boolean; error: string }> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) {
+    return { ok: false, error: "Switch to a landlord admin first." }
+  }
+  const result = bindUnitMesh({
+    tenantId: user.tenantId,
+    propertyId: input.propertyId,
+    unitId: input.unitId,
+    meshKey: input.meshKey,
+    meshKind: input.meshKind,
+  })
+  if (!result.ok) return { ok: false, error: result.error }
+  refresh([`/properties/${result.slug}`, `/landlord/properties/${input.propertyId}`])
+  return { ok: true, error: "" }
+}
+
+export async function unbindMeshAction(input: {
+  propertyId: string
+  meshKey: string
+}): Promise<{ ok: boolean; error: string }> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) {
+    return { ok: false, error: "Switch to a landlord admin first." }
+  }
+  const result = unbindUnitMesh(user.tenantId, input.propertyId, input.meshKey)
+  if (!result.ok) return { ok: false, error: result.error }
+  refresh([`/properties/${result.slug}`, `/landlord/properties/${input.propertyId}`])
+  return { ok: true, error: "" }
+}
+
+export async function submitUnitMatterport(input: {
+  unitId: string
+  url: string
+}): Promise<{ ok: boolean; error: string }> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) {
+    return { ok: false, error: "Switch to a landlord admin first." }
+  }
+  const { matterportEmbedSrc } = await import("@/lib/matterport")
+  const trimmed = input.url.trim()
+  const normalised = trimmed === "" ? null : matterportEmbedSrc(trimmed)
+  if (trimmed && !normalised) {
+    return {
+      ok: false,
+      error: "Use an https://my.matterport.com/show/?m=… URL (Discover /space/ links are normalised).",
+    }
+  }
+  const result = saveUnitMatterportUrl(user.tenantId, input.unitId, normalised)
+  if (!result.ok) return { ok: false, error: result.error }
+  if (result.slug && result.propertyId) {
+    refresh([
+      `/properties/${result.slug}`,
+      `/properties/${result.slug}/units`,
+      `/landlord/properties/${result.propertyId}`,
+    ])
+  }
+  return { ok: true, error: "" }
 }
 
 export async function submitLateFeeRule(formData: FormData) {
@@ -1646,6 +1766,65 @@ export async function decideAskEasyProposal(
   return { ...askEasyInitial, error: "Choose Approve or Reject." }
 }
 
+export type AskEasyMemoryState = {
+  error: string | null
+  message: string | null
+  deleted: number | null
+}
+
+const askEasyMemoryInitial: AskEasyMemoryState = {
+  error: null,
+  message: null,
+  deleted: null,
+}
+
+/** L.1 — landlord self-service purge (DPDP erasure). */
+export async function purgeAskEasyMemory(
+  _prev: AskEasyMemoryState,
+  formData: FormData,
+): Promise<AskEasyMemoryState> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) {
+    return { ...askEasyMemoryInitial, error: "Switch to a landlord admin to purge memory." }
+  }
+  const { askEasyGateReason, purgeAgentMemory, writeAuditEvent } = await import("@/lib/agentic")
+  if (askEasyGateReason(user.tenantId) === "upgrade") {
+    return { ...askEasyMemoryInitial, error: "Ask Easy requires Pro or higher." }
+  }
+  const mode = String(formData.get("mode") ?? "")
+  const id = String(formData.get("id") ?? "")
+  const propertyId = String(formData.get("propertyId") ?? "")
+  let scope:
+    | { mode: "id"; id: string }
+    | { mode: "property"; propertyId: string }
+    | { mode: "landlord" }
+    | { mode: "all" }
+  if (mode === "id" && id) scope = { mode: "id", id }
+  else if (mode === "property" && propertyId) scope = { mode: "property", propertyId }
+  else if (mode === "landlord") scope = { mode: "landlord" }
+  else if (mode === "all") scope = { mode: "all" }
+  else return { ...askEasyMemoryInitial, error: "Choose what to purge." }
+
+  const result = purgeAgentMemory(user.tenantId, scope)
+  if (!result.ok) return { ...askEasyMemoryInitial, error: result.error }
+  writeAuditEvent({
+    tenantId: user.tenantId,
+    kind: "memory_purge",
+    summary: `UI purge · ${scope.mode} · deleted ${result.deleted}`,
+    detail: { scope, deleted: result.deleted },
+    actorUserId: user.id,
+  })
+  refresh(["/landlord/ask", "/landlord/ask-easy"])
+  return {
+    ...askEasyMemoryInitial,
+    deleted: result.deleted,
+    message:
+      result.deleted === 0
+        ? "Nothing to purge."
+        : `Purged ${result.deleted} memory row(s).`,
+  }
+}
+
 /* ── Ask Easy · Slice L.0 in-memory queue (kept for main stubs) ─ */
 
 export async function approveAgenticProposal(
@@ -2092,4 +2271,203 @@ export async function ensureMyReferralLink() {
   // Soft: allow staff / landlords to mint a demo referrer code tied to their user
   const ref = ensureReferrerForUser(user)
   return { ok: true as const, code: ref.code }
+}
+
+/* ─── Slice A SaaS auth actions ───────────────────────────────────── */
+
+type LandlordActor = NonNullable<Awaited<ReturnType<typeof getSessionUser>>> & {
+  tenantId: string
+}
+
+function requireLandlordCap(
+  user: Awaited<ReturnType<typeof getSessionUser>>,
+  cap: keyof NonNullable<ReturnType<typeof seatCapabilities>>,
+): LandlordActor | null {
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) return null
+  const caps = seatCapabilities(user.seatRole ?? "owner")
+  if (!caps?.[cap]) return null
+  return user as LandlordActor
+}
+
+const emptyAuth: AuthFormState = { error: null, message: null, fieldErrors: {} }
+
+export async function signUpAction(
+  _prev: AuthFormState,
+  formData: FormData,
+): Promise<AuthFormState> {
+  const name = String(formData.get("name") ?? "").trim()
+  const email = String(formData.get("email") ?? "").trim()
+  const password = String(formData.get("password") ?? "")
+  const parsed = z
+    .object({
+      name: z.string().min(2, "Enter your name"),
+      email: z.string().email("Enter a work email"),
+      password: z.string().min(8, "Use at least 8 characters"),
+    })
+    .safeParse({ name, email, password })
+  if (!parsed.success) {
+    return { ...emptyAuth, error: "Check the form.", fieldErrors: issues(parsed.error) }
+  }
+  const auth = getAuthProvider()
+  const result = await auth.signUp(parsed.data)
+  if (!result.ok) return { ...emptyAuth, error: result.error }
+  await setSessionUserId(result.userId)
+  {
+    const jar = await cookies()
+    jar.delete(ADMIN_SESSION_COOKIE)
+  }
+  revalidatePath("/", "layout")
+  redirect("/create-account")
+}
+
+export async function logInAction(
+  _prev: AuthFormState,
+  formData: FormData,
+): Promise<AuthFormState> {
+  const email = String(formData.get("email") ?? "").trim()
+  const password = String(formData.get("password") ?? "")
+  const auth = getAuthProvider()
+  const result = await auth.logIn({ email, password })
+  if (!result.ok) return { ...emptyAuth, error: result.error }
+  await setSessionUserId(result.userId)
+  if (canImpersonate(getUser(result.userId)?.roleLevel ?? 5)) {
+    await setAdminSessionCookie(result.userId)
+  } else {
+    const jar = await cookies()
+    jar.delete(ADMIN_SESSION_COOKIE)
+  }
+  revalidatePath("/", "layout")
+  const user = getUser(result.userId)
+  if (!user) redirect("/")
+  if (!user.onboardingComplete || user.role === "pending") {
+    redirect("/onboarding/role")
+  }
+  if (
+    user.roleLevel === 2 &&
+    !user.tenantIsDemo &&
+    !subscriptionAllowsDesk(user.tenantStatus)
+  ) {
+    redirect(`${SUBSCRIBE_PATH}?from=onboard`)
+  }
+  if (user.role === "landlord_admin" && user.tenantId) redirect("/landlord")
+  if (canOpenConsole(user.roleLevel)) redirect("/console")
+  if (user.role === "applicant") redirect("/account")
+  redirect(deskPathForLevel(user.roleLevel))
+}
+
+export async function logOutAction() {
+  await clearSessionCookies()
+  revalidatePath("/", "layout")
+  redirect("/")
+}
+
+export async function createAccountAction(
+  _prev: AuthFormState,
+  formData: FormData,
+): Promise<AuthFormState> {
+  const user = await getSessionUser()
+  if (!user) {
+    return { ...emptyAuth, error: "Sign up or log in before creating an organisation." }
+  }
+  const parsed = z
+    .object({
+      legalName: z.string().trim().min(2, "Enter the legal name"),
+      city: z.string().trim().min(2, "Enter a city"),
+      actingAs: z.string().trim().min(2, "Say who is acting"),
+      entityType: z.string().trim().min(2, "Enter an entity type"),
+      contactName: z.string().trim().min(2, "Enter a contact name"),
+      contactEmail: z.string().trim().email("Enter a contact email"),
+      country: z.string().trim().min(2),
+      packageId: z.string().optional(),
+    })
+    .safeParse({
+      legalName: formData.get("legalName"),
+      city: formData.get("city"),
+      actingAs: formData.get("actingAs"),
+      entityType: formData.get("entityType"),
+      contactName: formData.get("contactName") || user.name,
+      contactEmail: formData.get("contactEmail") || user.email,
+      country: formData.get("country"),
+      packageId: formData.get("packageId") || DEFAULT_PACKAGE,
+    })
+  if (!parsed.success) {
+    return { ...emptyAuth, error: "Check the organisation form.", fieldErrors: issues(parsed.error) }
+  }
+  const country = parsed.data.country
+  if (country.toLowerCase() !== "india" && country.toUpperCase() !== "IN") {
+    return {
+      ...emptyAuth,
+      error: "Public Create account is India-only until another market clears the checklist.",
+      fieldErrors: { country: "India only" },
+    }
+  }
+  const auth = getAuthProvider()
+  const result = await auth.createOrg(user.id, {
+    ...parsed.data,
+    packageId: parsePackage(parsed.data.packageId),
+  })
+  if (!result.ok) return { ...emptyAuth, error: result.error }
+  revalidatePath("/", "layout")
+  redirect("/landlord")
+}
+
+export async function forgotPasswordAction(
+  _prev: AuthFormState,
+  formData: FormData,
+): Promise<AuthFormState> {
+  const email = String(formData.get("email") ?? "").trim()
+  const auth = getAuthProvider()
+  const result = await auth.requestPasswordReset(email)
+  if (!result.ok) return { ...emptyAuth, error: result.error }
+  return {
+    ...emptyAuth,
+    message:
+      "If that email has an account, a demo reset notice was queued. Check the inbox (email_demo) — live SMTP is not wired yet.",
+  }
+}
+
+export async function inviteSeatAction(
+  _prev: AuthFormState,
+  formData: FormData,
+): Promise<AuthFormState> {
+  const user = requireLandlordCap(await getSessionUser(), "inviteSeats")
+  if (!user?.tenantId) {
+    return { ...emptyAuth, error: "Only an owner can invite teammates." }
+  }
+  const email = String(formData.get("email") ?? "").trim()
+  const seatRoleRaw = String(formData.get("seatRole") ?? "")
+  if (!isSeatRole(seatRoleRaw) || seatRoleRaw === "owner") {
+    return { ...emptyAuth, error: "Choose leasing manager, accountant, or viewer." }
+  }
+  const auth = getAuthProvider()
+  const result = await auth.inviteSeat({
+    tenantId: user.tenantId,
+    email,
+    seatRole: seatRoleRaw,
+    invitedByUserId: user.id,
+  })
+  if (!result.ok) return { ...emptyAuth, error: result.error }
+  refresh(["/landlord/settings", "/inbox"])
+  return {
+    ...emptyAuth,
+    message: `Invite sent to ${email}. Accept link: /invite/${result.token}`,
+  }
+}
+
+export async function acceptInviteAction(token: string) {
+  const user = await getSessionUser()
+  if (!user) {
+    redirect(`/login?next=${encodeURIComponent(`/invite/${token}`)}`)
+  }
+  const auth = getAuthProvider()
+  const result = await auth.acceptInvite(token, user.id)
+  if (!result.ok) {
+    redirect(`/invite/${token}?error=${encodeURIComponent(result.error)}`)
+  }
+  revalidatePath("/", "layout")
+  redirect("/landlord")
+}
+
+export async function previewInvite(token: string) {
+  return getInviteByToken(token)
 }

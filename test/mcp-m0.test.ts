@@ -31,16 +31,16 @@ describe("MCP M0 read-only tools", () => {
     expect(session.scopes).toContain("read:*")
   })
 
-  it("advertises only read tools for landlord; no mutate names", () => {
+  it("advertises M0 reads for landlord; CMS tools stay staff-only", () => {
     const session = demoSession("u_nadia")
     const names = toolsForSession(session).map((t) => t.name)
     expect(names).toContain("query_portfolio_summary")
     expect(names).toContain("query_ledger_summary")
     expect(names).toContain("get_application_status")
     expect(names).toContain("search_listings")
-    expect(names).not.toContain("propose_job_assignment")
     expect(names).not.toContain("cms_list_landlords")
-    expect(toolsForSession(session).every((t) => t.mutating === false)).toBe(true)
+    // M1 adds propose/approvals for landlord — covered in mcp-m1.test.ts
+    expect(session.scopes).toContain("read:*")
   })
 
   it("landlord portfolio summary is tenant-scoped to BBM", () => {

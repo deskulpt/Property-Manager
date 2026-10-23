@@ -1,6 +1,7 @@
 import "server-only"
 import { createHmac, timingSafeEqual } from "node:crypto"
 import { cookies } from "next/headers"
+import { demoAuthAllowed } from "@/lib/auth/mode"
 import { getUser } from "@/lib/db"
 import { canImpersonate } from "@/lib/role-level"
 import { requireSecretKey, sessionCookieOptions } from "@/lib/env"
@@ -90,4 +91,19 @@ export async function setAgentTenantCookie(tenantId: string) {
 export async function clearAgentTenantCookie() {
   const jar = await cookies()
   jar.delete(AGENT_TENANT_COOKIE)
+}
+
+/** Slice A helper — sets or clears the signed user session (not admin cookie). */
+export async function setSessionUserId(userId: string | null) {
+  if (!userId) {
+    const jar = await cookies()
+    jar.delete(SESSION_COOKIE)
+    return
+  }
+  await setSessionCookie(userId)
+}
+
+/** Demo identity switcher — blocked in hosted mode unless ALLOW_DEMO_AUTH=1. */
+export function demoSwitcherEnabled() {
+  return demoAuthAllowed()
 }

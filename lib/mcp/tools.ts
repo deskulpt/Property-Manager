@@ -12,7 +12,44 @@ import {
   searchListings,
   type SessionUser,
 } from "@/lib/db"
+import {
+  approvalToolsForSession,
+  canInvokeApprovalTool,
+  invokeApprovalTool,
+  MCP_M1_APPROVAL_TOOLS,
+  type McpApprovalResult,
+  type McpApprovalToolName,
+  type McpApprovalToolSpec,
+} from "@/lib/mcp/approvals"
+import {
+  canInvokeMutateTool,
+  invokeMutateTool,
+  MCP_M1_MUTATE_TOOLS,
+  mutateToolsForSession,
+  type McpM1MutateToolName,
+  type McpMutateResult,
+  type McpMutateToolSpec,
+} from "@/lib/mcp/mutate"
 import { sessionFromUser, type McpSession } from "@/lib/mcp/session"
+
+export {
+  MCP_M1_MUTATE_TOOLS,
+  invokeMutateTool,
+  mutateToolsForSession,
+  canInvokeMutateTool,
+  type McpM1MutateToolName,
+  type McpMutateResult,
+  type McpMutateToolSpec,
+}
+export {
+  MCP_M1_APPROVAL_TOOLS,
+  invokeApprovalTool,
+  approvalToolsForSession,
+  canInvokeApprovalTool,
+  type McpApprovalToolName,
+  type McpApprovalResult,
+  type McpApprovalToolSpec,
+}
 
 /** M0 read-only tool names — see docs/role-actions-mcp-surface.md §5. */
 export type McpM0ToolName =
@@ -26,9 +63,11 @@ export type McpM0ToolName =
   | "cms_list_applicants"
   | "cms_list_providers"
 
+export type McpToolName = McpM0ToolName | McpM1MutateToolName | McpApprovalToolName
+
 export type McpToolResult = {
   ok: boolean
-  tool: McpM0ToolName
+  tool: string
   error?: string
   data?: unknown
 }
@@ -40,6 +79,8 @@ export type McpToolSpec = {
   /** Role levels that may invoke this tool. null level = anonymous. */
   roleLevels: ReadonlyArray<number | null>
 }
+
+export type McpAnyToolSpec = McpToolSpec | McpMutateToolSpec | McpApprovalToolSpec
 
 export const MCP_M0_TOOLS: readonly McpToolSpec[] = [
   {
@@ -112,22 +153,53 @@ function staffSeatAllows(session: McpSession, name: McpM0ToolName): boolean {
   return true
 }
 
-export function toolsForSession(session: McpSession): McpToolSpec[] {
+/** M0 read tools only (kept for M0 tests). */
+export function toolsForSessionM0(session: McpSession): McpToolSpec[] {
   return MCP_M0_TOOLS.filter(
     (t) => t.roleLevels.includes(session.roleLevel) && staffSeatAllows(session, t.name),
   )
 }
 
+/** M0 + M1 tools advertised for this session. */
+export function toolsForSession(session: McpSession): McpAnyToolSpec[] {
+  return [
+    ...toolsForSessionM0(session),
+    ...mutateToolsForSession(session),
+    ...approvalToolsForSession(session),
+  ]
+}
+
 export function canInvokeTool(session: McpSession, name: string): boolean {
-  const spec = MCP_M0_TOOLS.find((t) => t.name === name)
-  if (!spec) return false
-  if (spec.mutating) return false
-  if (!spec.roleLevels.includes(session.roleLevel)) return false
-  return staffSeatAllows(session, spec.name)
+  if (MCP_M0_TOOLS.some((t) => t.name === name)) {
+    const spec = MCP_M0_TOOLS.find((t) => t.name === name)!
+    if (!spec.roleLevels.includes(session.roleLevel)) return false
+    return staffSeatAllows(session, spec.name)
+  }
+  if (canInvokeMutateTool(session, name)) return true
+  if (canInvokeApprovalTool(session, name)) return true
+  return false
 }
 
 /**
- * Invoke an M0 tool. Rejects unknown / mutating / unauthorized tools.
+ * Unified MCP invoke (M0 reads + M1 mutate/approvals).
+ * Ignores any client-supplied tenant_id — isolation uses session only.
+ */
+export function invokeMcpTool(
+  session: McpSession,
+  name: string,
+  args: Record<string, unknown> = {},
+): McpToolResult | McpMutateResult | McpApprovalResult {
+  if (MCP_M1_MUTATE_TOOLS.some((t) => t.name === name)) {
+    return invokeMutateTool(session, name, args)
+  }
+  if (MCP_M1_APPROVAL_TOOLS.some((t) => t.name === name)) {
+    return invokeApprovalTool(session, name, args)
+  }
+  return invokeM0Tool(session, name, args)
+}
+
+/**
+ * Invoke an M0 tool. Rejects unknown / unauthorized tools.
  * Ignores any client-supplied tenant_id — isolation uses session only.
  */
 export function invokeM0Tool(
@@ -139,7 +211,7 @@ export function invokeM0Tool(
     return { ok: false, tool: name as McpM0ToolName, error: `Unknown tool: ${name}` }
   }
   const tool = name as McpM0ToolName
-  if (!canInvokeTool(session, tool)) {
+  if (!canInvokeTool(session, tool) || !MCP_M0_TOOLS.some((t) => t.name === tool)) {
     return {
       ok: false,
       tool,

@@ -2,13 +2,12 @@ import type { Metadata, Viewport } from "next"
 import { IBM_Plex_Mono, Source_Sans_3, Source_Serif_4 } from "next/font/google"
 import "./globals.css"
 import { AdminSessionBar } from "@/components/admin/admin-session-bar"
-import { BrandLogo } from "@/components/brand-logo"
 import { SiteFooter } from "@/components/site-footer"
 import { SiteHeader } from "@/components/site-header"
 import { PwaRegister } from "@/components/pwa-register"
 import { Toaster } from "@/components/ui/sonner"
+import { shouldShowDemoSwitcher } from "@/lib/auth/provider"
 import { listSessionUsers, unreadCount } from "@/lib/db"
-import { t } from "@/lib/i18n"
 import { getAdminSessionUser, getSessionUser } from "@/lib/session"
 
 /** Helvetica-adjacent UI sans — professional, not display/stretched. */
@@ -54,6 +53,7 @@ export const viewport: Viewport = {
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const demoOn = shouldShowDemoSwitcher()
   const [users, session, adminSession] = await Promise.all([
     listSessionUsers(),
     getSessionUser(),
@@ -78,6 +78,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body
         className={`flex min-h-full flex-col bg-paper font-sans text-ink ${showAdminBar ? "pb-20" : ""}`}
       >
+        {demoOn && !showAdminBar ? (
+          <div
+            className="border-b border-amber-900/20 bg-amber-50 px-4 py-2 text-center font-mono text-[11px] uppercase tracking-[0.12em] text-amber-950"
+            data-testid="demo-auth-banner"
+          >
+            Demo identities — not for production. Set HOSTED=1 to require Sign up / Log in.
+          </div>
+        ) : null}
         <SiteHeader
           users={switchUsers}
           currentId={session?.id ?? ""}

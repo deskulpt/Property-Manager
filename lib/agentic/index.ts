@@ -31,6 +31,7 @@ export {
   createProposal,
   getProposal,
   markProposal,
+  updateProposalPayload,
   pendingProposals,
   proposalsForTenant,
   listingDraftsForTenant,
@@ -38,9 +39,20 @@ export {
   publishListingDraft,
 } from "@/lib/agentic/proposals"
 export { auditEventsForTenant, writeAuditEvent } from "@/lib/agentic/audit"
+export {
+  listAgentMemory,
+  upsertAgentMemory,
+  purgeAgentMemory,
+  purgeExpiredAgentMemory,
+  assertMemoryContentAllowed,
+  MEMORY_KINDS,
+  MEMORY_RETENTION_MS,
+} from "@/lib/agentic/memory"
 export type {
   AgentProposal,
   AgentAuditEvent,
+  AgentMemoryEntry,
+  AgentMemoryKind,
   ListingDraft,
   AgentToolName,
   ProposalStatus,
@@ -69,4 +81,20 @@ export {
   executeUnlistUnit,
   executeUpsertOccupantLedger,
 } from "@/lib/agentic/lease-onboard"
-export { getESignProvider, DemoESignAdapter, type ESignProvider } from "@/lib/agentic/esign"
+export {
+  getESignProvider,
+  setESignProvider,
+  resolveESignProviderFromEnv,
+  resolveESignProviderId,
+  readDigioCredentials,
+  readEmudhraCredentials,
+  buildDigioCreateRequest,
+  buildEmudhraCreateRequest,
+  DemoESignAdapter,
+  DigioESignAdapter,
+  EmudhraESignAdapter,
+  type ESignProvider,
+  type ESignProviderId,
+  type ESignSendRequest,
+  type ESignSigner,
+} from "@/lib/agentic/esign"

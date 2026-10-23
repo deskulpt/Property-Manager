@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
 /**
- * M0 MCP Streamable HTTP endpoint (JSON responses, stateless).
+ * MCP Streamable HTTP endpoint (M0 reads + M1 propose/approvals; JSON, stateless).
  * Auth: Authorization: Bearer demo:u_nadia  (or x-easyrental-mcp-token)
  */
 async function handle(req: Request): Promise<Response> {

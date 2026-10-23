@@ -24,7 +24,7 @@ export default async function LandlordLayout({ children }: { children: React.Rea
     return (
       <RoleGate
         title="Landlord desk"
-        body="Sign in with your landlord account. Public demo role hopping is disabled — create an account or log in."
+        body="Sign in with your landlord account, accept an org invite, or create an account at Sign up. Public demo role hopping is disabled."
         action={{ href: "/login?next=/landlord", label: "Log in" }}
       />
     )
@@ -56,8 +56,13 @@ export default async function LandlordLayout({ children }: { children: React.Rea
       />
     )
   }
+  const seatHint = user.seatRole ? ` · ${user.seatRole.replace("_", " ")}` : ""
   return (
-    <PortalFrame kicker="Landlord" title={user.tenantName ?? "Portfolio"} links={links}>
+    <PortalFrame
+      kicker="Landlord"
+      title={`${user.tenantName ?? "Portfolio"}${seatHint}`}
+      links={links}
+    >
       {children}
     </PortalFrame>
   )

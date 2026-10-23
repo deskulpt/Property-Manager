@@ -170,6 +170,43 @@ export function markProposal(
   return getProposal(tenantId, proposalId)
 }
 
+/**
+ * Edit a pending proposal payload in place (MCP `approvals.resolve` decision=edit).
+ * Does not execute — proposal stays pending until Approve.
+ */
+export function updateProposalPayload(input: {
+  tenantId: string
+  proposalId: string
+  actorUserId: string
+  payload: ToolPayload
+  promptSummary?: string
+}): { ok: true; proposal: AgentProposal } | { ok: false; error: string } {
+  const existing = getProposal(input.tenantId, input.proposalId)
+  if (!existing) return { ok: false, error: "not_found" }
+  if (existing.status !== "pending") {
+    return { ok: false, error: `Cannot edit a ${existing.status} proposal.` }
+  }
+  const summary = input.promptSummary?.trim() || existing.promptSummary
+  getDb()
+    .prepare(
+      `UPDATE agent_proposals
+       SET payload_json = ?, prompt_summary = ?
+       WHERE id = ? AND tenant_id = ? AND status = 'pending'`,
+    )
+    .run(JSON.stringify(input.payload), summary, input.proposalId, input.tenantId)
+  writeAuditEvent({
+    tenantId: input.tenantId,
+    kind: "propose",
+    proposalId: input.proposalId,
+    summary: `Edited pending ${existing.toolName}`,
+    detail: { toolName: existing.toolName, edit: true },
+    actorUserId: input.actorUserId,
+  })
+  const proposal = getProposal(input.tenantId, input.proposalId)
+  if (!proposal) return { ok: false, error: "Edit write failed." }
+  return { ok: true, proposal }
+}
+
 /** Soft-apply draft listing fields. Never sets published=1. */
 export function applyListingDraft(input: {
   tenantId: string

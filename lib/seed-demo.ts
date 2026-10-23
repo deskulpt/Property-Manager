@@ -134,9 +134,10 @@ export function seedDemoDatabase(db: Sql) {
   const property = db.prepare(
     `INSERT INTO properties (
       id, tenant_id, name, slug, address, area, city_line, total_sqft, segment, subtype,
-      floor_plan_path, model_path, latitude, longitude
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      floor_plan_path, model_path, model_kind, latitude, longitude
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
+  // Waterman ships a Kenney-style seed GLB (CC0-style demo shell) — see CREDITS / docs/seed-3d-models.md.
   property.run(
     "p_waterman",
     "t_bbm",
@@ -149,7 +150,8 @@ export function seedDemoDatabase(db: Sql) {
     "warehouse",
     "logistics_park",
     "/floorplans/waterman.svg",
-    null,
+    "/models/seed-commercial.glb",
+    "glb",
     19.2813,
     73.0483,
   )
@@ -164,6 +166,7 @@ export function seedDemoDatabase(db: Sql) {
     18000,
     "commercial",
     "mall_store",
+    null,
     null,
     null,
     17.4942,
@@ -182,6 +185,7 @@ export function seedDemoDatabase(db: Sql) {
     "apartment",
     null,
     null,
+    null,
     17.4326,
     78.4071,
   )
@@ -198,6 +202,7 @@ export function seedDemoDatabase(db: Sql) {
     "commercial",
     "office",
     "/floorplans/powai-plate.svg",
+    null,
     null,
     19.1197,
     72.9051,
@@ -417,6 +422,24 @@ export function seedDemoDatabase(db: Sql) {
     )
   })
 
+  // Unit ↔ mesh bindings for the seed GLB (mesh names = unit codes on seeded bays).
+  const meshBind = db.prepare(
+    `INSERT INTO unit_mesh_bindings (
+      id, tenant_id, property_id, unit_id, floor_id, mesh_key, mesh_kind
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  )
+  for (const code of ["A1", "A2", "B1", "B2"]) {
+    meshBind.run(
+      `mb_waterman_${code.toLowerCase()}`,
+      "t_bbm",
+      "p_waterman",
+      `u_waterman_${code.toLowerCase()}`,
+      null,
+      code,
+      "gltf_name",
+    )
+  }
+
   const media = db.prepare(
     `INSERT INTO unit_media (id, tenant_id, unit_id, kind, url, caption, sort_order)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -556,4 +579,56 @@ export function seedDemoDatabase(db: Sql) {
     `INSERT INTO languages (code, name, status, waiting_reason, created_at, updated_at)
      VALUES (?, ?, ?, NULL, ?, ?)`,
   ).run("en", "English", "ready", "2026-09-01T00:00:00.000Z", "2026-09-01T00:00:00.000Z")
+
+  // Ask Easy L.1 — demo memory (no KYC / Aadhaar). Landlord-scoped + property-scoped.
+  const mem = db.prepare(
+    `INSERT INTO agent_memory
+      (id, tenant_id, property_id, kind, title, body, created_at, updated_at, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+  const memAt = "2026-09-15T10:00:00.000Z"
+  mem.run(
+    "amem_bbm_tone",
+    "t_bbm",
+    null,
+    "tone_pref",
+    "Tone preference",
+    "Prefer concise, formal English replies; INR and SF units.",
+    memAt,
+    memAt,
+    "u_nadia",
+  )
+  mem.run(
+    "amem_bbm_vendor",
+    "t_bbm",
+    null,
+    "preferred_vendor",
+    "Preferred electrician",
+    "Prefer Vikram Deshmukh (Pune Electric) for weather-seal and dock lighting jobs when available.",
+    memAt,
+    memAt,
+    "u_nadia",
+  )
+  mem.run(
+    "amem_waterman_issue",
+    "t_bbm",
+    "p_waterman",
+    "issue",
+    "Recurring weather seal",
+    "North drive-in bay weather seal loosens each monsoon; schedule inspect before June.",
+    memAt,
+    memAt,
+    "u_nadia",
+  )
+  mem.run(
+    "amem_waterman_complaint",
+    "t_bbm",
+    "p_waterman",
+    "complaint_theme",
+    "Complaint theme · yard staging",
+    "Occupants complain about trailer staging blocking dock approach after 6pm.",
+    memAt,
+    memAt,
+    "u_nadia",
+  )
 }

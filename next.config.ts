@@ -10,9 +10,12 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
   experimental: {
     serverActions: {
-      bodySizeLimit: "8mb",
+      // IFC uploads capped at 50 MB (PRD §4.2); GLB/OBJ at 25 MB.
+      bodySizeLimit: "55mb",
     },
   },
+  // web-ifc WASM + R3F; do not pull AGPL xeokit.
+  serverExternalPackages: ["web-ifc"],
   // Resolve prebuilt easyrent-wasm `.wasm` for the landlord plan creator.
   turbopack: {
     resolveExtensions: [".tsx", ".ts", ".jsx", ".js", ".mjs", ".json", ".wasm"],

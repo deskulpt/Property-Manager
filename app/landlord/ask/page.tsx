@@ -5,6 +5,7 @@ import {
   auditEventsForTenant,
   leaseAgreementsForTenant,
   leasePartiesForTenant,
+  listAgentMemory,
   listingDraftsForTenant,
   liveModelConfigured,
   pendingProposals,
@@ -56,7 +57,7 @@ export default async function AskEasyPage() {
       <PageHeader
         kicker="Ask Easy"
         title="Landlord assistant"
-        lede="Unified desk: text or voice onboard that reads real listing attributes, then lease parties → jurisdiction agreement → eSign propose. Stub works offline; Approve gates every mutation. Not legal advice."
+        lede="Unified desk: text or voice onboard that reads real listing attributes, durable per-building memory (purge anytime), then lease parties → jurisdiction agreement → eSign propose. Stub works offline; Approve gates every mutation. Not legal advice. No Aadhaar images in memory."
       />
       <AskEasyPanel
         gated={gated}
@@ -65,6 +66,7 @@ export default async function AskEasyPage() {
         drafts={gated ? [] : listingDraftsForTenant(tenantId)}
         agreements={gated ? [] : leaseAgreementsForTenant(tenantId)}
         parties={gated ? [] : leasePartiesForTenant(tenantId)}
+        memory={gated ? [] : listAgentMemory(tenantId)}
         audit={gated ? [] : auditEventsForTenant(tenantId)}
         modelMode={liveModelConfigured() ? "live-ready" : "stub"}
         onboardSeed={onboardSeed}

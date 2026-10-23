@@ -1,5 +1,6 @@
 import { getUser, type SessionUser } from "@/lib/db"
 import type { Role } from "@/lib/format"
+import { MCP_EXECUTE_PREAUTH_SCOPE, MCP_PROPOSE_SCOPE } from "@/lib/mcp/policy"
 import { roleLevelFor, type RoleLevel } from "@/lib/mcp/role-level"
 
 /**
@@ -11,12 +12,16 @@ export type McpSession = {
   role: Role | "anonymous"
   roleLevel: RoleLevel | null
   tenantId: string | null
-  /** Always includes read:* for M0. Mutate scopes deferred to M1+. */
+  /**
+   * M0: `read:*`. M1 landlord/agent: + `propose:*`.
+   * `execute:preauthorized` is opt-in (env) and never unlocks never-auto tools.
+   */
   scopes: readonly string[]
   user: SessionUser | null
 }
 
 export const MCP_READ_SCOPE = "read:*" as const
+export { MCP_PROPOSE_SCOPE, MCP_EXECUTE_PREAUTH_SCOPE }
 
 export function anonymousSession(): McpSession {
   return {
@@ -29,13 +34,31 @@ export function anonymousSession(): McpSession {
   }
 }
 
+function scopesForUser(user: SessionUser): string[] {
+  const scopes: string[] = [MCP_READ_SCOPE]
+  const level = roleLevelFor(user.role)
+  // Landlord org + managing agent get propose (M1). Viewer seat matrix still Planned —
+  // today every landlord seed is flat landlord_admin.
+  if (level === 2 || level === 3) {
+    scopes.push(MCP_PROPOSE_SCOPE)
+  }
+  // Narrow preauth for non-never-auto soft drafts only (M2 foreshadow; off by default).
+  if (
+    (level === 2 || level === 3) &&
+    process.env.EASYRENTAL_MCP_EXECUTE_PREAUTH === "1"
+  ) {
+    scopes.push(MCP_EXECUTE_PREAUTH_SCOPE)
+  }
+  return scopes
+}
+
 export function sessionFromUser(user: SessionUser): McpSession {
   return {
     userId: user.id,
     role: user.role,
     roleLevel: roleLevelFor(user.role),
     tenantId: user.tenantId,
-    scopes: [MCP_READ_SCOPE],
+    scopes: scopesForUser(user),
     user,
   }
 }
