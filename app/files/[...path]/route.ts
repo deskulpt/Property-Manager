@@ -1,5 +1,6 @@
 import fs from "node:fs/promises"
 import path from "node:path"
+import { isSafeObjectKey } from "@/lib/object-store"
 
 const TYPES: Record<string, string> = {
   png: "image/png",
@@ -7,33 +8,48 @@ const TYPES: Record<string, string> = {
   jpeg: "image/jpeg",
   webp: "image/webp",
   gif: "image/gif",
+  svg: "image/svg+xml",
+  glb: "model/gltf-binary",
+  gltf: "model/gltf+json",
+  obj: "text/plain",
+  ifc: "application/x-step",
 }
 
 export async function GET(_request: Request, context: { params: Promise<{ path: string[] }> }) {
   const { path: parts } = await context.params
-  if (parts.length !== 1 || parts[0].includes("..") || parts[0].includes("/") || parts[0].includes("\\")) {
+  if (parts.length === 0 || parts.some((p) => p.includes("..") || p.includes("/") || p.includes("\\"))) {
     return new Response("Not found", { status: 404 })
   }
-  if (!/^[a-zA-Z0-9._-]+$/.test(parts[0])) {
+
+  const key = parts.join("/")
+  // Legacy flat uploads: single segment `name.ext`
+  // ObjectStore keys: `tenant/kind/name.ext`
+  const legacyOk =
+    parts.length === 1 && /^[a-zA-Z0-9._-]+$/.test(parts[0])
+  if (!legacyOk && !isSafeObjectKey(key)) {
     return new Response("Not found", { status: 404 })
   }
-  const ext = parts[0].split(".").pop()?.toLowerCase() ?? ""
+
+  const ext = parts[parts.length - 1]?.split(".").pop()?.toLowerCase() ?? ""
   if (!TYPES[ext]) {
     return new Response("Not found", { status: 404 })
   }
+
   const uploadsRoot = path.resolve(process.cwd(), "data", "uploads")
-  const filePath = path.resolve(uploadsRoot, parts[0])
+  const filePath = path.resolve(uploadsRoot, ...parts)
   if (!filePath.startsWith(uploadsRoot + path.sep)) {
     return new Response("Not found", { status: 404 })
   }
+
   try {
     const bytes = await fs.readFile(filePath)
+    const filename = parts[parts.length - 1]!.replace(/"/g, "")
     return new Response(bytes, {
       headers: {
         "Content-Type": TYPES[ext],
         "Cache-Control": "private, max-age=3600",
         "X-Content-Type-Options": "nosniff",
-        "Content-Disposition": `inline; filename="${parts[0].replace(/"/g, "")}"`,
+        "Content-Disposition": `inline; filename="${filename}"`,
       },
     })
   } catch {

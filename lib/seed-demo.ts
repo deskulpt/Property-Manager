@@ -134,9 +134,10 @@ export function seedDemoDatabase(db: Sql) {
   const property = db.prepare(
     `INSERT INTO properties (
       id, tenant_id, name, slug, address, area, city_line, total_sqft, segment, subtype,
-      floor_plan_path, model_path, latitude, longitude
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      floor_plan_path, model_path, model_kind, latitude, longitude
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
+  // Waterman ships a Kenney-style seed GLB (CC0-style demo shell) — see CREDITS / docs/seed-3d-models.md.
   property.run(
     "p_waterman",
     "t_bbm",
@@ -149,7 +150,8 @@ export function seedDemoDatabase(db: Sql) {
     "warehouse",
     "logistics_park",
     "/floorplans/waterman.svg",
-    null,
+    "/models/seed-commercial.glb",
+    "glb",
     19.2813,
     73.0483,
   )
@@ -164,6 +166,7 @@ export function seedDemoDatabase(db: Sql) {
     18000,
     "commercial",
     "mall_store",
+    null,
     null,
     null,
     17.4942,
@@ -182,6 +185,7 @@ export function seedDemoDatabase(db: Sql) {
     "apartment",
     null,
     null,
+    null,
     17.4326,
     78.4071,
   )
@@ -198,6 +202,7 @@ export function seedDemoDatabase(db: Sql) {
     "commercial",
     "office",
     "/floorplans/powai-plate.svg",
+    null,
     null,
     19.1197,
     72.9051,
@@ -416,6 +421,24 @@ export function seedDemoDatabase(db: Sql) {
       `${sqft.toLocaleString("en-IN")} SF commercial plate on ${floor.label}.`,
     )
   })
+
+  // Unit ↔ mesh bindings for the seed GLB (mesh names = unit codes on seeded bays).
+  const meshBind = db.prepare(
+    `INSERT INTO unit_mesh_bindings (
+      id, tenant_id, property_id, unit_id, floor_id, mesh_key, mesh_kind
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  )
+  for (const code of ["A1", "A2", "B1", "B2"]) {
+    meshBind.run(
+      `mb_waterman_${code.toLowerCase()}`,
+      "t_bbm",
+      "p_waterman",
+      `u_waterman_${code.toLowerCase()}`,
+      null,
+      code,
+      "gltf_name",
+    )
+  }
 
   const media = db.prepare(
     `INSERT INTO unit_media (id, tenant_id, unit_id, kind, url, caption, sort_order)

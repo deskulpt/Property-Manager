@@ -22,7 +22,8 @@ self.addEventListener("fetch", (event) => {
   const cacheable =
     url.pathname.startsWith("/media/") ||
     url.pathname.startsWith("/icons/") ||
-    url.pathname.startsWith("/floorplans/")
+    url.pathname.startsWith("/floorplans/") ||
+    url.pathname.startsWith("/models/")
   if (!cacheable) return
   event.respondWith(
     caches.open(CACHE).then(async (cache) => {

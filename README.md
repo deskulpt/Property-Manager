@@ -117,9 +117,18 @@ Unit B1 at BBM Bhiwandi Hub is the rich media example. The gallery tabs are:
 - **Walkthrough:** an interactive iframe. Easy Rental stores a Matterport show URL only (`units.matterport_url`). Seeded demos (PRD SaaS §4.6): B1 `PmWtWjyqpJs`, A2 `VpGQDT9DFjr`, C2 `caFmhpiUXSc`, H1 `7Fdpg6tCFwu`, U1 `U5p62iYcxeY` — all `https://my.matterport.com/show/?m=…`. No Matterport SDK or vendored assets. Other bays show an empty slot until a URL is set
 - **Map:** Leaflet + OpenStreetMap pins from property `latitude` / `longitude`. Clicks open generic Google Maps URLs. No Mapbox key
 
-### Floor plans
+### Floor plans and 3D buildings
 
-Seeded SVG plans live in `public/floorplans/`. A building page plots unit hotspots (available, offer pending, leased) and links through to the bay. Landlord admins upload a replacement plan and edit hotspot positions from the property page. Uploaded files stay on the machine running the server (`data/uploads/`).
+Seeded SVG plans live in `public/floorplans/`. A building page plots unit hotspots (available, offer pending, leased) and links through to the bay. Multi-floor properties (Demo Powai Tower, 8 levels) use a stacked peel viewer with a scrollable floor selector when there are more than five floors.
+
+Landlord **Building visuals** (`/landlord/properties/[id]`) has:
+
+1. **Plan creator** — orthogonal layout drafts (tenant-scoped)
+2. **Floor map (2D)** — hotspot editor (≤5 MB images via `ObjectStore` → `LocalDiskStore`)
+3. **3D model** — GLB / glTF / IFC / OBJ (caps: GLB/OBJ 25 MB, IFC 50 MB). react-three-fiber viewer; bind mesh name / IFC express ID → unit
+4. **Matterport link** — show URL only (Discover `/space/` normalised on save)
+
+Seed GLB: `public/models/seed-commercial.glb` on waterman with unit↔mesh bindings. Kenney CC0 + Duplex CC BY notes: `CREDITS.md`, `docs/seed-3d-models.md`. No xeokit (AGPL). S3 not required yet.
 
 ### Applications
 
@@ -132,7 +141,7 @@ Nadia's inbox is `/landlord/applications`. Approving Maya is the path covered by
 Requires a landlord admin. Demo: Nadia (DEMO · EasyRent Hyderabad). Real signups see only their organisation. Portal chrome uses a left accent rail and desk-scoped side nav.
 
 - `/landlord` overview
-- `/landlord/properties` and `/landlord/properties/[id]` buildings, floor plan, hotspots
+- `/landlord/properties` and `/landlord/properties/[id]` building visuals (plan creator, 2D, 3D, Matterport)
 - `/landlord/applications` inbox
 - `/landlord/jobs` concierge board (open, assigned, accepted, complete)
 - `/landlord/providers` approve a provider for this organisation
@@ -207,7 +216,7 @@ See [`docs/setup.md`](docs/setup.md), [`docs/architecture.md`](docs/architecture
 
 **MIT.** See `LICENSE`. Copyright 2026 DeSkulpt contributors.
 
-Open-source dependencies only, with one stated exception: **GSAP** is used under its no-fee standard licence for commercial and non-commercial use. It is not an OSI licence. Every other direct dependency is under an OSI licence. Pannellum is MIT. Matterport, if you paste a show URL, stays Matterport's service. This app only embeds an iframe.
+Open-source dependencies only, with one stated exception: **GSAP** is used under its no-fee standard licence for commercial and non-commercial use. It is not an OSI licence. Every other direct dependency is under an OSI licence (three.js / R3F MIT; web-ifc MPL-2.0). Pannellum is MIT. **xeokit (AGPL) is not used.** Matterport, if you paste a show URL, stays Matterport's service. This app only embeds an iframe.
 
 No API key is required to run the demo. A Google Cloud Translation key is optional and only used when a Super Admin adds a language.
 

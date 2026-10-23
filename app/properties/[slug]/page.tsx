@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
+import { BuildingModelDynamic } from "@/components/floor/building-model-dynamic"
 import { FloorPlanView } from "@/components/floor/floor-plan"
 import { FloorStackViewer } from "@/components/floor/floor-stack-viewer"
 import { PropertyMap } from "@/components/map/property-map"
@@ -52,13 +53,39 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
           markers={markers}
         />
       )}
-      {property.modelPath ? (
-        <p className="mt-3 font-mono text-[11px] uppercase tracking-wider text-ink-soft">
-          3D model on file · {property.modelPath} (GLB/IFC viewer lands next)
-        </p>
+      {property.modelPath && property.modelKind ? (
+        <section className="mt-10" data-testid="property-3d-section">
+          <h2 className="font-serif text-xl font-semibold">3D building</h2>
+          <p className="mt-1 text-sm text-ink-soft">
+            Interactive model for this property. Coloured bays are mapped to leasable units — click
+            through to apply.
+          </p>
+          <div className="mt-4">
+            <BuildingModelDynamic
+              url={property.modelPath}
+              kind={property.modelKind}
+              bindings={property.meshBindings.flatMap((binding) => {
+                const unit = property.units.find((u) => u.id === binding.unitId)
+                if (!unit) return []
+                return [
+                  {
+                    meshKey: binding.meshKey,
+                    unitId: unit.id,
+                    unitCode: unit.code,
+                    status: unit.status,
+                    ratePsf: unit.ratePsf,
+                    sqft: unit.sqft,
+                    href: `/properties/${property.slug}/units/${unit.code}`,
+                  },
+                ]
+              })}
+              mode="public"
+            />
+          </div>
+        </section>
       ) : multiFloor ? (
         <p className="mt-3 font-mono text-[11px] uppercase tracking-wider text-ink-soft">
-          Progressive 2D stack · GLB/IFC upload slot reserved on the property record
+          Progressive 2D stack · upload a GLB/IFC on the landlord building visuals desk
         </p>
       ) : null}
       <div className="mt-4 flex flex-wrap gap-4 font-mono text-[11px] uppercase tracking-wider text-ink-soft">

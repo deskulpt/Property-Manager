@@ -15,6 +15,7 @@
 
 # next.js
 /.next/
+/.next-slice-b/
 /.next-e2e/
 /test-results/
 /playwright-report/

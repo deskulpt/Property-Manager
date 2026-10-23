@@ -65,7 +65,7 @@ import {
   type RewardStatus,
 } from "@/lib/referrals"
 
-const SEED_VERSION = "20"
+const SEED_VERSION = "21"
 
 function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
@@ -145,6 +145,19 @@ export type FloorRecord = {
   planDraftJson: string | null
 }
 
+/** Plan alias: `floors` is the Slice B floor_levels table. */
+export type FloorLevelRecord = FloorRecord
+
+export type MeshBindingRecord = {
+  id: string
+  tenantId: string
+  propertyId: string
+  unitId: string
+  floorId: string | null
+  meshKey: string
+  meshKind: "gltf_name" | "ifc_express_id" | "obj_name"
+}
+
 export type UnitRecord = {
   id: string
   tenantId: string
@@ -195,11 +208,13 @@ export type PropertyRecord = {
   subtype: string
   floorPlanPath: string | null
   modelPath: string | null
+  modelKind: "glb" | "gltf" | "ifc" | "obj" | null
   latitude: number | null
   longitude: number | null
   pinCode: string | null
   floors: FloorRecord[]
   units: UnitRecord[]
+  meshBindings: MeshBindingRecord[]
 }
 
 type Sql = DatabaseSync
@@ -422,6 +437,7 @@ function createSchema(db: Sql) {
       subtype TEXT NOT NULL DEFAULT 'logistics_park',
       floor_plan_path TEXT,
       model_path TEXT,
+      model_kind TEXT,
       latitude REAL,
       longitude REAL,
       pin_code TEXT
@@ -435,6 +451,16 @@ function createSchema(db: Sql) {
       plan_path TEXT,
       plan_draft_json TEXT,
       UNIQUE (property_id, level_index)
+    );
+    CREATE TABLE unit_mesh_bindings (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      property_id TEXT NOT NULL,
+      unit_id TEXT NOT NULL,
+      floor_id TEXT,
+      mesh_key TEXT NOT NULL,
+      mesh_kind TEXT NOT NULL,
+      UNIQUE (property_id, mesh_key)
     );
     CREATE TABLE visit_requests (
       id TEXT PRIMARY KEY,
@@ -895,6 +921,8 @@ function createSchema(db: Sql) {
     CREATE INDEX idx_units_tenant ON units(tenant_id);
     CREATE INDEX idx_units_property ON units(property_id);
     CREATE INDEX idx_floors_property ON floors(property_id);
+    CREATE INDEX idx_mesh_bindings_property ON unit_mesh_bindings(property_id);
+    CREATE INDEX idx_mesh_bindings_unit ON unit_mesh_bindings(unit_id);
     CREATE INDEX idx_apps_tenant ON applications(tenant_id, status);
     CREATE INDEX idx_apps_applicant ON applications(applicant_id);
     CREATE INDEX idx_jobs_tenant ON jobs(tenant_id, status);
@@ -951,6 +979,7 @@ function reset(db: Sql) {
     "shop_skus",
     "shop_settings",
     "unit_media",
+    "unit_mesh_bindings",
     "units",
     "floors",
     "properties",
@@ -1638,10 +1667,31 @@ function floorsFor(propertyId: string): FloorRecord[] {
   )
 }
 
+function meshBindingsFor(propertyId: string): MeshBindingRecord[] {
+  return asRows(
+    getDb()
+      .prepare(
+        "SELECT * FROM unit_mesh_bindings WHERE property_id = ? ORDER BY mesh_key",
+      )
+      .all(propertyId),
+  ).map(
+    (row): MeshBindingRecord => ({
+      id: String(row.id),
+      tenantId: String(row.tenant_id),
+      propertyId: String(row.property_id),
+      unitId: String(row.unit_id),
+      floorId: str(row, "floor_id"),
+      meshKey: String(row.mesh_key),
+      meshKind: String(row.mesh_kind) as MeshBindingRecord["meshKind"],
+    }),
+  )
+}
+
 function mapProperty(row: Record<string, unknown>): PropertyRecord {
   const id = String(row.id)
   const segmentRaw = String(row.segment ?? "warehouse")
   const segment: PropertySegment = isPropertySegment(segmentRaw) ? segmentRaw : "warehouse"
+  const kind = str(row, "model_kind")
   return {
     id,
     tenantId: String(row.tenant_id),
@@ -1656,11 +1706,14 @@ function mapProperty(row: Record<string, unknown>): PropertyRecord {
     subtype: String(row.subtype ?? "logistics_park"),
     floorPlanPath: str(row, "floor_plan_path"),
     modelPath: str(row, "model_path"),
+    modelKind:
+      kind === "glb" || kind === "gltf" || kind === "ifc" || kind === "obj" ? kind : null,
     latitude: num(row, "latitude"),
     longitude: num(row, "longitude"),
     pinCode: str(row, "pin_code"),
     floors: floorsFor(id),
     units: unitsFor(id, segment),
+    meshBindings: meshBindingsFor(id),
   }
 }
 
@@ -2997,8 +3050,8 @@ export function createPropertyForLandlord(input: {
     tx.prepare(
       `INSERT INTO properties (
         id, tenant_id, name, slug, address, area, city_line, total_sqft, segment, subtype,
-        floor_plan_path, model_path, latitude, longitude
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)`,
+        floor_plan_path, model_path, model_kind, latitude, longitude
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?)`,
     ).run(
       propertyId,
       input.tenantId,
@@ -3112,6 +3165,121 @@ export function addFloorLevel(
     )
     .run(id, tenantId, propertyId, label, nextIndex)
   return { ok: true as const, slug: property.slug, floorId: id, levelIndex: nextIndex, label }
+}
+
+export function saveBuildingModel(
+  tenantId: string,
+  propertyId: string,
+  publicPath: string,
+  modelKind: "glb" | "gltf" | "ifc" | "obj",
+) {
+  const property = propertyForLandlord(tenantId, propertyId)
+  if (!property) return { ok: false as const, error: "Building not found in this organisation." }
+  getDb()
+    .prepare(
+      "UPDATE properties SET model_path = ?, model_kind = ? WHERE id = ? AND tenant_id = ?",
+    )
+    .run(publicPath, modelKind, propertyId, tenantId)
+  // New model invalidates prior mesh keys — clear bindings for this building.
+  getDb()
+    .prepare("DELETE FROM unit_mesh_bindings WHERE property_id = ? AND tenant_id = ?")
+    .run(propertyId, tenantId)
+  return { ok: true as const, slug: property.slug }
+}
+
+export function saveUnitMatterportUrl(
+  tenantId: string,
+  unitId: string,
+  matterportUrl: string | null,
+) {
+  const unit = asRow(
+    getDb()
+      .prepare("SELECT id, property_id FROM units WHERE id = ? AND tenant_id = ?")
+      .get(unitId, tenantId),
+  )
+  if (!unit) return { ok: false as const, error: "Unit not found in this organisation." }
+  getDb()
+    .prepare("UPDATE units SET matterport_url = ? WHERE id = ? AND tenant_id = ?")
+    .run(matterportUrl, unitId, tenantId)
+  const property = propertyForLandlord(tenantId, String(unit.property_id))
+  return { ok: true as const, slug: property?.slug ?? null, propertyId: String(unit.property_id) }
+}
+
+export function bindUnitMesh(input: {
+  tenantId: string
+  propertyId: string
+  unitId: string
+  meshKey: string
+  meshKind: MeshBindingRecord["meshKind"]
+  activeFloorId?: string | null
+}): { ok: true; slug: string } | { ok: false; error: string } {
+  const property = propertyForLandlord(input.tenantId, input.propertyId)
+  if (!property) return { ok: false, error: "Building not found in this organisation." }
+  const unit = property.units.find((u) => u.id === input.unitId)
+  if (!unit) return { ok: false, error: "Unit not found in this organisation." }
+
+  if (input.activeFloorId && unit.floorId && unit.floorId !== input.activeFloorId) {
+    return {
+      ok: false,
+      error: `Unit ${unit.code} belongs to another floor. Switch the floor selector before binding.`,
+    }
+  }
+
+  const meshKey = input.meshKey.trim()
+  if (!meshKey || meshKey.length > 200) {
+    return { ok: false, error: "Pick a mesh in the 3D viewer first." }
+  }
+
+  const db = getDb()
+  const existing = asRow(
+    db
+      .prepare(
+        "SELECT id, unit_id FROM unit_mesh_bindings WHERE property_id = ? AND mesh_key = ?",
+      )
+      .get(input.propertyId, meshKey),
+  )
+  if (existing && String(existing.unit_id) !== input.unitId) {
+    return { ok: false, error: "That mesh is already linked to another unit." }
+  }
+
+  if (existing) {
+    db.prepare(
+      `UPDATE unit_mesh_bindings
+       SET unit_id = ?, floor_id = ?, mesh_kind = ?
+       WHERE id = ? AND tenant_id = ?`,
+    ).run(input.unitId, unit.floorId, input.meshKind, String(existing.id), input.tenantId)
+  } else {
+    db.prepare(
+      `INSERT INTO unit_mesh_bindings (
+        id, tenant_id, property_id, unit_id, floor_id, mesh_key, mesh_kind
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      crypto.randomUUID(),
+      input.tenantId,
+      input.propertyId,
+      input.unitId,
+      unit.floorId,
+      meshKey,
+      input.meshKind,
+    )
+  }
+  return { ok: true, slug: property.slug }
+}
+
+export function unbindUnitMesh(
+  tenantId: string,
+  propertyId: string,
+  meshKey: string,
+): { ok: true; slug: string } | { ok: false; error: string } {
+  const property = propertyForLandlord(tenantId, propertyId)
+  if (!property) return { ok: false, error: "Building not found in this organisation." }
+  const result = getDb()
+    .prepare(
+      "DELETE FROM unit_mesh_bindings WHERE tenant_id = ? AND property_id = ? AND mesh_key = ?",
+    )
+    .run(tenantId, propertyId, meshKey)
+  if (result.changes === 0) return { ok: false, error: "No binding for that mesh." }
+  return { ok: true, slug: property.slug }
 }
 
 export function saveLateFeeRule(

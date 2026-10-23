@@ -1,7 +1,5 @@
 "use server"
 
-import fs from "node:fs/promises"
-import path from "node:path"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
@@ -44,9 +42,13 @@ import {
   payDue,
   publicFormCountries,
   addFloorLevel,
+  bindUnitMesh,
+  saveBuildingModel,
   saveFloorPlan,
   saveFloorPlanDraft,
   saveHotspots,
+  saveUnitMatterportUrl,
+  unbindUnitMesh,
   saveLateFeeRule,
   saveVerification,
   setAutopay,
@@ -989,6 +991,7 @@ const TYPES = new Map([
   ["image/jpeg", "jpg"],
   ["image/webp", "webp"],
   ["image/gif", "gif"],
+  ["image/svg+xml", "svg"],
 ])
 
 export async function submitFloorPlan(formData: FormData) {
@@ -1003,16 +1006,127 @@ export async function submitFloorPlan(formData: FormData) {
   if (file.size > 5_000_000) return
   const ext = TYPES.get(file.type)
   if (!ext) return
-  const name = `${propertyId}-${Date.now()}.${ext}`
-  const dir = path.join(process.cwd(), "data", "uploads")
-  await fs.mkdir(dir, { recursive: true })
-  const target = path.join(dir, name)
-  const resolved = path.resolve(target)
-  if (!resolved.startsWith(path.resolve(dir) + path.sep)) return
-  await fs.writeFile(resolved, Buffer.from(await file.arrayBuffer()))
-  const result = saveFloorPlan(user.tenantId, propertyId, `/files/${name}`)
+  const { getObjectStore } = await import("@/lib/object-store")
+  const bytes = Buffer.from(await file.arrayBuffer())
+  const stored = await getObjectStore().put({
+    tenantId: user.tenantId,
+    kind: "floorplans",
+    ext,
+    bytes,
+    contentType: file.type || "application/octet-stream",
+  })
+  const result = saveFloorPlan(user.tenantId, propertyId, stored.publicPath)
   if (!result.ok) return
   refresh([`/properties/${result.slug}`, `/landlord/properties/${propertyId}`])
+}
+
+export async function submitBuildingModel(formData: FormData): Promise<{
+  ok: boolean
+  error: string
+}> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) {
+    return { ok: false, error: "Switch to a landlord admin first." }
+  }
+  const propertyId = String(formData.get("propertyId") ?? "")
+  if (!/^[a-zA-Z0-9_-]+$/.test(propertyId)) {
+    return { ok: false, error: "Building not found in this organisation." }
+  }
+  const owned = propertyForLandlord(user.tenantId, propertyId)
+  if (!owned) return { ok: false, error: "Building not found in this organisation." }
+  const file = formData.get("buildingModel")
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: "Choose a GLB, glTF, IFC, or OBJ file." }
+  }
+  const bytes = Buffer.from(await file.arrayBuffer())
+  const { rejectReasonForModel, sniffModelKind, MODEL_CONTENT_TYPES } = await import(
+    "@/lib/model-sniff"
+  )
+  const reject = rejectReasonForModel(bytes, file.size)
+  if (reject) return { ok: false, error: reject }
+  const kind = sniffModelKind(bytes)!
+  const { getObjectStore } = await import("@/lib/object-store")
+  const stored = await getObjectStore().put({
+    tenantId: user.tenantId,
+    kind: "models",
+    ext: kind,
+    bytes,
+    contentType: MODEL_CONTENT_TYPES[kind],
+  })
+  const result = saveBuildingModel(
+    user.tenantId,
+    propertyId,
+    stored.publicPath,
+    kind === "gltf" ? "gltf" : kind,
+  )
+  if (!result.ok) return { ok: false, error: result.error }
+  refresh([`/properties/${result.slug}`, `/landlord/properties/${propertyId}`])
+  return { ok: true, error: "" }
+}
+
+export async function bindMeshAction(input: {
+  propertyId: string
+  unitId: string
+  meshKey: string
+  meshKind: "gltf_name" | "ifc_express_id" | "obj_name"
+}): Promise<{ ok: boolean; error: string }> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) {
+    return { ok: false, error: "Switch to a landlord admin first." }
+  }
+  const result = bindUnitMesh({
+    tenantId: user.tenantId,
+    propertyId: input.propertyId,
+    unitId: input.unitId,
+    meshKey: input.meshKey,
+    meshKind: input.meshKind,
+  })
+  if (!result.ok) return { ok: false, error: result.error }
+  refresh([`/properties/${result.slug}`, `/landlord/properties/${input.propertyId}`])
+  return { ok: true, error: "" }
+}
+
+export async function unbindMeshAction(input: {
+  propertyId: string
+  meshKey: string
+}): Promise<{ ok: boolean; error: string }> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) {
+    return { ok: false, error: "Switch to a landlord admin first." }
+  }
+  const result = unbindUnitMesh(user.tenantId, input.propertyId, input.meshKey)
+  if (!result.ok) return { ok: false, error: result.error }
+  refresh([`/properties/${result.slug}`, `/landlord/properties/${input.propertyId}`])
+  return { ok: true, error: "" }
+}
+
+export async function submitUnitMatterport(input: {
+  unitId: string
+  url: string
+}): Promise<{ ok: boolean; error: string }> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) {
+    return { ok: false, error: "Switch to a landlord admin first." }
+  }
+  const { matterportEmbedSrc } = await import("@/lib/matterport")
+  const trimmed = input.url.trim()
+  const normalised = trimmed === "" ? null : matterportEmbedSrc(trimmed)
+  if (trimmed && !normalised) {
+    return {
+      ok: false,
+      error: "Use an https://my.matterport.com/show/?m=… URL (Discover /space/ links are normalised).",
+    }
+  }
+  const result = saveUnitMatterportUrl(user.tenantId, input.unitId, normalised)
+  if (!result.ok) return { ok: false, error: result.error }
+  if (result.slug && result.propertyId) {
+    refresh([
+      `/properties/${result.slug}`,
+      `/properties/${result.slug}/units`,
+      `/landlord/properties/${result.propertyId}`,
+    ])
+  }
+  return { ok: true, error: "" }
 }
 
 export async function submitLateFeeRule(formData: FormData) {
