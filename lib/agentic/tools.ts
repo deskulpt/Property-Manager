@@ -18,9 +18,25 @@ import type {
   AgentToolName,
   AttributeCitation,
   DraftListingPayload,
+  DraftRentalAgreementPayload,
+  LeaseAgreement,
+  LeaseParty,
   ListingDraft,
+  ProposeEsignSendPayload,
   ProposeJobPayload,
+  ProposeListUnitPayload,
+  ProposeUnlistUnitPayload,
+  UpsertLeasePartyPayload,
+  UpsertOccupantLedgerPayload,
 } from "@/lib/agentic/types"
+import {
+  draftRentalAgreement,
+  extractOnboardHints,
+  leaseAgreementById,
+  leaseAgreementsForTenant,
+  leasePartiesForUnit,
+} from "@/lib/agentic/lease-onboard"
+import { resolveLawNotes, type JurisdictionCountry } from "@/lib/agentic/jurisdictions"
 
 /**
  * ADK-style thin tool registry — wrappers around Easy Rental commands only.
@@ -64,6 +80,44 @@ export type ToolDispatchResult =
       citations?: AttributeCitation[]
     }
   | (ReadToolResult & { citations: AttributeCitation[] })
+  | {
+      kind: "propose_list_unit"
+      proposal: AgentProposal
+      reply: string
+      citations?: AttributeCitation[]
+    }
+  | {
+      kind: "propose_unlist_unit"
+      proposal: AgentProposal
+      reply: string
+      citations?: AttributeCitation[]
+    }
+  | {
+      kind: "propose_upsert_occupant_ledger"
+      proposal: AgentProposal
+      reply: string
+      citations?: AttributeCitation[]
+    }
+  | {
+      kind: "propose_upsert_lease_party"
+      proposal: AgentProposal
+      reply: string
+      citations?: AttributeCitation[]
+    }
+  | {
+      kind: "draft_rental_agreement"
+      proposal: AgentProposal
+      agreement: LeaseAgreement
+      parties: LeaseParty[]
+      reply: string
+      citations?: AttributeCitation[]
+    }
+  | {
+      kind: "propose_esign_send"
+      proposal: AgentProposal
+      reply: string
+      citations?: AttributeCitation[]
+    }
   | { kind: "error"; error: string; citations?: AttributeCitation[] }
 
 export const ASK_EASY_TOOLS: readonly ToolDefinition[] = [
@@ -128,6 +182,48 @@ export const ASK_EASY_TOOLS: readonly ToolDefinition[] = [
     mutating: true,
     requiresApproval: true,
   },
+  {
+    name: "propose_list_unit",
+    description:
+      "Propose listing a unit as publicly available. Never auto-publishes or notifies.",
+    mutating: true,
+    requiresApproval: true,
+  },
+  {
+    name: "propose_unlist_unit",
+    description:
+      "Propose delisting a unit from the public catalog (hold). Never auto-notifies.",
+    mutating: true,
+    requiresApproval: true,
+  },
+  {
+    name: "propose_upsert_occupant_ledger",
+    description:
+      "Propose occupant details + optional rent ledger seed. Money lines only after Approve.",
+    mutating: true,
+    requiresApproval: true,
+  },
+  {
+    name: "propose_upsert_lease_party",
+    description:
+      "Propose primary/secondary/guarantor lease party (name, email, phone, address).",
+    mutating: true,
+    requiresApproval: true,
+  },
+  {
+    name: "draft_rental_agreement",
+    description:
+      "Draft a jurisdiction-aware standard rental agreement (IN/CA) from parties + unit. Soft draft; not legal advice.",
+    mutating: false,
+    requiresApproval: false,
+  },
+  {
+    name: "propose_esign_send",
+    description:
+      "Propose sending the draft agreement via demo eSign (Digio/eMudhra/DocuSign later). Never auto-sends.",
+    mutating: true,
+    requiresApproval: true,
+  },
 ] as const
 
 export function getTool(name: AgentToolName): ToolDefinition | undefined {
@@ -156,6 +252,22 @@ function resolveProperty(ctx: ToolContext) {
       ? listPortfolio().find((p) => p.id === ctx.propertyId && p.tenantId === ctx.tenantId)
       : null) ?? firstProperty(ctx.tenantId)
   )
+}
+
+function resolveUnit(
+  property: NonNullable<ReturnType<typeof resolveProperty>>,
+  ctx: ToolContext,
+) {
+  return (
+    (ctx.unitId ? property.units.find((u) => u.id === ctx.unitId) : null) ??
+    property.units.find((u) => u.status === "available") ??
+    property.units[0] ??
+    null
+  )
+}
+
+function monthlyRentCents(ratePsf: number, sqft: number) {
+  return Math.round(ratePsf * sqft * 100)
 }
 
 export function resolveTrade(prompt: string): Trade {
@@ -279,6 +391,214 @@ export function dispatchTool(
       reply: `Proposed assigning ${provider.name} (${trade}) at ${property.name}. Waiting in the approval queue — reject leaves no job; approve runs the concierge command.`,
     }
   }
+
+
+  const hints = extractOnboardHints(ctx.prompt)
+  const o = (overrides ?? {}) as Record<string, unknown>
+
+  if (toolName === "propose_list_unit" || toolName === "propose_unlist_unit") {
+    const unit = resolveUnit(property, ctx)
+    if (!unit) return { kind: "error", error: "Pick a bay to list or delist." }
+    const payload: ProposeListUnitPayload | ProposeUnlistUnitPayload = {
+      propertyId: property.id,
+      unitId: (o.unitId as string | undefined) ?? unit.id,
+    }
+    const proposal = createProposal({
+      tenantId: ctx.tenantId,
+      toolName,
+      payload,
+      promptSummary: ctx.prompt.slice(0, 200),
+      createdBy: ctx.userId,
+      requiresApproval: true,
+    })
+    const verb = toolName === "propose_list_unit" ? "list" : "delist"
+    return {
+      kind: toolName,
+      proposal,
+      reply: `Proposed to ${verb} Unit ${unit.code} at ${property.name}. Approve to apply — never auto-notifies applicants.`,
+    }
+  }
+
+  if (toolName === "propose_upsert_occupant_ledger") {
+    const unit = resolveUnit(property, ctx)
+    if (!unit) return { kind: "error", error: "Pick a bay for the occupant / ledger seed." }
+    const name =
+      (o.name as string | undefined) ??
+      hints.name ??
+      "New Occupant"
+    const email =
+      (o.email as string | undefined) ??
+      hints.email ??
+      `occupant+${unit.code.toLowerCase()}@example.com`
+    const payload: UpsertOccupantLedgerPayload = {
+      propertyId: property.id,
+      unitId: (o.unitId as string | undefined) ?? unit.id,
+      userId: (o.userId as string | undefined) ?? null,
+      name,
+      email,
+      phone: (o.phone as string | undefined) ?? hints.phone,
+      company: o.company as string | undefined,
+      seedRentCents:
+        typeof o.seedRentCents === "number"
+          ? o.seedRentCents
+          : monthlyRentCents(unit.ratePsf, unit.sqft),
+      dueOn: o.dueOn as string | undefined,
+      description: o.description as string | undefined,
+    }
+    const proposal = createProposal({
+      tenantId: ctx.tenantId,
+      toolName: "propose_upsert_occupant_ledger",
+      payload,
+      promptSummary: ctx.prompt.slice(0, 200),
+      createdBy: ctx.userId,
+      requiresApproval: true,
+    })
+    return {
+      kind: "propose_upsert_occupant_ledger",
+      proposal,
+      reply: `Proposed occupant ${name} <${email}> on Unit ${unit.code} with a rent ledger seed. Approve to write — reject leaves ledger unchanged.`,
+    }
+  }
+
+  if (toolName === "propose_upsert_lease_party") {
+    const unit = resolveUnit(property, ctx)
+    if (!unit) return { kind: "error", error: "Pick a bay for the lease party." }
+    const role =
+      (o.role as UpsertLeasePartyPayload["role"] | undefined) ??
+      hints.role ??
+      "primary"
+    const name = (o.name as string | undefined) ?? hints.name ?? "Lease Party"
+    const email =
+      (o.email as string | undefined) ??
+      hints.email ??
+      `${role}+${unit.code.toLowerCase()}@example.com`
+    const payload: UpsertLeasePartyPayload = {
+      propertyId: property.id,
+      unitId: (o.unitId as string | undefined) ?? unit.id,
+      partyId: (o.partyId as string | undefined) ?? null,
+      role,
+      name,
+      email,
+      phone: (o.phone as string | undefined) ?? hints.phone,
+      addressLine1: o.addressLine1 as string | undefined,
+      addressLine2: o.addressLine2 as string | undefined,
+      city: o.city as string | undefined,
+      region: (o.region as string | undefined) ?? hints.region,
+      postalCode: o.postalCode as string | undefined,
+      country: (o.country as string | undefined) ?? hints.country,
+    }
+    const proposal = createProposal({
+      tenantId: ctx.tenantId,
+      toolName: "propose_upsert_lease_party",
+      payload,
+      promptSummary: ctx.prompt.slice(0, 200),
+      createdBy: ctx.userId,
+      requiresApproval: true,
+    })
+    return {
+      kind: "propose_upsert_lease_party",
+      proposal,
+      reply: `Proposed ${role} party ${name} <${email}> on Unit ${unit.code}. Approve to persist — tenant-scoped; reject writes nothing.`,
+    }
+  }
+
+  if (toolName === "draft_rental_agreement") {
+    const unit = resolveUnit(property, ctx)
+    if (!unit) return { kind: "error", error: "Pick a bay to draft the rental agreement." }
+    const country =
+      ((o.country as string | undefined) ?? hints.country ?? "IN") as JurisdictionCountry
+    const region = (o.region as string | undefined) ?? hints.region ?? (country === "CA" ? "ON" : "MH")
+    const lawNotes =
+      (o.lawNotes as string | undefined) ?? resolveLawNotes(country, region)
+    const payload: DraftRentalAgreementPayload = {
+      propertyId: property.id,
+      unitId: (o.unitId as string | undefined) ?? unit.id,
+      country,
+      region,
+      lawNotes,
+    }
+
+    // Soft-apply draft immediately (like draft_listing); still audit via proposal row.
+    const drafted = draftRentalAgreement({
+      tenantId: ctx.tenantId,
+      unitId: payload.unitId,
+      country: payload.country,
+      region: payload.region,
+      lawNotes: payload.lawNotes,
+    })
+    if (!drafted.ok) return { kind: "error", error: drafted.error }
+
+    const proposal = createProposal({
+      tenantId: ctx.tenantId,
+      toolName: "draft_rental_agreement",
+      payload,
+      promptSummary: ctx.prompt.slice(0, 200),
+      createdBy: ctx.userId,
+      requiresApproval: false,
+    })
+    getDb()
+      .prepare(
+        `UPDATE agent_proposals SET outcome_json = ?, status = 'executed' WHERE id = ? AND tenant_id = ?`,
+      )
+      .run(
+        JSON.stringify({ agreementId: drafted.agreement.id, status: drafted.agreement.status }),
+        proposal.id,
+        ctx.tenantId,
+      )
+
+    const parties = leasePartiesForUnit(ctx.tenantId, payload.unitId)
+    return {
+      kind: "draft_rental_agreement",
+      proposal: {
+        ...proposal,
+        status: "executed",
+        outcomeJson: JSON.stringify({ agreementId: drafted.agreement.id }),
+      },
+      agreement: drafted.agreement,
+      parties,
+      reply: `Draft rental agreement ready for Unit ${unit.code} (${payload.country}/${payload.region}). Preview at /landlord/ask/agreements/${drafted.agreement.id}. Not legal advice — propose eSign send only after you review.`,
+    }
+  }
+
+  if (toolName === "propose_esign_send") {
+    const unit = resolveUnit(property, ctx)
+    if (!unit) return { kind: "error", error: "Pick a bay whose agreement you want to send." }
+    const agreementId =
+      (o.agreementId as string | undefined) ??
+      leaseAgreementsForTenant(ctx.tenantId).find(
+        (a) => a.unitId === unit.id && (a.status === "draft" || a.status === "ready_for_esign"),
+      )?.id
+    if (!agreementId) {
+      return {
+        kind: "error",
+        error: "No draft agreement on this bay. Ask Easy to draft a rental agreement first.",
+      }
+    }
+    const agreement = leaseAgreementById(ctx.tenantId, agreementId)
+    if (!agreement) return { kind: "error", error: "Agreement not found for this organisation." }
+    if (agreement.status === "sent" || agreement.status === "signed") {
+      return { kind: "error", error: `Agreement is already ${agreement.status}.` }
+    }
+    const payload: ProposeEsignSendPayload = {
+      propertyId: property.id,
+      unitId: unit.id,
+      agreementId,
+    }
+    const proposal = createProposal({
+      tenantId: ctx.tenantId,
+      toolName: "propose_esign_send",
+      payload,
+      promptSummary: ctx.prompt.slice(0, 200),
+      createdBy: ctx.userId,
+      requiresApproval: true,
+    })
+    return {
+      kind: "propose_esign_send",
+      proposal,
+      reply: `Proposed eSign send for agreement ${agreementId.slice(0, 8)}… (Unit ${unit.code}). Approve once to mark sent via demo adapter — reject leaves status unchanged. Never auto-sends.`,
+    }
+  }
+
 
   // draft_listing — soft apply to draft only (never publish)
   const unit =

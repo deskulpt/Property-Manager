@@ -36,7 +36,7 @@ import { seedDemoDatabase } from "@/lib/seed-demo"
 import { decryptSecret, encryptSecret, secretLast4 } from "@/lib/shop-crypto"
 import { resolveShopPaymentProvider } from "@/lib/shop-payments"
 
-const SEED_VERSION = "14"
+const SEED_VERSION = "15"
 
 function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
@@ -616,6 +616,41 @@ function createSchema(db: Sql) {
       updated_at TEXT NOT NULL,
       source_proposal_id TEXT
     );
+
+    CREATE TABLE lease_parties (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      unit_id TEXT NOT NULL,
+      lease_id TEXT,
+      role TEXT NOT NULL,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      phone TEXT NOT NULL DEFAULT '',
+      address_line1 TEXT NOT NULL DEFAULT '',
+      address_line2 TEXT NOT NULL DEFAULT '',
+      city TEXT NOT NULL DEFAULT '',
+      region TEXT NOT NULL DEFAULT '',
+      postal_code TEXT NOT NULL DEFAULT '',
+      country TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE lease_agreements (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      unit_id TEXT NOT NULL,
+      lease_id TEXT,
+      country TEXT NOT NULL,
+      region TEXT NOT NULL,
+      law_notes TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL,
+      document_html TEXT NOT NULL,
+      document_json TEXT NOT NULL DEFAULT '',
+      esign_provider TEXT,
+      esign_envelope_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
     CREATE INDEX idx_units_tenant ON units(tenant_id);
     CREATE INDEX idx_units_property ON units(property_id);
     CREATE INDEX idx_floors_property ON floors(property_id);
@@ -636,6 +671,8 @@ function createSchema(db: Sql) {
     CREATE INDEX idx_agent_proposals_tenant ON agent_proposals(tenant_id, status, created_at);
     CREATE INDEX idx_agent_audit_tenant ON agent_audit_events(tenant_id, created_at);
     CREATE INDEX idx_listing_drafts_tenant ON listing_drafts(tenant_id, updated_at);
+    CREATE INDEX idx_lease_parties_tenant ON lease_parties(tenant_id, unit_id);
+    CREATE INDEX idx_lease_agreements_tenant ON lease_agreements(tenant_id, status, updated_at);
   `)
 }
 
@@ -644,6 +681,8 @@ function reset(db: Sql) {
   for (const table of [
     "agent_audit_events",
     "agent_proposals",
+    "lease_agreements",
+    "lease_parties",
     "listing_drafts",
     "notifications",
     "otp_challenges",

@@ -10,7 +10,14 @@ import {
   submitAskEasyPrompt,
   type AskEasyState,
 } from "@/lib/actions"
-import type { AgentAuditEvent, AgentProposal, AttributeCitation, ListingDraft } from "@/lib/agentic"
+import type {
+  AgentAuditEvent,
+  AgentProposal,
+  AttributeCitation,
+  LeaseAgreement,
+  LeaseParty,
+  ListingDraft,
+} from "@/lib/agentic"
 import {
   getVoiceSupport,
   speakText,
@@ -42,12 +49,24 @@ type ChatRow = {
   meta?: string
 }
 
+const ONBOARD_STEPS = [
+  { id: "listing", label: "Listing", hint: "List or delist a bay" },
+  { id: "parties", label: "Parties", hint: "Primary · secondary · guarantor" },
+  { id: "jurisdiction", label: "Jurisdiction", hint: "IN/CA + state/province" },
+  { id: "preview", label: "Preview", hint: "Standard agreement draft" },
+  { id: "esign", label: "eSign", hint: "Propose send — never auto" },
+] as const
+
 const STARTERS = [
   "Onboard me — summarise my portfolio",
   "List my buildings and floor-plan status",
   "What bays are available and at what rate?",
   "What fields can you read?",
   "Assign an electrician for the weather seal",
+  "Delist Unit B1 from the public catalog",
+  "Add primary lease holder named Priya Sharma priya.sharma@example.com +91 98765 43210",
+  "Draft rental agreement for Maharashtra India (MH)",
+  "Propose eSign send for the draft agreement",
 ]
 
 export function AskEasyPanel({
@@ -55,6 +74,8 @@ export function AskEasyPanel({
   properties,
   pending,
   drafts,
+  agreements = [],
+  parties = [],
   audit,
   modelMode,
   onboardSeed,
@@ -63,6 +84,8 @@ export function AskEasyPanel({
   properties: { id: string; name: string; units: { id: string; code: string }[] }[]
   pending: AgentProposal[]
   drafts: ListingDraft[]
+  agreements?: LeaseAgreement[]
+  parties?: LeaseParty[]
   audit: AgentAuditEvent[]
   modelMode: "stub" | "live-ready"
   onboardSeed?: { reply: string; citations: AttributeCitation[]; toolName?: string | null }
@@ -212,6 +235,59 @@ export function AskEasyPanel({
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
       <div className="grid gap-6">
+        <div className="rounded-sm border border-ink/15 bg-paper/40 p-3" data-testid="ask-easy-lease-steps">
+          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink/55">Lease onboard</p>
+          <ol className="mt-2 flex flex-wrap gap-2">
+            {ONBOARD_STEPS.map((step) => (
+              <li key={step.id} className="rounded-sm border border-ink/10 px-2 py-1 text-xs">
+                <span className="font-medium">{step.label}</span>
+                <span className="ml-1 text-ink/50">{step.hint}</span>
+              </li>
+            ))}
+          </ol>
+          <p className="mt-2 text-xs text-ink/60">
+            Never auto: list/delist notify, eSign send, or ledger charge — Approve only. Not legal advice.
+          </p>
+        </div>
+
+        {(parties.length > 0 || agreements.length > 0) && (
+          <div className="grid gap-3 md:grid-cols-2" data-testid="ask-easy-lease-state">
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink/55">Lease parties</p>
+              <ul className="mt-1 space-y-1 text-sm">
+                {parties.length === 0 ? (
+                  <li className="text-ink/50">None yet</li>
+                ) : (
+                  parties.map((p) => (
+                    <li key={p.id}>
+                      <span className="font-medium">{p.role}</span> · {p.name} · {p.email}
+                    </li>
+                  ))
+                )}
+              </ul>
+            </div>
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink/55">Agreements</p>
+              <ul className="mt-1 space-y-1 text-sm">
+                {agreements.length === 0 ? (
+                  <li className="text-ink/50">None yet</li>
+                ) : (
+                  agreements.map((a) => (
+                    <li key={a.id}>
+                      <Link
+                        href={`/landlord/ask/agreements/${a.id}`}
+                        className="underline-offset-2 hover:underline"
+                      >
+                        {a.country}/{a.region} · {a.status}
+                      </Link>
+                    </li>
+                  ))
+                )}
+              </ul>
+            </div>
+          </div>
+        )}
+
         <section
           className="relative overflow-hidden border border-brand/10 bg-card shadow-[inset_0_1px_0_rgb(14_110_140_/_0.12)]"
           aria-label="Ask Easy chat"

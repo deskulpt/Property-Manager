@@ -40,6 +40,12 @@ const ALL_TOOLS = new Set<AgentToolName>([
   "get_listing_draft",
   "list_listing_attributes",
   "summarize_portfolio",
+  "propose_list_unit",
+  "propose_unlist_unit",
+  "propose_upsert_occupant_ledger",
+  "propose_upsert_lease_party",
+  "draft_rental_agreement",
+  "propose_esign_send",
 ])
 
 function detectIntent(prompt: string, onboard?: boolean): AgentToolName {
@@ -53,6 +59,39 @@ function detectIntent(prompt: string, onboard?: boolean): AgentToolName {
     }
   }
 
+
+  // Lease onboard intents (never-auto mutators)
+  if (
+    /(?:^|[^.\w])(esign|e-sign|docusign|digio|emudhra)(?:[^.\w]|$)/i.test(prompt) ||
+    /\b(send (the )?(agreement|lease|packet)|e-?sign send|envelope)\b/.test(lower)
+  ) {
+    return "propose_esign_send"
+  }
+  if (
+    /\b(rental agreement|lease agreement|draft (the )?(lease|agreement)|standard agreement|jurisdiction)\b/.test(
+      lower,
+    )
+  ) {
+    return "draft_rental_agreement"
+  }
+  if (
+    /\b(guarantor|secondary (tenant|holder|party)|primary (tenant|holder|party)|lease (party|holder)|add (a )?tenant)\b/.test(
+      lower,
+    )
+  ) {
+    return "propose_upsert_lease_party"
+  }
+  if (
+    /\b(occupant|ledger seed|new occupant|update ledger|seed rent)\b/.test(lower)
+  ) {
+    return "propose_upsert_occupant_ledger"
+  }
+  if (/\b(unlist|delist|take (off|down)|unpublish)\b/.test(lower)) {
+    return "propose_unlist_unit"
+  }
+  if (/\b(list (the )?(unit|bay)|re-?list|publish (the )?(unit|bay|listing))\b/.test(lower)) {
+    return "propose_list_unit"
+  }
   if (
     /\b(assign|electrician|plumber|courier|cleaning|concierge|job|repair|fix|worker)\b/.test(
       lower,
@@ -188,6 +227,7 @@ export async function planLiveTurn(input: PlanTurnInput): Promise<ModelPlan> {
           'Reply with ONLY JSON: {"tool":"<one tool name>"}.',
           "Prefer read tools for onboarding and attribute questions.",
           "Never invent side effects. Mutating tools only propose; landlord must approve.",
+          "Lease onboard order: list/unlist → occupant ledger → parties → draft_rental_agreement → propose_esign_send.",
           "Tools:",
           ...catalog.map((t) => `- ${t.name}: ${t.description}`),
         ].join("\n"),

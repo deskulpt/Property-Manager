@@ -3,6 +3,8 @@ import { PageHeader } from "@/components/product"
 import {
   askEasyGateReason,
   auditEventsForTenant,
+  leaseAgreementsForTenant,
+  leasePartiesForTenant,
   listingDraftsForTenant,
   liveModelConfigured,
   pendingProposals,
@@ -13,6 +15,10 @@ import { getSessionUser } from "@/lib/session"
 
 export const metadata = { title: "Ask Easy" }
 
+/**
+ * Canonical landlord Ask Easy surface (onboard + lease pack).
+ * `/landlord/ask-easy` redirects here.
+ */
 export default async function AskEasyPage() {
   const user = await getSessionUser()
   if (!user?.tenantId) return null
@@ -50,13 +56,15 @@ export default async function AskEasyPage() {
       <PageHeader
         kicker="Ask Easy"
         title="Landlord assistant"
-        lede="Unified desk path: text or voice onboard that reads real listing attributes from SQLite, plus approval-gated mutations. Stub works offline; optional Gemini / model keys when set. Public catalog chat stays at /ask."
+        lede="Unified desk: text or voice onboard that reads real listing attributes, then lease parties → jurisdiction agreement → eSign propose. Stub works offline; Approve gates every mutation. Not legal advice."
       />
       <AskEasyPanel
         gated={gated}
         properties={properties}
         pending={gated ? [] : pendingProposals(tenantId)}
         drafts={gated ? [] : listingDraftsForTenant(tenantId)}
+        agreements={gated ? [] : leaseAgreementsForTenant(tenantId)}
+        parties={gated ? [] : leasePartiesForTenant(tenantId)}
         audit={gated ? [] : auditEventsForTenant(tenantId)}
         modelMode={liveModelConfigured() ? "live-ready" : "stub"}
         onboardSeed={onboardSeed}

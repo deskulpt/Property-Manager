@@ -12,7 +12,8 @@ export type StaffRole =
   | "property_manager"
   | "merchandiser"
 export type Role = MarketRole | StaffRole
-export type UnitStatus = "available" | "pending" | "leased"
+/** `hold` = deliberately delisted from the public catalog (Ask Easy unlist). */
+export type UnitStatus = "available" | "pending" | "leased" | "hold"
 export type ApplicationStatus = "submitted" | "approved" | "denied"
 export type JobStatus = "open" | "assigned" | "accepted" | "complete"
 export type Trade = "electrician" | "plumber" | "courier" | "cleaning"
@@ -171,6 +172,7 @@ export function statusLabel(status: string) {
   if (status === "available") return "Available"
   if (status === "pending") return "Offer pending"
   if (status === "leased") return "Leased"
+  if (status === "hold") return "Delisted"
   if (status === "submitted") return "In review"
   if (status === "approved") return "Approved"
   if (status === "denied") return "Denied"

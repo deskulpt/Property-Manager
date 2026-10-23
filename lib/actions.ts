@@ -1339,7 +1339,7 @@ export async function submitAskEasyPrompt(
     unitId,
     onboard,
   })
-  refresh(["/landlord/ask-easy", "/landlord/ask", "/landlord", "/landlord/jobs", "/provider", "/inbox"])
+  refresh(["/landlord/ask-easy", "/landlord/ask", "/landlord", "/landlord/jobs", "/landlord/ledger", "/provider", "/inbox"])
   if (result.kind === "error") {
     return { ...askEasyInitial, error: result.error, toolName: result.toolName ?? null }
   }
@@ -1381,8 +1381,8 @@ export async function decideAskEasyProposal(
     if (!result.ok) return { ...askEasyInitial, error: result.error }
     return {
       ...askEasyInitial,
-      message: "Proposal rejected. No job or notify was created.",
-      reply: "Proposal rejected. No job or notify was created.",
+      message: "Proposal rejected. No job, notify, ledger charge, or eSign send was created.",
+      reply: "Proposal rejected. No job, notify, ledger charge, or eSign send was created.",
     }
   }
   if (decision === "approve") {
@@ -1391,12 +1391,37 @@ export async function decideAskEasyProposal(
       proposalId,
       actorUserId: user.id,
     })
-    refresh(["/landlord/ask-easy", "/landlord/ask", "/landlord/jobs", "/landlord", "/provider", "/inbox"])
+    refresh([
+      "/landlord/ask-easy",
+      "/landlord/ask",
+      "/landlord/jobs",
+      "/landlord/ledger",
+      "/landlord",
+      "/provider",
+      "/inbox",
+    ])
     if (!result.ok) return { ...askEasyInitial, error: result.error }
-    const msg = result.jobId
-      ? `Approved and executed. Concierge job ${result.jobId} created.`
-      : "Approved and executed."
-    return { ...askEasyInitial, message: msg, reply: msg }
+    if (result.jobId) {
+      const msg = `Approved and executed. Concierge job ${result.jobId} created.`
+      return { ...askEasyInitial, message: msg, reply: msg }
+    }
+    if (result.envelopeId) {
+      const msg = `Approved and executed. eSign envelope ${result.envelopeId} marked sent (demo).`
+      return { ...askEasyInitial, message: msg, reply: msg }
+    }
+    if (result.partyId) {
+      const msg = "Approved and executed. Lease party saved."
+      return { ...askEasyInitial, message: msg, reply: msg }
+    }
+    if (result.ledgerEntryId || result.userId) {
+      const msg = "Approved and executed. Occupant / ledger updated."
+      return { ...askEasyInitial, message: msg, reply: msg }
+    }
+    if (result.unitId) {
+      const msg = "Approved and executed. Listing status updated."
+      return { ...askEasyInitial, message: msg, reply: msg }
+    }
+    return { ...askEasyInitial, message: "Approved and executed.", reply: "Approved and executed." }
   }
   return { ...askEasyInitial, error: "Choose Approve or Reject." }
 }
