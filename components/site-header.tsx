@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { BrandLogo } from "@/components/brand-logo"
 import { Mail, Menu, MessageCircle, Phone } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -17,6 +18,7 @@ import {
   whatsappHref,
 } from "@/lib/brand-contact"
 import { isStaffRole, roleLabel, type Role } from "@/lib/format"
+import { canOpenConsole, roleToLevel } from "@/lib/role-level"
 import { t } from "@/lib/i18n"
 
 type NavLink = { href: string; label: string; badge?: number }
@@ -26,7 +28,9 @@ function publicLinks(): NavLink[] {
     { href: "/listings", label: t("nav.listings") },
     { href: "/#map", label: t("nav.map") },
     { href: "/properties", label: t("nav.portfolio") },
-    { href: "/pricing", label: t("nav.pricing") },
+    { href: "/pricing", label: "Pricing" },
+    { href: "/refer", label: t("nav.refer") },
+    { href: "/partners", label: t("nav.partners") },
   ]
 }
 
@@ -42,7 +46,12 @@ function deskLinks(role: Role | null | undefined, unread: number): NavLink[] {
     links.push({ href: "/shop", label: "Shop" })
   } else if (role === "service_provider") {
     links.push({ href: "/provider", label: t("nav.desk.provider") })
+  } else if (role === "referrer") {
+    links.push({ href: "/refer/dashboard", label: t("nav.desk.referrer") })
   } else if (role && isStaffRole(role)) {
+    if (canOpenConsole(roleToLevel(role))) {
+      links.push({ href: "/console", label: "Console" })
+    }
     links.push({ href: "/cms", label: t("nav.desk.cms") })
   }
   links.push({
@@ -180,17 +189,10 @@ export function SiteHeader({
       <UtilityStrip />
       <div className="border-b border-ink/10 bg-paper/95 backdrop-blur-md">
         <div className="mx-auto flex max-w-[1200px] items-center justify-between gap-3 px-4 py-2.5 md:px-8">
-          <Link href="/" className="group flex shrink-0 items-center gap-2">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/logo.svg"
-              alt=""
-              width={140}
-              height={48}
-              className="h-8 w-auto object-contain md:h-9"
-            />
+          <div className="group flex shrink-0 items-center gap-2">
+            <BrandLogo />
             <span className="sr-only">{t("app.name")}</span>
-          </Link>
+          </div>
 
           <nav className="hidden items-center gap-1 lg:flex" aria-label="Primary">
             <div className="flex items-center gap-5 pr-4">

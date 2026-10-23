@@ -2,18 +2,14 @@ import "server-only"
 import { createHmac, timingSafeEqual } from "node:crypto"
 import { cookies } from "next/headers"
 import { getUser } from "@/lib/db"
-import { requireSecretKey } from "@/lib/env"
+import { canImpersonate } from "@/lib/role-level"
+import { requireSecretKey, sessionCookieOptions } from "@/lib/env"
 
 export const SESSION_COOKIE = "deskulpt_user"
+/** Sticky L0/L1 staff identity while impersonating demo desks. */
+export const ADMIN_SESSION_COOKIE = "deskulpt_admin"
 /** Managing agent selected landlord org. */
 export const AGENT_TENANT_COOKIE = "deskulpt_agent_tenant"
-
-const COOKIE_OPTS = {
-  httpOnly: true,
-  sameSite: "lax" as const,
-  path: "/",
-  maxAge: 60 * 60 * 24 * 30,
-}
 
 function sign(userId: string) {
   return createHmac("sha256", requireSecretKey()).update(`v1:${userId}`).digest("base64url")
@@ -55,6 +51,32 @@ export async function getSessionUser() {
   return getUser(id)
 }
 
+export async function getAdminSessionUser() {
+  const jar = await cookies()
+  const id = parseSessionValue(jar.get(ADMIN_SESSION_COOKIE)?.value)
+  if (!id) return null
+  const user = getUser(id)
+  if (!user || !canImpersonate(user.roleLevel)) return null
+  return user
+}
+
+export async function setSessionCookie(userId: string) {
+  const jar = await cookies()
+  jar.set(SESSION_COOKIE, mintSessionValue(userId), sessionCookieOptions())
+}
+
+export async function setAdminSessionCookie(userId: string) {
+  const jar = await cookies()
+  jar.set(ADMIN_SESSION_COOKIE, mintSessionValue(userId), sessionCookieOptions())
+}
+
+export async function clearSessionCookies() {
+  const jar = await cookies()
+  jar.delete(SESSION_COOKIE)
+  jar.delete(ADMIN_SESSION_COOKIE)
+  jar.delete(AGENT_TENANT_COOKIE)
+}
+
 export async function getAgentTenantId() {
   const jar = await cookies()
   return jar.get(AGENT_TENANT_COOKIE)?.value ?? null
@@ -62,7 +84,7 @@ export async function getAgentTenantId() {
 
 export async function setAgentTenantCookie(tenantId: string) {
   const jar = await cookies()
-  jar.set(AGENT_TENANT_COOKIE, tenantId, COOKIE_OPTS)
+  jar.set(AGENT_TENANT_COOKIE, tenantId, sessionCookieOptions())
 }
 
 export async function clearAgentTenantCookie() {

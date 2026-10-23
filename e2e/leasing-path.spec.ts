@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import { mintDemoSessionCookie } from "./session"
 
+/** Cookie inject only — public header demo switcher is retired (L0/L1 sticky bar). */
 async function switchIdentity(page: Page, userId: string) {
   await page.context().addCookies([
     {
@@ -13,7 +14,6 @@ async function switchIdentity(page: Page, userId: string) {
     },
   ])
   await page.goto("/", { waitUntil: "networkidle" })
-  await expect(page.getByTestId("demo-identity")).toHaveValue(userId)
 }
 
 test.describe("evaluator leasing path", () => {

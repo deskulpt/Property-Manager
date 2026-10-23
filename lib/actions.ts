@@ -56,8 +56,25 @@ import {
   saveShopRazorpaySettings,
   setShopSkuEnabled,
   getShopSettingsPublic,
+  setTenantStatus,
+  setTenantPackage,
+  advanceIndicationStatus,
+  attachAttributionToLandlord,
+  createIndication,
+  createReferrerFromSubmit,
+  ensureReferrerForUser,
+  getReferrerByCode,
+  getReferrerByUserId,
+  recordReferralAttribution,
 } from "@/lib/db"
 import { TRADES } from "@/lib/format"
+import {
+  isSelfServePlan,
+  packageHasAskEasy,
+  parsePlanId,
+  planLabel,
+  SUBSCRIBE_PATH,
+} from "@/lib/plans"
 import { t } from "@/lib/i18n"
 import {
   isPropertySegment,
@@ -73,14 +90,27 @@ import { hashPassword, passwordPolicyError, verifyPassword } from "@/lib/passwor
 import { demoOtpCode, requestDemoOtp, verifyDemoOtp } from "@/lib/otp"
 import { demoPayments } from "@/lib/payments"
 import { staffCapabilities } from "@/lib/permissions"
-import { agentCanAccessTenant } from "@/lib/agent-context"
-import { isDemoSwitcherEnabled, sessionCookieOptions } from "@/lib/env"
 import {
+  REF_COOKIE,
+  REF_COOKIE_MAX_AGE,
+  normalizePhone,
+  type IndicationStatus,
+  type PropertyType,
+} from "@/lib/referrals"
+import { agentCanAccessTenant } from "@/lib/agent-context"
+import { canImpersonate, canOpenConsole } from "@/lib/role-level"
+import { sessionCookieOptions } from "@/lib/env"
+import {
+  ADMIN_SESSION_COOKIE,
   clearAgentTenantCookie,
+  clearSessionCookies,
+  getAdminSessionUser,
   getSessionUser,
   mintSessionValue,
   SESSION_COOKIE,
+  setAdminSessionCookie,
   setAgentTenantCookie,
+  setSessionCookie,
 } from "@/lib/session"
 import { translateEnglishCatalog, writeLocaleFile } from "@/lib/translate"
 import { simulateMatch } from "@/lib/verification"
@@ -147,15 +177,75 @@ export async function signupLandlord(
     purpose: "signup_privacy_terms",
     version: "dpdp-2023-v1",
   })
-  const jar = await cookies()
-  jar.set(SESSION_COOKIE, mintSessionValue(result.userId), sessionCookieOptions())
+  await setSessionCookie(result.userId)
+  {
+    const jar = await cookies()
+    jar.delete(ADMIN_SESSION_COOKIE)
+  }
   notify({
     userId: result.userId,
     title: "Welcome to Easy Rental",
-    body: `${parsed.data.company} is ready. Add a property from the landlord desk.`,
+    body: `${parsed.data.company} is ready. Choose a listing plan to open the landlord desk.`,
+    href: `${SUBSCRIBE_PATH}?from=onboard`,
+  })
+  refresh(["/", "/landlord", "/landlord/settings", "/inbox", "/pricing", SUBSCRIBE_PATH])
+  // L2 landlord onboard: signup → package select (secure-login may wrap role pick first).
+  redirect(`${SUBSCRIBE_PATH}?from=onboard`)
+}
+
+export type SubscribeFormState = {
+  error?: string | null
+  fieldErrors?: Record<string, string>
+}
+
+const subscribeSchema = z.object({
+  plan: z.string().trim().min(1),
+  seats: z.coerce.number().int().min(1).max(500).optional(),
+})
+
+/**
+ * Demo purchase step for landlord listing plans (L2 onboard + /pricing CTAs).
+ * Sets `tenants.package` — no live Razorpay charge in this slice.
+ */
+export async function activateSubscriptionPlan(
+  _prev: SubscribeFormState,
+  formData: FormData,
+): Promise<SubscribeFormState> {
+  const user = await getSessionUser()
+  if (!user || user.role !== "landlord_admin" || !user.tenantId) {
+    return {
+      error: "Sign in as a landlord admin to activate a plan.",
+      fieldErrors: {},
+    }
+  }
+  const parsed = subscribeSchema.safeParse({
+    plan: formData.get("plan"),
+    seats: formData.get("seats") || undefined,
+  })
+  if (!parsed.success) {
+    return { error: "Choose a plan to continue.", fieldErrors: issues(parsed.error) }
+  }
+  const plan = parsePlanId(parsed.data.plan)
+  if (!isSelfServePlan(plan)) {
+    return {
+      error: "Enterprise is sales-led — email hello@easyrental.space.",
+      fieldErrors: { plan: "Not self-serve" },
+    }
+  }
+  const seats = parsed.data.seats ?? 1
+  const result = setTenantPackage(user.tenantId, plan)
+  if (!result.ok) return { error: result.error, fieldErrors: {} }
+  const label = planLabel(result.package)
+  notify({
+    userId: user.id,
+    title: `${label} plan active`,
+    body:
+      seats > 1
+        ? `${label} activated for ${seats} listing seats (demo — billing not charged).`
+        : `${label} activated (demo — proposed INR / year / active listing; billing not charged).`,
     href: "/landlord",
   })
-  refresh(["/", "/landlord", "/landlord/settings", "/inbox"])
+  refresh(["/landlord", "/landlord/settings", "/pricing", SUBSCRIBE_PATH, "/inbox"])
   redirect("/landlord")
 }
 
@@ -186,16 +276,21 @@ export async function loginWithPassword(
   if (!ok) return generic
   const account = getUserByEmail(parsed.data.email)
   if (!account) return generic
-  const jar = await cookies()
-  jar.set(SESSION_COOKIE, mintSessionValue(account.id), sessionCookieOptions())
-  refresh(["/", "/landlord", "/inbox"])
+  await setSessionCookie(account.id)
+  if (canImpersonate(account.roleLevel)) {
+    await setAdminSessionCookie(account.id)
+  } else {
+    const jar = await cookies()
+    jar.delete(ADMIN_SESSION_COOKIE)
+  }
+  refresh(["/", "/landlord", "/inbox", "/cms", "/console"])
   if (account.role === "landlord_admin") redirect("/landlord")
+  if (canOpenConsole(account.roleLevel)) redirect("/console")
   redirect("/")
 }
 
 export async function logoutSession() {
-  const jar = await cookies()
-  jar.delete(SESSION_COOKIE)
+  await clearSessionCookies()
   revalidatePath("/", "layout")
   redirect("/")
 }
@@ -243,14 +338,14 @@ export async function removeLandlordDomain(formData: FormData) {
 }
 
 export async function switchSession(userId: string) {
+  const admin = await getAdminSessionUser()
+  if (!admin || !canImpersonate(admin.roleLevel)) return
   const jar = await cookies()
   if (!userId || userId === "visitor") {
-    jar.delete(SESSION_COOKIE)
+    // Restore L0/L1 staff identity; keep sticky bar unlocked.
+    jar.set(SESSION_COOKIE, mintSessionValue(admin.id), sessionCookieOptions())
     await clearAgentTenantCookie()
     revalidatePath("/", "layout")
-    return
-  }
-  if (!isDemoSwitcherEnabled()) {
     return
   }
   const user = getUser(userId)
@@ -260,6 +355,62 @@ export async function switchSession(userId: string) {
     await clearAgentTenantCookie()
   }
   revalidatePath("/", "layout")
+}
+
+async function requireConsoleAdmin() {
+  const session = await getSessionUser()
+  if (!session || !canOpenConsole(session.roleLevel)) return null
+  return session
+}
+
+export async function consoleSetTenantStatus(formData: FormData) {
+  if (!(await requireConsoleAdmin())) return
+  const tenantId = String(formData.get("tenantId") ?? "")
+  const status = String(formData.get("status") ?? "")
+  if (status !== "active" && status !== "suspended") return
+  setTenantStatus(tenantId, status)
+  refresh(["/console", "/console/tenants", "/console/pricing"])
+}
+
+export async function consoleSetTenantPackage(formData: FormData) {
+  if (!(await requireConsoleAdmin())) return
+  const tenantId = String(formData.get("tenantId") ?? "")
+  const raw = String(formData.get("package") ?? "")
+  const pkg = parsePlanId(raw)
+  // Only accept known ladder ids (incl. growth / enterprise for L0 console).
+  if (
+    raw !== "starter" &&
+    raw !== "basic" &&
+    raw !== "growth" &&
+    raw !== "pro" &&
+    raw !== "enterprise" &&
+    raw !== "portfolio"
+  ) {
+    return
+  }
+  setTenantPackage(tenantId, pkg)
+  refresh(["/console", "/console/tenants", "/console/pricing", "/pricing"])
+}
+
+export async function consoleImpersonateTenant(formData: FormData) {
+  const session = await getSessionUser()
+  const admin = await getAdminSessionUser()
+  if (!admin && !(session && canImpersonate(session.roleLevel))) return
+  if (session && canImpersonate(session.roleLevel)) {
+    await setAdminSessionCookie(session.id)
+  }
+  const userId = String(formData.get("userId") ?? "")
+  await switchSession(userId)
+  redirect("/landlord")
+}
+
+export async function consoleToggleShopSku(formData: FormData) {
+  if (!(await requireConsoleAdmin())) return
+  const tenantId = String(formData.get("tenantId") ?? "")
+  const skuId = String(formData.get("skuId") ?? "")
+  const enabled = String(formData.get("enabled") ?? "") === "1"
+  setShopSkuEnabled(tenantId, skuId, enabled)
+  refresh(["/console/shops"])
 }
 
 export async function setAgentLandlordForm(formData: FormData) {
@@ -1435,8 +1586,8 @@ export async function approveAgenticProposal(
   if (!user || user.role !== "landlord_admin" || !user.tenantId) {
     return { ok: false, error: "Switch to a landlord admin to approve proposals." }
   }
-  if ((user.tenantPackage ?? getTenantPackage(user.tenantId)) !== "pro") {
-    return { ok: false, error: "Ask Easy is a PRO feature." }
+  if (!packageHasAskEasy(user.tenantPackage ?? getTenantPackage(user.tenantId))) {
+    return { ok: false, error: "Ask Easy is a Pro feature." }
   }
   const result = decideProposal({
     tenantId: user.tenantId,
@@ -1456,8 +1607,8 @@ export async function rejectAgenticProposal(
   if (!user || user.role !== "landlord_admin" || !user.tenantId) {
     return { ok: false, error: "Switch to a landlord admin to reject proposals." }
   }
-  if ((user.tenantPackage ?? getTenantPackage(user.tenantId)) !== "pro") {
-    return { ok: false, error: "Ask Easy is a PRO feature." }
+  if (!packageHasAskEasy(user.tenantPackage ?? getTenantPackage(user.tenantId))) {
+    return { ok: false, error: "Ask Easy is a Pro feature." }
   }
   const result = decideProposal({
     tenantId: user.tenantId,
@@ -1477,8 +1628,8 @@ export async function runStubListingAutofill(
   if (!user || user.role !== "landlord_admin" || !user.tenantId) {
     return { ok: false, error: "Switch to a landlord admin to run autofill." }
   }
-  if ((user.tenantPackage ?? getTenantPackage(user.tenantId)) !== "pro") {
-    return { ok: false, error: "Ask Easy is a PRO feature." }
+  if (!packageHasAskEasy(user.tenantPackage ?? getTenantPackage(user.tenantId))) {
+    return { ok: false, error: "Ask Easy is a Pro feature." }
   }
   const trimmed = prompt.trim()
   if (trimmed.length < 8) {
@@ -1620,4 +1771,256 @@ export async function requestAccountErasure() {
   const user = await getSessionUser()
   if (!user) return { ok: false as const, error: "Sign in first." }
   return redactUserPersonalData(user.id)
+}
+
+/* ─── Refer & Earn (§19A) ─────────────────────────────────────────────── */
+
+export type ReferSubmitState = {
+  error: string | null
+  fieldErrors: Record<string, string>
+  ok?: boolean
+  indicationId?: string
+}
+
+const referSubmitSchema = z.object({
+  propertyAddress: z.string().trim().min(5, "Enter a street / plot address"),
+  propertyCity: z.string().trim().min(2, "Enter the city"),
+  propertyPin: z.string().trim().regex(/^\d{6}$/, "Enter a 6-digit PIN"),
+  propertyType: z.enum(["warehouse", "office", "industrial_park", "retail", "other"]),
+  approxSqft: z.string().trim().optional(),
+  askingRentInr: z.string().trim().optional(),
+  landlordName: z.string().trim().min(2, "Enter the landlord name"),
+  landlordPhone: z.string().trim().min(10, "Enter a +91 mobile"),
+  landlordEmail: z.string().trim().optional(),
+  consent: z.string().optional(),
+  referrerName: z.string().trim().min(2, "Enter your name"),
+  referrerPhone: z.string().trim().min(10, "Enter your mobile"),
+  referrerEmail: z
+    .string()
+    .trim()
+    .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Enter your email"),
+})
+
+export async function submitReferralIndication(
+  _prev: ReferSubmitState,
+  formData: FormData,
+): Promise<ReferSubmitState> {
+  const parsed = referSubmitSchema.safeParse({
+    propertyAddress: formData.get("propertyAddress"),
+    propertyCity: formData.get("propertyCity"),
+    propertyPin: formData.get("propertyPin"),
+    propertyType: formData.get("propertyType"),
+    approxSqft: formData.get("approxSqft") || undefined,
+    askingRentInr: formData.get("askingRentInr") || undefined,
+    landlordName: formData.get("landlordName"),
+    landlordPhone: formData.get("landlordPhone"),
+    landlordEmail: formData.get("landlordEmail") || undefined,
+    consent: formData.get("consent") || undefined,
+    referrerName: formData.get("referrerName"),
+    referrerPhone: formData.get("referrerPhone"),
+    referrerEmail: formData.get("referrerEmail"),
+  })
+  if (!parsed.success) {
+    return { error: "Check the highlighted fields.", fieldErrors: issues(parsed.error) }
+  }
+  if (parsed.data.consent !== "on" && parsed.data.consent !== "true" && parsed.data.consent !== "1") {
+    return {
+      error: "Owner consent is required before we contact the landlord.",
+      fieldErrors: { consent: "Confirm the owner consented to be contacted." },
+    }
+  }
+
+  const session = await getSessionUser()
+  let referrer =
+    session?.role === "referrer" ? getReferrerByUserId(session.id) : null
+  if (!referrer && session) {
+    // Soft account: bind submitter identity when already signed in as referrer-capable
+    if (session.role === "referrer") {
+      referrer = ensureReferrerForUser(session)
+    }
+  }
+  if (!referrer) {
+    referrer = createReferrerFromSubmit({
+      name: parsed.data.referrerName,
+      phone: parsed.data.referrerPhone,
+      email: parsed.data.referrerEmail,
+      userId: session?.id ?? null,
+    })
+  }
+
+  const sqftRaw = parsed.data.approxSqft?.replace(/,/g, "")
+  const rentRaw = parsed.data.askingRentInr?.replace(/,/g, "")
+  const approxSqft = sqftRaw ? Number(sqftRaw) : null
+  const askingRentPaise =
+    rentRaw && Number.isFinite(Number(rentRaw)) ? Math.round(Number(rentRaw) * 100) : null
+
+  const created = createIndication({
+    referrerId: referrer.id,
+    path: "submit",
+    propertyAddress: parsed.data.propertyAddress,
+    propertyCity: parsed.data.propertyCity,
+    propertyPin: parsed.data.propertyPin,
+    propertyType: parsed.data.propertyType as PropertyType,
+    approxSqft: approxSqft && approxSqft > 0 ? approxSqft : null,
+    askingRentPaise,
+    landlordName: parsed.data.landlordName,
+    landlordPhone: parsed.data.landlordPhone,
+    landlordEmail: parsed.data.landlordEmail || null,
+    consentAt: new Date().toISOString(),
+  })
+  if (!created.ok) {
+    return { error: created.error, fieldErrors: {} }
+  }
+
+  if (session) {
+    notify({
+      userId: session.id,
+      title: "Indication received",
+      body: `${parsed.data.propertyCity} · ${parsed.data.propertyType} is in New status.`,
+      href: "/refer/dashboard",
+    })
+  }
+  notifyMany(
+    ["u_avery", "u_sam"].map((userId) => ({
+      userId,
+      title: "New Refer & Earn indication",
+      body: `${referrer!.name} submitted ${parsed.data.propertyCity} (${parsed.data.propertyType}).`,
+      href: "/cms/referrals",
+    })),
+  )
+
+  refresh(["/refer/dashboard", "/refer/rewards", "/cms/referrals", "/inbox"])
+  return { error: null, fieldErrors: {}, ok: true, indicationId: created.id }
+}
+
+export async function captureReferralCode(code: string) {
+  const result = recordReferralAttribution(code)
+  if (!result.ok) return result
+  const jar = await cookies()
+  jar.set(REF_COOKIE, result.code, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: REF_COOKIE_MAX_AGE,
+  })
+  return result
+}
+
+export type LinkClaimState = {
+  error: string | null
+  fieldErrors: Record<string, string>
+  ok?: boolean
+}
+
+const linkClaimSchema = z.object({
+  propertyAddress: z.string().trim().min(5, "Enter the property address"),
+  propertyCity: z.string().trim().min(2, "Enter the city"),
+  propertyPin: z.string().trim().regex(/^\d{6}$/, "Enter a 6-digit PIN"),
+  propertyType: z.enum(["warehouse", "office", "industrial_park", "retail", "other"]),
+  approxSqft: z.string().trim().optional(),
+  askingRentInr: z.string().trim().optional(),
+  landlordName: z.string().trim().min(2, "Enter your name"),
+  landlordPhone: z.string().trim().min(10, "Enter a +91 mobile"),
+  landlordEmail: z.string().trim().optional(),
+})
+
+export async function claimReferralAsLandlord(
+  _prev: LinkClaimState,
+  formData: FormData,
+): Promise<LinkClaimState> {
+  const jar = await cookies()
+  const code = String(formData.get("refCode") || jar.get(REF_COOKIE)?.value || "").trim()
+  if (!code || !getReferrerByCode(code)) {
+    return { error: "Missing or unknown referral code. Open your personal /r/ link first.", fieldErrors: {} }
+  }
+  const parsed = linkClaimSchema.safeParse({
+    propertyAddress: formData.get("propertyAddress"),
+    propertyCity: formData.get("propertyCity"),
+    propertyPin: formData.get("propertyPin"),
+    propertyType: formData.get("propertyType"),
+    approxSqft: formData.get("approxSqft") || undefined,
+    askingRentInr: formData.get("askingRentInr") || undefined,
+    landlordName: formData.get("landlordName"),
+    landlordPhone: formData.get("landlordPhone"),
+    landlordEmail: formData.get("landlordEmail") || undefined,
+  })
+  if (!parsed.success) {
+    return { error: "Check the highlighted fields.", fieldErrors: issues(parsed.error) }
+  }
+
+  const session = await getSessionUser()
+  const sqftRaw = parsed.data.approxSqft?.replace(/,/g, "")
+  const rentRaw = parsed.data.askingRentInr?.replace(/,/g, "")
+  const result = attachAttributionToLandlord({
+    code,
+    landlordUserId: session?.id ?? `guest_${normalizePhone(parsed.data.landlordPhone)}`,
+    tenantId: session?.tenantId ?? null,
+    propertyAddress: parsed.data.propertyAddress,
+    propertyCity: parsed.data.propertyCity,
+    propertyPin: parsed.data.propertyPin,
+    propertyType: parsed.data.propertyType as PropertyType,
+    approxSqft: sqftRaw && Number(sqftRaw) > 0 ? Number(sqftRaw) : null,
+    askingRentPaise:
+      rentRaw && Number.isFinite(Number(rentRaw)) ? Math.round(Number(rentRaw) * 100) : null,
+    landlordName: parsed.data.landlordName,
+    landlordPhone: parsed.data.landlordPhone,
+    landlordEmail: parsed.data.landlordEmail || null,
+  })
+  if (!result.ok) return { error: result.error, fieldErrors: {} }
+
+  const referrer = getReferrerByCode(code)
+  if (referrer?.userId) {
+    notify({
+      userId: referrer.userId,
+      title: "Landlord used your link",
+      body: `${parsed.data.landlordName} added ${parsed.data.propertyCity} via ${code}.`,
+      href: "/refer/dashboard",
+    })
+  }
+  refresh(["/refer/dashboard", "/cms/referrals", "/inbox", "/signup"])
+  return { error: null, fieldErrors: {}, ok: true }
+}
+
+export async function cmsAdvanceIndication(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user || !staffCapabilities(user.role)?.manageReferrals) {
+    return
+  }
+  const id = String(formData.get("indicationId") ?? "")
+  const to = String(formData.get("toStatus") ?? "") as IndicationStatus
+  const leasedRentInr = String(formData.get("leasedRentInr") ?? "").replace(/,/g, "")
+  const leasedRentPaise =
+    leasedRentInr && Number.isFinite(Number(leasedRentInr))
+      ? Math.round(Number(leasedRentInr) * 100)
+      : undefined
+  const result = advanceIndicationStatus(id, to, {
+    leasedRentPaise,
+    reason: to === "deactivated" ? "staff" : to === "discarded" ? "staff" : undefined,
+  })
+  if (result.ok) {
+    const { getIndication, getReferrerById } = await import("@/lib/db")
+    const ind = getIndication(id)
+    const ref = ind ? getReferrerById(ind.referrerId) : null
+    if (ref?.userId) {
+      notify({
+        userId: ref.userId,
+        title: `Indication → ${to}`,
+        body: `${ind?.propertyCity ?? "Property"} is now ${to}.`,
+        href: "/refer/dashboard",
+      })
+    }
+  }
+  refresh(["/cms/referrals", "/refer/dashboard", "/refer/rewards", "/inbox"])
+}
+
+export async function ensureMyReferralLink() {
+  const user = await getSessionUser()
+  if (!user) return { ok: false as const, error: "Pick Asha Reddy (or any identity) in the demo header." }
+  if (user.role === "referrer") {
+    const ref = ensureReferrerForUser(user)
+    return { ok: true as const, code: ref.code }
+  }
+  // Soft: allow staff / landlords to mint a demo referrer code tied to their user
+  const ref = ensureReferrerForUser(user)
+  return { ok: true as const, code: ref.code }
 }

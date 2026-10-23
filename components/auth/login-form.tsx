@@ -51,7 +51,7 @@ export function LoginForm() {
         </Link>
       </p>
       <p className="font-mono text-[10px] uppercase tracking-wider text-ink-faint">
-        Demo fixture users still use the Demo identity switcher (no password).
+        Platform staff (L0/L1) use password login. Impersonation is on the sticky bar after staff sign-in.
       </p>
     </form>
   )
