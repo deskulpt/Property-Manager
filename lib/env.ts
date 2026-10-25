@@ -72,4 +72,24 @@ export const ENV_CHECKLIST = [
     requiredInProd: true,
     note: "Must be production on Railway",
   },
+  {
+    name: "BILLING_PROVIDER",
+    requiredInProd: false,
+    note: "dodo (default) | stripe | demo — platform MoR swap",
+  },
+  {
+    name: "DODO_WEBHOOK_SECRET",
+    requiredInProd: false,
+    note: "HMAC for /api/billing/webhook when using Dodo",
+  },
+  {
+    name: "OTP_SMS_PROVIDER",
+    requiredInProd: false,
+    note: "demo | msg91 | twilio — never returns codes in production",
+  },
+  {
+    name: "KYC_PROVIDER",
+    requiredInProd: false,
+    note: "demo | idfy | signzy | hyperverge",
+  },
 ] as const

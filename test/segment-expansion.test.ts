@@ -125,7 +125,7 @@ describe("security launch fixes", () => {
     const { clearRateLimits } = await import("@/lib/rate-limit")
     const { requestDemoOtp, verifyDemoOtp } = await import("@/lib/otp")
     clearRateLimits()
-    const req = requestDemoOtp("u_maya", "+919876543210")
+    const req = await requestDemoOtp("u_maya", "+919876543210")
     expect(req.ok).toBe(true)
     for (let i = 0; i < 10; i++) {
       verifyDemoOtp("u_maya", "000000")

@@ -49,6 +49,7 @@ describe("Slice C occupant portal", () => {
   it("ticket transitions follow open → in_progress → resolved → closed", async () => {
     const { transitionTicket, createTicket, leasesForOccupant } = await db()
     const lease = leasesForOccupant("u_devon")[0]
+    if (!lease?.id) throw new Error("expected Devon lease")
     const created = createTicket({
       occupantId: "u_devon",
       leaseId: lease.id,

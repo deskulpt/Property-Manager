@@ -67,7 +67,7 @@ import {
   type RewardStatus,
 } from "@/lib/referrals"
 
-const SEED_VERSION = "23"
+const SEED_VERSION = "24"
 
 function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
@@ -449,6 +449,47 @@ function createSchema(db: Sql) {
       created_at TEXT NOT NULL,
       expires_at TEXT NOT NULL,
       verified_at TEXT
+    );
+    CREATE TABLE rate_limit_buckets (
+      bucket_key TEXT PRIMARY KEY,
+      hit_count INTEGER NOT NULL DEFAULT 0,
+      reset_at INTEGER NOT NULL
+    );
+    CREATE TABLE billing_subscriptions (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      status TEXT NOT NULL,
+      cadence TEXT NOT NULL,
+      mix_json TEXT NOT NULL,
+      locked_rates_json TEXT NOT NULL,
+      price_lock_until TEXT,
+      external_customer_id TEXT,
+      external_subscription_id TEXT,
+      external_session_id TEXT,
+      current_period_end TEXT,
+      cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE billing_events (
+      id TEXT PRIMARY KEY,
+      provider TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      external_id TEXT,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE kyc_sessions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      status TEXT NOT NULL,
+      provider_ref TEXT,
+      redirect_url TEXT,
+      consent_version TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
     );
     CREATE TABLE provider_approvals (
       tenant_id TEXT NOT NULL,
@@ -1121,6 +1162,10 @@ function reset(db: Sql) {
     "listing_drafts",
     "notifications",
     "otp_challenges",
+    "rate_limit_buckets",
+    "billing_events",
+    "billing_subscriptions",
+    "kyc_sessions",
     "ledger_entries",
     "payment_methods",
     "late_fee_rules",
@@ -3359,6 +3404,10 @@ export function createPropertyForLandlord(input: {
     db.prepare("SELECT id FROM tenants WHERE id = ? AND kind = 'landlord'").get(input.tenantId),
   )
   if (!tenant) return { ok: false as const, error: "Landlord organisation not found." }
+  if (input.unit) {
+    const gate = assertFreePlanUnitSlot(input.tenantId)
+    if (!gate.ok) return gate
+  }
   const slugBase = input.name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -5843,6 +5892,33 @@ export function countUnits(tenantId: string) {
     getDb().prepare("SELECT COUNT(*) AS c FROM units WHERE tenant_id = ?").get(tenantId),
   )
   return Number(row?.c ?? 0)
+}
+
+/** Free plan = 1 unit org-wide until an active platform billing subscription exists. */
+export function assertFreePlanUnitSlot(tenantId: string) {
+  const tenant = asRow(
+    getDb().prepare("SELECT is_demo FROM tenants WHERE id = ?").get(tenantId),
+  )
+  // Seeded DEMO portfolios keep multiple units for product walkthroughs.
+  if (tenant && Number(tenant.is_demo) === 1) return { ok: true as const }
+  const paid = asRow(
+    getDb()
+      .prepare(
+        `SELECT id FROM billing_subscriptions
+         WHERE tenant_id = ? AND status IN ('active', 'trialing', 'past_due')
+         LIMIT 1`,
+      )
+      .get(tenantId),
+  )
+  if (paid) return { ok: true as const }
+  const used = countUnits(tenantId)
+  if (used >= 1) {
+    return {
+      ok: false as const,
+      error: "Free plan includes 1 unit. Upgrade on Billing to add more.",
+    }
+  }
+  return { ok: true as const }
 }
 
 /** Hard-block new seat when at package seat cap. */

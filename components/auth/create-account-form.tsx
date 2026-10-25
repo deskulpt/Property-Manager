@@ -24,7 +24,7 @@ export function CreateAccountForm({
       <div className="grid gap-2">
         <Label htmlFor="legalName">Organisation legal name</Label>
         <Input id="legalName" name="legalName" required placeholder="Acme Logistics Parks Pvt Ltd" />
-        {state.fieldErrors.legalName ? (
+        {state.fieldErrors?.legalName ? (
           <p className="text-sm text-destructive">{state.fieldErrors.legalName}</p>
         ) : null}
       </div>
@@ -68,7 +68,7 @@ export function CreateAccountForm({
         <p className="text-xs text-ink-faint">
           Public signup is India-only. Other markets stay off this form until the checklist clears.
         </p>
-        {state.fieldErrors.country ? (
+        {state.fieldErrors?.country ? (
           <p className="text-sm text-destructive">{state.fieldErrors.country}</p>
         ) : null}
       </div>

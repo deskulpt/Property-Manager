@@ -19,9 +19,9 @@ export type PackageLimits = {
 export const PACKAGE_LIMITS: Record<SubscriptionPackage, PackageLimits> = {
   starter: {
     id: "starter",
-    label: "Basic",
-    maxProperties: 1,
-    maxUnitsPerProperty: 25,
+    label: "Free",
+    maxProperties: 50,
+    maxUnitsPerProperty: 1,
     maxSeats: 2,
     customDomain: false,
     askEasy: false,
