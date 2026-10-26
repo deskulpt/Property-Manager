@@ -1,6 +1,6 @@
 import type { BillingCadence, BillableSegment, PricingQuote, UnitMix } from "@/lib/billing/pricing"
 
-export type BillingProviderName = "dodo" | "stripe" | "demo"
+export type BillingProviderName = "dodo" | "stripe" | "demo" | "paypal"
 
 export type CheckoutSessionInput = {
   tenantId: string
@@ -13,6 +13,8 @@ export type CheckoutSessionInput = {
   cancelUrl: string
   /** Idempotency / internal subscription draft id */
   clientReferenceId: string
+  /** ISO 3166-1 alpha-2 — drives India vs PayPal routing */
+  billingCountry: string
 }
 
 export type CheckoutSessionResult = {
@@ -22,6 +24,10 @@ export type CheckoutSessionResult = {
   url: string
   externalSessionId: string
   labelledTestMode: boolean
+  /** Set when PayPal (or other FX) settles outside INR */
+  settlementCurrency?: "INR" | "CAD" | "USD"
+  settlementAmountMinor?: number
+  settlementLabel?: string
 }
 
 export type WebhookVerifyResult =

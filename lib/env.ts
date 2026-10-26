@@ -75,12 +75,22 @@ export const ENV_CHECKLIST = [
   {
     name: "BILLING_PROVIDER",
     requiredInProd: false,
-    note: "dodo (default) | stripe | demo — platform MoR swap",
+    note: "India/primary MoR: dodo (default) | stripe | demo",
+  },
+  {
+    name: "BILLING_INTL_PROVIDER",
+    requiredInProd: false,
+    note: "Non-IN payers: paypal (default) | dodo | stripe | demo",
   },
   {
     name: "DODO_WEBHOOK_SECRET",
     requiredInProd: false,
     note: "HMAC for /api/billing/webhook when using Dodo",
+  },
+  {
+    name: "PAYPAL_WEBHOOK_SECRET",
+    requiredInProd: false,
+    note: "Sandbox HMAC for PayPal webhooks (Deskulpt Inc CA account)",
   },
   {
     name: "OTP_SMS_PROVIDER",

@@ -20,7 +20,7 @@ export default async function ConfirmBillingPage({
       <PageHeader
         kicker={params.provider ?? "checkout"}
         title="Confirm test payment"
-        lede="This step stands in for the hosted Dodo/Stripe checkout page while keys are unset."
+        lede="This step stands in for hosted Dodo / Stripe / PayPal (sandbox) checkout while keys are unset."
       />
       {session && ref ? (
         <ConfirmCheckoutForm session={session} refId={ref} />

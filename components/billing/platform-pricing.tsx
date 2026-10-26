@@ -81,6 +81,10 @@ export function PlatformPricing({ nowMs }: { nowMs: number }) {
           <li>Volume: 6–20 units −15%, 21–50 units −25% (does not stack with sale; we apply the better deal).</li>
           <li>12-month price lock from the day you join a paid plan.</li>
           <li>Test-mode checkout only — no live payment keys in this build.</li>
+          <li>
+            India: Dodo/Stripe (primary). Outside India: PayPal sandbox (Deskulpt Inc CA) with INR
+            converted to CAD/USD.
+          </li>
         </ul>
       </section>
 

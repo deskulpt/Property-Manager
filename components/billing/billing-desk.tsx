@@ -83,10 +83,28 @@ export function BillingDesk({
         <section className="bg-card p-4 ring-1 ring-foreground/10 md:p-6">
           <h2 className="font-sans text-lg font-extrabold">Checkout (test mode)</h2>
           <p className="mt-1 text-sm text-ink-soft">
-            No live keys — Dodo/Stripe adapters open an in-app confirm step. Sale vs volume: better
-            discount wins (never stacked).
+            No live keys — adapters open an in-app confirm step. India payers use{" "}
+            <code className="font-mono text-xs">BILLING_PROVIDER</code> (Dodo/Stripe). Outside India,
+            PayPal sandbox (Deskulpt Inc CA) via <code className="font-mono text-xs">BILLING_INTL_PROVIDER</code>
+            — INR total converted to CAD/USD. Sale vs volume: better discount wins (never stacked).
           </p>
           <form action={startCheckoutAction} className="mt-4 grid gap-3">
+            <label className="grid gap-1 text-sm">
+              <span className="font-medium">Billing country</span>
+              <select
+                name="billing_country"
+                className="h-10 border border-ink/20 bg-paper px-3"
+                defaultValue="IN"
+              >
+                <option value="IN">India (Dodo / primary MoR)</option>
+                <option value="CA">Canada (PayPal — CAD)</option>
+                <option value="US">United States (PayPal — USD/CAD)</option>
+                <option value="GB">United Kingdom (PayPal)</option>
+                <option value="AE">UAE (PayPal)</option>
+                <option value="SG">Singapore (PayPal)</option>
+                <option value="AU">Australia (PayPal)</option>
+              </select>
+            </label>
             <label className="grid gap-1 text-sm">
               <span className="font-medium">Cadence</span>
               <select

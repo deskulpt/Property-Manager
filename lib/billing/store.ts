@@ -9,7 +9,8 @@ import {
   type PricingQuote,
   type UnitMix,
 } from "@/lib/billing/pricing"
-import { resolveBillingProvider } from "@/lib/billing"
+import { getBillingProviderByName, resolveBillingProviderForPayer } from "@/lib/billing"
+import { normalizeBillingCountry } from "@/lib/billing/routing"
 import type { BillingProviderName, BillingSubscriptionRow, SubscriptionStatus } from "@/lib/billing/types"
 
 function asRow(value: unknown): Record<string, unknown> | null {
@@ -140,11 +141,15 @@ export async function startBillingCheckout(input: {
   cadence: BillingCadence
   successUrl: string
   cancelUrl: string
+  /** ISO country — IN uses primary MoR; others may route to PayPal */
+  billingCountry?: string | null
 }) {
   const quote = quoteForTenant(input.tenantId, input.mix, input.cadence)
   if (quote.units < 1) {
     return { ok: false as const, error: "Add at least one unit to the mix." }
   }
+  const billingCountry = normalizeBillingCountry(input.billingCountry)
+  const provider = resolveBillingProviderForPayer(billingCountry)
   const id = crypto.randomUUID()
   const now = new Date().toISOString()
   const locked = lockRatesFromQuote(quote)
@@ -160,7 +165,7 @@ export async function startBillingCheckout(input: {
     .run(
       id,
       input.tenantId,
-      resolveBillingProvider().name,
+      provider.name,
       input.cadence,
       JSON.stringify(input.mix),
       JSON.stringify(locked),
@@ -169,7 +174,6 @@ export async function startBillingCheckout(input: {
       now,
     )
 
-  const provider = resolveBillingProvider()
   const session = await provider.createCheckoutSession({
     tenantId: input.tenantId,
     customerEmail: input.email,
@@ -180,6 +184,7 @@ export async function startBillingCheckout(input: {
     successUrl: input.successUrl,
     cancelUrl: input.cancelUrl,
     clientReferenceId: id,
+    billingCountry,
   })
 
   getDb()
@@ -188,7 +193,15 @@ export async function startBillingCheckout(input: {
     )
     .run(session.externalSessionId, session.provider, new Date().toISOString(), id)
 
-  return { ok: true as const, checkoutUrl: session.url, subscriptionId: id, quote, session }
+  return {
+    ok: true as const,
+    checkoutUrl: session.url,
+    subscriptionId: id,
+    quote,
+    session,
+    billingCountry,
+    provider: session.provider,
+  }
 }
 
 export function activateBillingSubscription(input: {
@@ -228,7 +241,7 @@ export function activateBillingSubscription(input: {
 export async function cancelBillingSubscription(tenantId: string) {
   const sub = getActiveBillingSubscription(tenantId)
   if (!sub) return { ok: false as const, error: "No active subscription to cancel." }
-  const provider = resolveBillingProvider()
+  const provider = getBillingProviderByName(sub.provider)
   if (sub.externalSubscriptionId) {
     const remote = await provider.cancelSubscription({
       externalSubscriptionId: sub.externalSubscriptionId,

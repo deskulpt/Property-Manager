@@ -31,12 +31,14 @@ export async function startCheckoutAction(formData: FormData): Promise<void> {
     ? "annual"
     : "monthly") as BillingCadence
   const mix = parseMix(formData)
+  const billingCountry = String(formData.get("billing_country") ?? "IN")
   const result = await startBillingCheckout({
     tenantId: user.tenantId,
     email: user.email,
     name: user.name,
     mix,
     cadence,
+    billingCountry,
     successUrl: "/landlord/billing?paid=1",
     cancelUrl: "/landlord/billing?canceled=1",
   })
