@@ -18,7 +18,8 @@ export default async function ReferDashboardPage() {
     return (
       <RoleGate
         title="Referrer dashboard"
-        body="Switch to Asha Reddy · Refer & Earn in the demo header to see seeded India C&I indications."
+        body="Sign in as Asha Reddy (Refer & Earn) or any account with a referral profile to see seeded India C&I indications."
+        action={{ href: "/login?next=/refer/dashboard", label: "Log in" }}
       />
     )
   }

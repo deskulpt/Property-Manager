@@ -13,7 +13,13 @@ export const metadata = { title: "Profile" }
 export default async function ProfilePage() {
   const user = await getSessionUser()
   if (!user) {
-    return <RoleGate title="Profile" body="Sign in or pick an identity to manage email prefs, WhatsApp OTP, and verification." />
+    return (
+      <RoleGate
+        title="Profile"
+        body="Sign in to manage email preferences, WhatsApp OTP, and verification."
+        action={{ href: "/login?next=/profile", label: "Log in" }}
+      />
+    )
   }
   const prefs = getNotifPrefs(user.id)
   const verification = latestVerification(user.id)

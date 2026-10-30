@@ -20,7 +20,8 @@ export default async function ShopPage() {
       <div className="mx-auto max-w-[900px] px-4 py-10">
         <RoleGate
           title="Occupant shop"
-          body="Switch to Devon Hale (approved lease on BBM Unit A1) to shop. Maya has no lease yet."
+          body="Sign in as Devon Hale (approved lease on BBM Unit A1) to shop. Applicants without a lease will see an empty shop gate."
+          action={{ href: "/login?next=/shop", label: "Log in" }}
         />
       </div>
     )

@@ -8,7 +8,8 @@ export default async function ApplicantLayout({ children }: { children: React.Re
     return (
       <RoleGate
         title="Applicant desk"
-        body="Switch to Maya Chen (in review) or Devon Hale (approved occupant) to manage applications, verification, and e-sign."
+        body="Sign in as Maya Chen (in review) or Devon Hale (approved occupant) to manage applications, verification, and e-sign — or impersonate from the L0 sticky bar."
+        action={{ href: "/login?next=/applicant", label: "Log in" }}
       />
     )
   }

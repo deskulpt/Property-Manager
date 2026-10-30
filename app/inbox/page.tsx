@@ -11,7 +11,13 @@ export const metadata = { title: "Inbox" }
 export default async function InboxPage() {
   const user = await getSessionUser()
   if (!user) {
-    return <RoleGate title="Pick an identity to open the inbox" body="Visitors do not have notices. Choose any seeded person in the demo header." />
+    return (
+      <RoleGate
+        title="Sign in to open the inbox"
+        body="Notices are scoped to your account. Log in, or use L0 SuperAdmin sticky impersonation after signing in as admindeskulpt@gmail.com."
+        action={{ href: "/login?next=/inbox", label: "Log in" }}
+      />
+    )
   }
   const inbox = listNotifications(user.id, "in_app")
   const email = listNotifications(user.id, "email_demo")

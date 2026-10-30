@@ -25,7 +25,17 @@ export default async function ConfirmBillingPage({
       {session && ref ? (
         <ConfirmCheckoutForm session={session} refId={ref} />
       ) : (
-        <p className="text-sm text-ink-soft">Missing session reference.</p>
+        <div className="border border-ink/10 bg-card p-4 text-sm">
+          <p className="text-ink-soft">Missing checkout session. Start again from Billing or Pricing.</p>
+          <p className="mt-3 flex flex-wrap gap-3 font-semibold">
+            <a href="/landlord/billing" className="text-terra hover:underline">
+              Back to billing
+            </a>
+            <a href="/pricing" className="text-terra hover:underline">
+              Pricing
+            </a>
+          </p>
+        </div>
       )}
     </div>
   )

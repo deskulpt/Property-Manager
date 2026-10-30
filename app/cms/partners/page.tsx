@@ -16,7 +16,7 @@ export default async function CmsPartnersPage() {
     return (
       <EmptyState
         title="Partner CMS"
-        body="Switch to Avery (Super Admin), Sam (Account Manager), or Priya (Service Manager)."
+        body="Staff only — log in as Avery (Super Admin), Sam (Account Manager), or Priya (Service Manager), or impersonate from the L0 sticky bar."
       />
     )
   }

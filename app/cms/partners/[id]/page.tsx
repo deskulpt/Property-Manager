@@ -30,7 +30,13 @@ export default async function PartnerDetailPage({
     !canOpenCms(user.role) ||
     !["super_admin", "account_manager", "service_manager"].includes(user.role)
   ) {
-    return <EmptyState title="Staff only" body="Switch to a CMS identity." />
+    return (
+      <EmptyState
+        title="Staff only"
+        body="Sign in as Avery, Sam, or Priya — or impersonate from the L0 sticky bar."
+        action={{ href: "/login?next=/cms/partners", label: "Log in" }}
+      />
+    )
   }
   const { id } = await params
   const app = getPartnerApplication(id)

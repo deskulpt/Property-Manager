@@ -25,6 +25,7 @@ export default async function AgreementNewPage() {
       <RoleGate
         title="Agreement studio"
         body="Sign in as a landlord admin (Nadia / Jonah / Meera) or managing agent (Riya) to draft a standard India C&I rental agreement."
+        action={{ href: "/login?next=/agreements/new", label: "Log in" }}
       />
     )
   }

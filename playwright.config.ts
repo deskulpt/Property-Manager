@@ -33,7 +33,7 @@ export default defineConfig({
   webServer: {
     command: isCI
       ? `npx next start -H 127.0.0.1 -p ${e2ePort}`
-      : `npx next dev -H 127.0.0.1 -p ${e2ePort}`,
+      : `npx next dev --webpack -H 127.0.0.1 -p ${e2ePort}`,
     url: `http://127.0.0.1:${e2ePort}`,
     reuseExistingServer: !isCI && process.env.E2E_REUSE_SERVER === "1",
     timeout: 180_000,

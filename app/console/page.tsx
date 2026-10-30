@@ -14,8 +14,8 @@ export default async function ConsoleHomePage() {
     { href: "/console/tenants", title: "Tenants", body: "Landlord org directory — edit package, suspend, impersonate." },
     { href: "/console/shops", title: "Shops catalog", body: "SKUs and shop config across every landlord tenant." },
     { href: "/console/providers", title: "Service providers", body: "Verify, approve, reject, and match to properties." },
-    { href: "/console/partners", title: "Partner affiliates", body: "Vetting queue placeholder until partner network merges." },
-    { href: "/console/referrals", title: "Referrals CMS", body: "Refer & Earn indications — empty until referral slice merges." },
+    { href: "/console/partners", title: "Partner affiliates", body: "Affiliate and service-provider vetting across the partner network." },
+    { href: "/console/referrals", title: "Referrals CMS", body: "Refer & Earn indications, rewards, and staff review." },
     { href: "/console/pricing", title: "Pricing entitlements", body: "Starter / Pro package assignment across tenants." },
   ]
   return (
