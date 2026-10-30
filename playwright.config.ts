@@ -43,6 +43,13 @@ export default defineConfig({
       DESKULPT_DIST_DIR: distDir,
       DESKULPT_SECRET_KEY: process.env.DESKULPT_SECRET_KEY || "deskulpt-e2e-secret-key-32b",
       DESKULPT_DEMO_SWITCHER: "1",
+      // Keyless demo path — no Dodo/Stripe/PayPal credentials required
+      BILLING_PROVIDER: "demo",
+      BILLING_INTL_PROVIDER: "demo",
+      OTP_LIVE: "0",
+      KYC_LIVE: "0",
+      OTP_SMS_PROVIDER: process.env.OTP_SMS_PROVIDER || "demo",
+      KYC_PROVIDER: process.env.KYC_PROVIDER || "demo",
     },
   },
 })

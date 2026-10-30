@@ -96,6 +96,12 @@ export function PlatformPricing({ nowMs }: { nowMs: number }) {
           Open billing desk
         </Link>
         <Link
+          href="/pricing/subscribe?plan=growth&from=pricing"
+          className="border border-ink/25 px-5 py-3 text-sm font-semibold text-ink hover:border-terra"
+        >
+          Activate listing plan (demo)
+        </Link>
+        <Link
           href="/signup"
           className="border border-ink/25 px-5 py-3 text-sm font-semibold text-ink hover:border-terra"
         >
