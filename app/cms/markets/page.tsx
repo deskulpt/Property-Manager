@@ -16,7 +16,7 @@ export default async function CmsMarketsPage() {
     return (
       <RoleGate
         title="Next-market checklist"
-        body="Switch to Avery Quinn (Super Admin) to start draft countries and work the checklist."
+        body="Sign in as Avery Quinn (Super Admin) — or impersonate from the L0 sticky bar — to start draft countries and work the checklist."
       />
     )
   }

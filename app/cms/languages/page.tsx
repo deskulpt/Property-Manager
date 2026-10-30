@@ -15,7 +15,7 @@ export default async function CmsLanguagesPage() {
     return (
       <RoleGate
         title="Languages"
-        body="Switch to Avery Quinn (Super Admin) to add interface languages."
+        body="Sign in as Avery Quinn (Super Admin) — or impersonate from the L0 sticky bar — to add interface languages."
       />
     )
   }

@@ -32,8 +32,9 @@ export default async function ApplyPage({ params }: { params: Promise<{ unitId: 
   if (!user || user.role !== "applicant") {
     return (
       <RoleGate
-        title="Switch to an applicant"
-        body="Sign in as an applicant, or use the Demo switcher (Maya Chen, Devon Hale, or Ravi Menon) when enabled. Visitors can browse only."
+        title="Sign in as an applicant"
+        body="Lease applications require an applicant account (Maya Chen, Devon Hale, or Ravi Menon in the demo seed). Visitors can browse only."
+        action={{ href: `/login?next=/apply/${row.id}`, label: "Log in" }}
       />
     )
   }

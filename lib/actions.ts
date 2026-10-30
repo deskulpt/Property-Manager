@@ -537,7 +537,7 @@ export async function submitApplication(_prev: ApplyState, formData: FormData): 
   const user = await getSessionUser()
   if (!user || user.role !== "applicant") {
     return {
-      error: "Switch to an applicant in the demo header before you apply.",
+      error: "Sign in as an applicant before you apply.",
       fieldErrors: {},
     }
   }
@@ -1437,7 +1437,7 @@ export async function submitDisplayCurrency(formData: FormData): Promise<{
 }> {
   const user = await getSessionUser()
   if (!user || user.role !== "landlord_admin" || !user.tenantId) {
-    return { ok: false, error: "Switch to a landlord admin in the demo header first.", currency: null }
+    return { ok: false, error: "Sign in as a landlord admin first.", currency: null }
   }
   const currency = String(formData.get("displayCurrency") ?? "") as DisplayCurrency
   if (!["INR", "USD", "CAD", "GBP"].includes(currency)) {
@@ -1468,7 +1468,7 @@ export type OtpState = {
 export async function submitRequestOtp(_prev: OtpState, formData: FormData): Promise<OtpState> {
   const user = await getSessionUser()
   if (!user) {
-    return { error: "Pick a demo identity first.", message: null, demoCode: null, phoneE164: null, verified: false }
+    return { error: "Sign in before requesting an OTP.", message: null, demoCode: null, phoneE164: null, verified: false }
   }
   const countryCode = String(formData.get("countryCode") ?? "")
   const national = String(formData.get("national") ?? "")
@@ -1500,7 +1500,7 @@ export async function submitRequestOtp(_prev: OtpState, formData: FormData): Pro
 export async function submitVerifyOtp(_prev: OtpState, formData: FormData): Promise<OtpState> {
   const user = await getSessionUser()
   if (!user) {
-    return { error: "Pick a demo identity first.", message: null, demoCode: null, phoneE164: null, verified: false }
+    return { error: "Sign in before verifying an OTP.", message: null, demoCode: null, phoneE164: null, verified: false }
   }
   const code = String(formData.get("code") ?? "")
   const result = verifyDemoOtp(user.id, code)
@@ -1760,7 +1760,7 @@ export async function submitLandlordInvite(
   notify({
     userId: result.userId,
     title: "Welcome to Easy Rental",
-    body: `${result.companyName} is on the platform. Switch to this identity in the demo header to open the landlord desk.`,
+    body: `${result.companyName} is on the platform. Log in as the new admin to open the landlord desk.`,
     href: "/landlord",
   })
   notify({
@@ -1772,7 +1772,7 @@ export async function submitLandlordInvite(
   refresh(["/", "/cms", "/cms/landlords", "/inbox"])
   return {
     error: null,
-    notice: `${result.companyName} is ready. Pick ${parsed.data.adminName} in the demo header.`,
+    notice: `${result.companyName} is ready. Log in as ${parsed.data.adminName}.`,
   }
 }
 
@@ -2543,7 +2543,7 @@ export async function cmsAdvanceIndication(formData: FormData) {
 
 export async function ensureMyReferralLink() {
   const user = await getSessionUser()
-  if (!user) return { ok: false as const, error: "Pick Asha Reddy (or any identity) in the demo header." }
+  if (!user) return { ok: false as const, error: "Sign in before claiming a referral link." }
   if (user.role === "referrer") {
     const ref = ensureReferrerForUser(user)
     return { ok: true as const, code: ref.code }
@@ -2959,12 +2959,13 @@ export async function saveProfileNotifPrefs(formData: FormData) {
 export async function reviewApplicationAsDesk(formData: FormData) {
   const user = await getSessionUser()
   if (!user) return
-  let tenantId: string | null = null
+  let tenantId: string | undefined
   if (user.role === "landlord_admin" && user.tenantId) {
     tenantId = user.tenantId
   } else if (user.role === "managing_agent") {
-    tenantId = await resolveAgentTenantId(user.id)
-    if (!tenantId || !agentCanAccessTenant(user.id, tenantId)) return
+    const resolved = await resolveAgentTenantId(user.id)
+    if (!resolved || !agentCanAccessTenant(user.id, resolved)) return
+    tenantId = resolved
   } else {
     return
   }
@@ -2973,34 +2974,37 @@ export async function reviewApplicationAsDesk(formData: FormData) {
   const result = decideApplication(tenantId, applicationId, decision)
   if (!result.ok) return
   const verb = decision === "approved" ? "approved" : "declined"
+  const application = result.application
+  const inviteToken = "inviteToken" in result ? result.inviteToken : null
+  const deniedIds = "deniedIds" in result ? result.deniedIds : []
   const landlordLabel = user.tenantName ?? user.name
   notify({
-    userId: result.application.applicantId,
+    userId: application.applicantId,
     title: `Application ${verb}`,
     body:
-      decision === "approved" && result.inviteToken
-        ? `${landlordLabel} approved Unit ${result.application.unitCode}. Open your portal invite to unlock dues and tickets.`
-        : `${landlordLabel} ${verb} the application for Unit ${result.application.unitCode}.`,
+      decision === "approved" && inviteToken
+        ? `${landlordLabel} approved Unit ${application.unitCode}. Open your portal invite to unlock dues and tickets.`
+        : `${landlordLabel} ${verb} the application for Unit ${application.unitCode}.`,
     href:
-      decision === "approved" && result.inviteToken
-        ? `/portal/invite/${result.inviteToken}`
+      decision === "approved" && inviteToken
+        ? `/portal/invite/${inviteToken}`
         : decision === "approved"
           ? "/account/payments"
           : "/account",
   })
-  for (const applicantId of result.deniedIds) {
+  for (const applicantId of deniedIds) {
     notify({
       userId: applicantId,
       title: "Application declined",
-      body: `Unit ${result.application.unitCode} was leased to another applicant.`,
+      body: `Unit ${application.unitCode} was leased to another applicant.`,
       href: "/account",
     })
   }
   refresh([
     "/",
     "/properties",
-    `/properties/${result.application.propertySlug}`,
-    `/properties/${result.application.propertySlug}/units/${result.application.unitCode}`,
+    `/properties/${application.propertySlug}`,
+    `/properties/${application.propertySlug}/units/${application.unitCode}`,
     "/account",
     "/account/payments",
     "/landlord",

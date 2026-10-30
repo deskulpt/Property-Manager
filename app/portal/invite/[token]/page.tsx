@@ -27,7 +27,8 @@ export default async function PortalInvitePage({
     return (
       <RoleGate
         title="Occupant invite"
-        body={`Switch to the applicant invited for Unit ${invite.unitCode} at ${invite.propertyName}, then return to this link.`}
+        body={`Sign in as the applicant invited for Unit ${invite.unitCode} at ${invite.propertyName}, then return to this link.`}
+        action={{ href: `/login?next=/portal/invite/${token}`, label: "Log in" }}
       />
     )
   }
@@ -36,7 +37,8 @@ export default async function PortalInvitePage({
     return (
       <RoleGate
         title="Wrong identity"
-        body={`This invite is for ${invite.email}. Switch to that demo identity and try again.`}
+        body={`This invite is for ${invite.email}. Log in with that account (or impersonate from the L0 sticky bar) and try again.`}
+        action={{ href: `/login?next=/portal/invite/${token}`, label: "Log in" }}
       />
     )
   }
