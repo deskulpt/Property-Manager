@@ -56,7 +56,15 @@ describe("Slice F visit booking", () => {
   })
 
   it("confirm → completed path and decline from requested", async () => {
+    const { getDb } = await db()
     const { transitionAppointment, appointmentForTenant } = await import("@/lib/visits")
+    // Keep window in the future so "completed" is rejected until ends_at (wall-clock safe).
+    const startsAt = new Date(Date.now() + 2 * 3_600_000).toISOString()
+    const endsAt = new Date(Date.now() + 2.5 * 3_600_000).toISOString()
+    getDb()
+      .prepare("UPDATE appointments SET starts_at = ?, ends_at = ? WHERE id = ?")
+      .run(startsAt, endsAt, "appt_maya_waterman")
+
     const confirmed = transitionAppointment("t_bbm", "appt_maya_waterman", "confirmed")
     expect(confirmed.ok).toBe(true)
     expect(appointmentForTenant("t_bbm", "appt_maya_waterman")?.status).toBe("confirmed")

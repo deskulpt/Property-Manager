@@ -67,7 +67,7 @@ import {
   type RewardStatus,
 } from "@/lib/referrals"
 
-const SEED_VERSION = "24"
+const SEED_VERSION = "25"
 
 function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
@@ -1285,6 +1285,10 @@ function seedVisitCalendar(db: Sql) {
     windowIns.run(`aw_waterman_pm_${weekday}`, "t_bbm", "p_waterman", weekday, "14:00", "17:00")
   }
 
+  // Relative future slot so demo + “too early to complete” stay valid across wall-clock days.
+  const mayaVisitStart = new Date(Date.now() + 3 * 24 * 3_600_000)
+  mayaVisitStart.setUTCMinutes(0, 0, 0)
+  const mayaVisitEnd = new Date(mayaVisitStart.getTime() + 30 * 60_000)
   db.prepare(
     `INSERT INTO appointments (
       id, tenant_id, property_id, unit_id, appointment_type_id, status,
@@ -1298,15 +1302,15 @@ function seedVisitCalendar(db: Sql) {
     "u_waterman_b1",
     "atype_bbm_inperson",
     "requested",
-    "2026-10-27T10:00:00+05:30",
-    "2026-10-27T10:30:00+05:30",
+    mayaVisitStart.toISOString(),
+    mayaVisitEnd.toISOString(),
     "Maya Chen",
     "maya@apexlogistics.example",
     "+919876501234",
     "Want to walk B1 before we finalise the application.",
     "u_maya",
-    "2026-10-20T09:00:00.000Z",
-    "2026-10-20T09:00:00.000Z",
+    new Date().toISOString(),
+    new Date().toISOString(),
   )
 
   const note = db.prepare(
@@ -1317,9 +1321,9 @@ function seedVisitCalendar(db: Sql) {
     "n_visit_maya",
     "u_nadia",
     "Visit requested",
-    "Maya Chen asked for an In-person tour at Demo Bhiwandi Hub · Mon, 27 Oct · 10:00–10:30 am IST.",
+    "Maya Chen asked for an In-person tour at Demo Bhiwandi Hub (upcoming slot).",
     "/landlord/visits",
-    "2026-10-20T09:01:00.000Z",
+    new Date().toISOString(),
     "in_app",
   )
 }
