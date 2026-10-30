@@ -10,7 +10,9 @@ export const demoBillingProvider: PlatformBillingProvider = {
   name: "demo",
   async createCheckoutSession(input: CheckoutSessionInput): Promise<CheckoutSessionResult> {
     const externalSessionId = `demo_sess_${input.clientReferenceId}`
-    const url = `/landlord/billing/confirm?session=${encodeURIComponent(externalSessionId)}&ref=${encodeURIComponent(input.clientReferenceId)}`
+    const url =
+      `/landlord/billing/confirm?session=${encodeURIComponent(externalSessionId)}` +
+      `&ref=${encodeURIComponent(input.clientReferenceId)}&provider=demo`
     return {
       ok: true,
       provider: "demo",
