@@ -67,7 +67,7 @@ import {
   type RewardStatus,
 } from "@/lib/referrals"
 
-const SEED_VERSION = "23"
+const SEED_VERSION = "25"
 
 function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
@@ -449,6 +449,47 @@ function createSchema(db: Sql) {
       created_at TEXT NOT NULL,
       expires_at TEXT NOT NULL,
       verified_at TEXT
+    );
+    CREATE TABLE rate_limit_buckets (
+      bucket_key TEXT PRIMARY KEY,
+      hit_count INTEGER NOT NULL DEFAULT 0,
+      reset_at INTEGER NOT NULL
+    );
+    CREATE TABLE billing_subscriptions (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      status TEXT NOT NULL,
+      cadence TEXT NOT NULL,
+      mix_json TEXT NOT NULL,
+      locked_rates_json TEXT NOT NULL,
+      price_lock_until TEXT,
+      external_customer_id TEXT,
+      external_subscription_id TEXT,
+      external_session_id TEXT,
+      current_period_end TEXT,
+      cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE billing_events (
+      id TEXT PRIMARY KEY,
+      provider TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      external_id TEXT,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE kyc_sessions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      status TEXT NOT NULL,
+      provider_ref TEXT,
+      redirect_url TEXT,
+      consent_version TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
     );
     CREATE TABLE provider_approvals (
       tenant_id TEXT NOT NULL,
@@ -1121,6 +1162,10 @@ function reset(db: Sql) {
     "listing_drafts",
     "notifications",
     "otp_challenges",
+    "rate_limit_buckets",
+    "billing_events",
+    "billing_subscriptions",
+    "kyc_sessions",
     "ledger_entries",
     "payment_methods",
     "late_fee_rules",
@@ -1240,6 +1285,10 @@ function seedVisitCalendar(db: Sql) {
     windowIns.run(`aw_waterman_pm_${weekday}`, "t_bbm", "p_waterman", weekday, "14:00", "17:00")
   }
 
+  // Relative future slot so demo + “too early to complete” stay valid across wall-clock days.
+  const mayaVisitStart = new Date(Date.now() + 3 * 24 * 3_600_000)
+  mayaVisitStart.setUTCMinutes(0, 0, 0)
+  const mayaVisitEnd = new Date(mayaVisitStart.getTime() + 30 * 60_000)
   db.prepare(
     `INSERT INTO appointments (
       id, tenant_id, property_id, unit_id, appointment_type_id, status,
@@ -1253,15 +1302,15 @@ function seedVisitCalendar(db: Sql) {
     "u_waterman_b1",
     "atype_bbm_inperson",
     "requested",
-    "2026-10-27T10:00:00+05:30",
-    "2026-10-27T10:30:00+05:30",
+    mayaVisitStart.toISOString(),
+    mayaVisitEnd.toISOString(),
     "Maya Chen",
     "maya@apexlogistics.example",
     "+919876501234",
     "Want to walk B1 before we finalise the application.",
     "u_maya",
-    "2026-10-20T09:00:00.000Z",
-    "2026-10-20T09:00:00.000Z",
+    new Date().toISOString(),
+    new Date().toISOString(),
   )
 
   const note = db.prepare(
@@ -1272,9 +1321,9 @@ function seedVisitCalendar(db: Sql) {
     "n_visit_maya",
     "u_nadia",
     "Visit requested",
-    "Maya Chen asked for an In-person tour at Demo Bhiwandi Hub · Mon, 27 Oct · 10:00–10:30 am IST.",
+    "Maya Chen asked for an In-person tour at Demo Bhiwandi Hub (upcoming slot).",
     "/landlord/visits",
-    "2026-10-20T09:01:00.000Z",
+    new Date().toISOString(),
     "in_app",
   )
 }
@@ -3359,6 +3408,10 @@ export function createPropertyForLandlord(input: {
     db.prepare("SELECT id FROM tenants WHERE id = ? AND kind = 'landlord'").get(input.tenantId),
   )
   if (!tenant) return { ok: false as const, error: "Landlord organisation not found." }
+  if (input.unit) {
+    const gate = assertFreePlanUnitSlot(input.tenantId)
+    if (!gate.ok) return gate
+  }
   const slugBase = input.name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -5843,6 +5896,33 @@ export function countUnits(tenantId: string) {
     getDb().prepare("SELECT COUNT(*) AS c FROM units WHERE tenant_id = ?").get(tenantId),
   )
   return Number(row?.c ?? 0)
+}
+
+/** Free plan = 1 unit org-wide until an active platform billing subscription exists. */
+export function assertFreePlanUnitSlot(tenantId: string) {
+  const tenant = asRow(
+    getDb().prepare("SELECT is_demo FROM tenants WHERE id = ?").get(tenantId),
+  )
+  // Seeded DEMO portfolios keep multiple units for product walkthroughs.
+  if (tenant && Number(tenant.is_demo) === 1) return { ok: true as const }
+  const paid = asRow(
+    getDb()
+      .prepare(
+        `SELECT id FROM billing_subscriptions
+         WHERE tenant_id = ? AND status IN ('active', 'trialing', 'past_due')
+         LIMIT 1`,
+      )
+      .get(tenantId),
+  )
+  if (paid) return { ok: true as const }
+  const used = countUnits(tenantId)
+  if (used >= 1) {
+    return {
+      ok: false as const,
+      error: "Free plan includes 1 unit. Upgrade on Billing to add more.",
+    }
+  }
+  return { ok: true as const }
 }
 
 /** Hard-block new seat when at package seat cap. */

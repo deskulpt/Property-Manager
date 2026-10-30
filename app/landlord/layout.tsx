@@ -18,6 +18,7 @@ const links = [
   { href: "/landlord/ledger", label: "Ledger" },
   { href: "/landlord/ask", label: "Ask Easy" },
   { href: "/landlord/shop", label: "Shop" },
+  { href: "/landlord/billing", label: "Billing" },
   { href: "/landlord/settings", label: "Settings" },
 ]
 

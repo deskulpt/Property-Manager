@@ -43,7 +43,6 @@ function segmentAccommodationType(segment: PropertySegment): string {
     case "warehouse":
       return "Warehouse"
     case "commercial":
-    case "retail":
       return "Accommodation"
     default:
       return "Accommodation"

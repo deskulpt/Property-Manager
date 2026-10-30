@@ -4,6 +4,11 @@ import { isE164 } from "@/lib/market"
 import { getDb } from "@/lib/db"
 import { isProduction } from "@/lib/env"
 import { rateLimit } from "@/lib/rate-limit"
+import {
+  resolveEmailOtpProvider,
+  resolveSmsOtpProvider,
+  type OtpChannel,
+} from "@/lib/otp/providers"
 
 const DEMO_OTP_CODE = "246810"
 
@@ -12,12 +17,15 @@ function hashCode(code: string) {
 }
 
 export function demoOtpCode() {
-  // Never expose a fixed code in production builds.
   if (isProduction()) return null
   return DEMO_OTP_CODE
 }
 
-export function requestDemoOtp(userId: string, phoneE164: string) {
+export async function requestDemoOtp(
+  userId: string,
+  phoneE164: string,
+  opts?: { channel?: OtpChannel },
+) {
   if (!isE164(phoneE164)) {
     return { ok: false as const, error: "Enter a valid international number with country code." }
   }
@@ -38,12 +46,26 @@ export function requestDemoOtp(userId: string, phoneE164: string) {
     `INSERT INTO otp_challenges (id, user_id, phone_e164, code, created_at, expires_at, verified_at)
      VALUES (?, ?, ?, ?, ?, ?, NULL)`,
   ).run(id, userId, phoneE164, hashCode(plain), now.toISOString(), expires)
+
+  const channel = opts?.channel ?? "sms"
+  const provider = channel === "email" ? resolveEmailOtpProvider() : resolveSmsOtpProvider()
+  const sent = await provider.send({
+    to: phoneE164,
+    code: plain,
+    purpose: "phone_verify",
+  })
+  if (!sent.ok) return { ok: false as const, error: sent.error }
+
+  // Never return codes in production — even if a provider mistakenly echoes one.
+  const demoCode = isProduction() ? null : (sent.demoCode ?? (sent.labelledDemo ? plain : null))
+
   return {
     ok: true as const,
     phoneE164,
-    /** Only returned outside production so the UI can show the demo code. */
-    demoCode: isProduction() ? null : plain,
+    demoCode,
     expiresAt: expires,
+    provider: sent.provider,
+    labelledDemo: sent.labelledDemo,
   }
 }
 
@@ -69,7 +91,6 @@ export function verifyDemoOtp(userId: string, code: string) {
     return { ok: false as const, error: "That OTP expired. Request a new one." }
   }
   const incoming = hashCode(code.trim())
-  // Support legacy plaintext seed rows during transition.
   const match = row.code === incoming || (!isProduction() && code.trim() === row.code)
   if (!match) {
     return { ok: false as const, error: "Incorrect OTP." }

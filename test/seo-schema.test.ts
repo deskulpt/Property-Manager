@@ -80,6 +80,6 @@ describe("SEO / schema.org (SEO-0)", () => {
   it("marks free-text and geo query pages noindex", () => {
     expect(listingsShouldNoIndex({ q: "jubilee" })).toBe(true)
     expect(listingsShouldNoIndex({ lat: 19.2, lng: 73.0 })).toBe(true)
-    expect(listingsShouldNoIndex({ segment: undefined })).toBe(false)
+    expect(listingsShouldNoIndex({})).toBe(false)
   })
 })

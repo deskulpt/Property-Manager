@@ -131,7 +131,7 @@ export function proposalsForTenant(
     args.push(...statuses)
   }
   sql += " ORDER BY created_at DESC"
-  const rows = getDb().prepare(sql).all(...args) as Record<string, unknown>[]
+  const rows = getDb().prepare(sql).all(...(args as string[])) as Record<string, unknown>[]
   return rows.map((row) => mapProposal(asRow(row) ?? row))
 }
 

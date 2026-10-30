@@ -33,7 +33,7 @@ describe("pricing plans catalog + activate", () => {
     expect(byId.growth.priceInr).toBe(1499)
     expect(byId.pro.priceInr).toBe(2999)
     expect(byId.enterprise.priceInr).toBeNull()
-    expect(planLabel("starter")).toBe("Basic")
+    expect(planLabel("starter")).toBe("Free")
     expect(parsePlanId("basic")).toBe("starter")
     expect(packageHasCustomDomain("pro")).toBe(true)
     expect(packageHasCustomDomain("growth")).toBe(false)
