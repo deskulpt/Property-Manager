@@ -8,7 +8,8 @@ export default async function ProviderLayout({ children }: { children: React.Rea
     return (
       <RoleGate
         title="L5 service provider desk"
-        body="This is the L5 Service Provider desk. Demo: Luis Ortega (Bhiwandi) or Vikram Deshmukh (Hinjewadi / partner network). Public partner apply stays on /partners — activated trades land here."
+        body="Sign in as a verified service provider (Luis Ortega · Bhiwandi, or Vikram Deshmukh · Hinjewadi), or impersonate from the L0 sticky bar. Public apply stays on Partners."
+        action={{ href: "/login?next=/provider", label: "Log in" }}
       />
     )
   }

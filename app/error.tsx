@@ -15,8 +15,8 @@ export default function Error({
       <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-terra">Something broke</p>
       <h1 className="mt-3 text-3xl font-black">This page did not load.</h1>
       <p className="mt-3 text-ink-soft">
-        Try again. If you were using the demo identity switcher, return home and re-select your role. No
-        internal stack traces are shown here.
+        Try again. If you were signed in, return home and continue from your desk. No internal stack
+        traces are shown here.
       </p>
       {error.digest ? (
         <p className="mt-2 font-mono text-[11px] text-ink-faint">Reference: {error.digest}</p>

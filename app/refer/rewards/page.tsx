@@ -13,7 +13,8 @@ export default async function ReferRewardsPage() {
     return (
       <RoleGate
         title="Rewards ledger"
-        body="Switch to Asha Reddy to see accrued, payable, and paid_demo INR rows."
+        body="Sign in as Asha Reddy to see accrued, payable, and paid_demo INR reward rows."
+        action={{ href: "/login?next=/refer/rewards", label: "Log in" }}
       />
     )
   }

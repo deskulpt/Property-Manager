@@ -10,7 +10,8 @@ export default async function PortalLayout({ children }: { children: React.React
     return (
       <RoleGate
         title="Occupant portal"
-        body="This desk is for tenants with an approved lease. Switch to Devon Hale (Unit A1 at BBM) to open tickets, dues, shop, and documents."
+        body="This desk is for occupants with an approved lease. Sign in as Devon Hale (devon@northline.example) or impersonate that identity from the L0 sticky bar after logging in as SuperAdmin."
+        action={{ href: "/login?next=/portal", label: "Log in" }}
       />
     )
   }

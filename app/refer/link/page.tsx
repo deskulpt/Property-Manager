@@ -11,8 +11,9 @@ export default async function ReferLinkPage() {
   if (!session) {
     return (
       <RoleGate
-        title="Pick a demo identity"
-        body="Switch to Asha Reddy · Refer & Earn in the header to copy your personal link, or any identity to mint a demo code."
+        title="Sign in for a referral link"
+        body="Log in as Asha Reddy (Refer & Earn) — or any signed-in account — to mint and copy your personal referral link."
+        action={{ href: "/login?next=/refer/link", label: "Log in" }}
       />
     )
   }

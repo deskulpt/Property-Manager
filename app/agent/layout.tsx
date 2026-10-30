@@ -9,7 +9,8 @@ export default async function AgentLayout({ children }: { children: React.ReactN
     return (
       <RoleGate
         title="Managing agent desk"
-        body="Switch to Riya Kapoor in the demo identity switcher. Managing agents only see landlords they are invited to collaborate on — not platform staff Property Manager (Chris Vogel)."
+        body="Sign in as managing agent Riya Kapoor, or impersonate her from the L0 sticky bar. Managing agents only see invited landlords — not platform staff Property Manager."
+        action={{ href: "/login?next=/agent", label: "Log in" }}
       />
     )
   }
