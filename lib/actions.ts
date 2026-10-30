@@ -965,33 +965,36 @@ export async function reviewApplication(formData: FormData) {
   const result = decideApplication(user.tenantId, applicationId, decision)
   if (!result.ok) return
   const verb = decision === "approved" ? "approved" : "declined"
+  const application = result.application
+  const inviteToken = "inviteToken" in result ? result.inviteToken : null
+  const deniedIds = "deniedIds" in result ? result.deniedIds : []
   notify({
-    userId: result.application.applicantId,
+    userId: application.applicantId,
     title: `Application ${verb}`,
     body:
-      decision === "approved" && result.inviteToken
-        ? `${user.tenantName ?? "Your landlord"} approved Unit ${result.application.unitCode}. Open your portal invite to unlock dues and tickets.`
-        : `${user.tenantName ?? "Your landlord"} ${verb} the application for Unit ${result.application.unitCode}.`,
+      decision === "approved" && inviteToken
+        ? `${user.tenantName ?? "Your landlord"} approved Unit ${application.unitCode}. Open your portal invite to unlock dues and tickets.`
+        : `${user.tenantName ?? "Your landlord"} ${verb} the application for Unit ${application.unitCode}.`,
     href:
-      decision === "approved" && result.inviteToken
-        ? `/portal/invite/${result.inviteToken}`
+      decision === "approved" && inviteToken
+        ? `/portal/invite/${inviteToken}`
         : decision === "approved"
           ? "/account/payments"
           : "/account",
   })
-  for (const applicantId of result.deniedIds) {
+  for (const applicantId of deniedIds) {
     notify({
       userId: applicantId,
       title: "Application declined",
-      body: `Unit ${result.application.unitCode} was leased to another applicant.`,
+      body: `Unit ${application.unitCode} was leased to another applicant.`,
       href: "/account",
     })
   }
   refresh([
     "/",
     "/properties",
-    `/properties/${result.application.propertySlug}`,
-    `/properties/${result.application.propertySlug}/units/${result.application.unitCode}`,
+    `/properties/${application.propertySlug}`,
+    `/properties/${application.propertySlug}/units/${application.unitCode}`,
     "/account",
     "/account/payments",
     "/landlord",
@@ -1471,13 +1474,15 @@ export async function submitRequestOtp(_prev: OtpState, formData: FormData): Pro
       verified: false,
     }
   }
-  const result = requestDemoOtp(user.id, e164)
+  const result = await requestDemoOtp(user.id, e164)
   if (!result.ok) {
     return { error: result.error, message: null, demoCode: null, phoneE164: null, verified: false }
   }
   return {
     error: null,
-    message: `Demo OTP sent to ${result.phoneE164}. No SMS provider — use the code shown.`,
+    message: result.labelledDemo
+      ? `OTP queued via ${result.provider} (test mode) to ${result.phoneE164}.`
+      : `OTP sent to ${result.phoneE164}.`,
     demoCode: result.demoCode,
     phoneE164: result.phoneE164,
     verified: false,
@@ -2924,4 +2929,101 @@ export async function submitDemoSign(formData: FormData) {
     })),
   )
   refresh(["/portal/documents", "/landlord/esign", "/inbox"])
+}
+
+/** Restored Origin-mirror action shims (were missing on main — unblocks Next build). */
+export async function createListingUnitForm(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user?.tenantId || (user.role !== "landlord_admin" && user.role !== "property_manager")) return
+  const { createUnitForProperty } = await import("@/lib/role-cms-store")
+  const { assertFreePlanUnitSlot } = await import("@/lib/db")
+  const gate = assertFreePlanUnitSlot(user.tenantId)
+  if (!gate.ok) return
+  const result = createUnitForProperty({
+    tenantId: user.tenantId,
+    propertyId: String(formData.get("propertyId") ?? ""),
+    code: String(formData.get("code") ?? "").trim(),
+    sqft: Number(formData.get("sqft") ?? 0),
+    clearHeight: String(formData.get("clearHeight") ?? ""),
+    docks: Number(formData.get("docks") ?? 0),
+    driveIns: Number(formData.get("driveIns") ?? 0),
+    power: String(formData.get("power") ?? ""),
+    ratePsf: Number(formData.get("ratePsf") ?? 0),
+    description: String(formData.get("description") ?? ""),
+  })
+  if (!result.ok) return
+  refresh(["/landlord/listings", "/listings", "/landlord/properties"])
+}
+
+export async function saveListingPricingForm(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user?.tenantId || (user.role !== "landlord_admin" && user.role !== "property_manager")) return
+  const { updateUnitListing } = await import("@/lib/role-cms-store")
+  const unitId = String(formData.get("unitId") ?? "")
+  const listed = String(formData.get("listed") ?? "1") === "1"
+  const matterportRaw = String(formData.get("matterportUrl") ?? "").trim()
+  updateUnitListing(user.tenantId, unitId, {
+    ratePsf: Number(formData.get("ratePsf") ?? 0),
+    description: String(formData.get("description") ?? ""),
+    listed,
+    matterportUrl: matterportRaw || null,
+  })
+  refresh(["/landlord/listings", "/listings", "/agent/listings"])
+}
+
+export async function saveProfileNotifPrefs(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user) return
+  const { saveNotifPrefs } = await import("@/lib/role-cms-store")
+  saveNotifPrefs(user.id, {
+    applications: formData.has("applications"),
+    visits: formData.has("visits"),
+    tickets: formData.has("tickets"),
+    ledger: formData.has("ledger"),
+    shop: formData.has("shop"),
+    marketing: formData.has("marketing"),
+  })
+  refresh(["/profile"])
+}
+
+export async function reviewApplicationAsDesk(formData: FormData) {
+  return reviewApplication(formData)
+}
+
+export async function generateRentalAgreement(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user?.tenantId || user.role !== "landlord_admin") {
+    return { error: "Landlord admin required." }
+  }
+  const { createAgreement } = await import("@/lib/role-cms-store")
+  const rentMajor = Number(formData.get("rentInr") ?? 0)
+  const depositMajor = Number(formData.get("depositInr") ?? 0)
+  const agreement = createAgreement({
+    tenantId: user.tenantId,
+    unitId: String(formData.get("unitId") ?? ""),
+    landlordName: String(formData.get("landlordName") ?? user.name),
+    tenantPartyName: String(formData.get("tenantPartyName") ?? "Occupant").trim() || "Occupant",
+    propertyLabel: String(formData.get("propertyLabel") ?? ""),
+    unitCode: String(formData.get("unitCode") ?? ""),
+    rentInrCents: Math.round(rentMajor * 100),
+    depositInrCents: Math.round(depositMajor * 100),
+    startDate: String(formData.get("startDate") ?? ""),
+    endDate: String(formData.get("endDate") ?? ""),
+    lockInMonths: Number(formData.get("lockInMonths") ?? 11),
+    noticeDays: Number(formData.get("noticeDays") ?? 30),
+    extras: String(formData.get("extras") ?? ""),
+  })
+  refresh(["/agreements", `/agreements/${agreement.id}`])
+  return { error: null, agreementId: agreement.id }
+}
+
+export async function demoEsignAgreementForm(formData: FormData) {
+  const user = await getSessionUser()
+  if (!user) return
+  const { demoSignAgreement } = await import("@/lib/role-cms-store")
+  const id = String(formData.get("agreementId") ?? formData.get("id") ?? "")
+  const mode =
+    formData.get("mode") === "aadhaar_esign_demo" ? "aadhaar_esign_demo" : "signed_demo"
+  demoSignAgreement(id, mode)
+  refresh([`/agreements/${id}`, "/agreements"])
 }

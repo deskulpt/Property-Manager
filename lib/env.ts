@@ -72,4 +72,34 @@ export const ENV_CHECKLIST = [
     requiredInProd: true,
     note: "Must be production on Railway",
   },
+  {
+    name: "BILLING_PROVIDER",
+    requiredInProd: false,
+    note: "India/primary MoR: dodo (default) | stripe | demo",
+  },
+  {
+    name: "BILLING_INTL_PROVIDER",
+    requiredInProd: false,
+    note: "Non-IN payers: paypal (default) | dodo | stripe | demo",
+  },
+  {
+    name: "DODO_WEBHOOK_SECRET",
+    requiredInProd: false,
+    note: "HMAC for /api/billing/webhook when using Dodo",
+  },
+  {
+    name: "PAYPAL_WEBHOOK_SECRET",
+    requiredInProd: false,
+    note: "Sandbox HMAC for PayPal webhooks (Deskulpt Inc CA account)",
+  },
+  {
+    name: "OTP_SMS_PROVIDER",
+    requiredInProd: false,
+    note: "demo | msg91 | twilio — never returns codes in production",
+  },
+  {
+    name: "KYC_PROVIDER",
+    requiredInProd: false,
+    note: "demo | idfy | signzy | hyperverge",
+  },
 ] as const

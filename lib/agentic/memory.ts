@@ -227,7 +227,7 @@ export function purgeAgentMemory(
   if (scope.mode === "id") {
     result = db
       .prepare("DELETE FROM agent_memory WHERE id = ? AND tenant_id = ?")
-      .run(scope.id, tenantId)
+      .run(scope.id, tenantId) as { changes: number }
   } else if (scope.mode === "property") {
     const prop = db
       .prepare("SELECT id FROM properties WHERE id = ? AND tenant_id = ?")
@@ -235,16 +235,18 @@ export function purgeAgentMemory(
     if (!prop) return { ok: false, error: "Property not in your organisation." }
     result = db
       .prepare("DELETE FROM agent_memory WHERE tenant_id = ? AND property_id = ?")
-      .run(tenantId, scope.propertyId)
+      .run(tenantId, scope.propertyId) as { changes: number }
   } else if (scope.mode === "landlord") {
     result = db
       .prepare("DELETE FROM agent_memory WHERE tenant_id = ? AND property_id IS NULL")
-      .run(tenantId)
+      .run(tenantId) as { changes: number }
   } else {
-    result = db.prepare("DELETE FROM agent_memory WHERE tenant_id = ?").run(tenantId)
+    result = db.prepare("DELETE FROM agent_memory WHERE tenant_id = ?").run(tenantId) as {
+      changes: number
+    }
   }
 
-  return { ok: true, deleted: result.changes }
+  return { ok: true, deleted: Number(result.changes) }
 }
 
 /** Drop rows older than retention window (24 months). Tenant-scoped. */
@@ -253,7 +255,7 @@ export function purgeExpiredAgentMemory(tenantId: string, now = Date.now()): num
   const result = getDb()
     .prepare("DELETE FROM agent_memory WHERE tenant_id = ? AND updated_at < ?")
     .run(tenantId, cutoff)
-  return result.changes
+  return Number(result.changes)
 }
 
 /** Heuristic extract from landlord prompt for stub remember. */

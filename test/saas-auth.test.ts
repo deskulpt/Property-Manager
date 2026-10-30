@@ -20,9 +20,10 @@ describe("password hashing", () => {
 })
 
 describe("package limits", () => {
-  it("Basic (starter) hard-blocks at seat and property caps", () => {
+  it("Free (starter) hard-blocks at seat and unit-per-property caps", () => {
     expect(PACKAGE_LIMITS.starter.maxSeats).toBe(2)
-    expect(PACKAGE_LIMITS.starter.maxProperties).toBe(1)
+    expect(PACKAGE_LIMITS.starter.maxProperties).toBe(50)
+    expect(PACKAGE_LIMITS.starter.maxUnitsPerProperty).toBe(1)
     expect(softWarn(1, 2)).toBe(false)
     expect(softWarn(2, 2)).toBe(false)
     expect(hardBlocked(2, 2)).toBe(true)

@@ -53,6 +53,8 @@ next-env.d.ts
 /data/*.sqlite-*
 /data/uploads/*
 !/data/uploads/.gitkeep
+/data/esign/*
+!/data/esign/.gitkeep
 
 # Generated locale files (English is source)
 locales/*.json

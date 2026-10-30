@@ -51,7 +51,11 @@ export default async function LandlordSettingsPage() {
           {hasDomain
             ? " — custom domains unlocked."
             : " — upgrade to Pro for a custom listings hostname."}{" "}
-          Soft warn at 80%; hard block at 100% for new seats and properties.
+          Free = 1 unit org-wide. Manage per-unit platform billing on{" "}
+          <Link href="/landlord/billing" className="font-semibold text-terra hover:underline">
+            Billing
+          </Link>
+          .
         </p>
         <dl className="mt-4 grid gap-3 sm:grid-cols-3" data-testid="package-usage">
           <div className="border border-ink/10 p-3">

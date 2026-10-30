@@ -57,6 +57,8 @@ export type {
   AgentToolName,
   ProposalStatus,
   AttributeCitation,
+  LeaseAgreement,
+  LeaseParty,
 } from "@/lib/agentic/types"
 
 /** Public / grounded ADK runner (sibling platform surface). */

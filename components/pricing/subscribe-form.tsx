@@ -46,7 +46,13 @@ export function SubscribeForm({
           href="/pricing#plans"
           className="mt-6 inline-block bg-brand px-4 py-3 text-sm font-semibold text-paper hover:bg-brand-deep"
         >
-          Back to plans
+          Back to listing plans
+        </Link>
+        <Link
+          href="/pricing#platform-billing"
+          className="mt-3 inline-block text-sm font-semibold text-terra hover:underline"
+        >
+          Or see per-unit platform billing
         </Link>
       </div>
     )

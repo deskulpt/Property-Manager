@@ -28,17 +28,18 @@ See `.env.example` and `lib/env.ts` `ENV_CHECKLIST`.
 | `NODE_ENV` | `production` |
 | `PORT` | Railway sets this; `npm start` defaults to 43123 locally |
 
-## Deploy (Railway — not configured yet)
+## Deploy (Railway — ready, not deployed)
 
-1. Create a Railway project from this GitHub repo.
-2. Set start command: `npm run start` (or `npx next start -H 0.0.0.0 -p $PORT` if Railway injects `PORT`).
-3. Attach a **volume** for SQLite + uploads; set `DESKULPT_DB_PATH` to e.g. `/data/deskulpt.sqlite`.
-4. Set `DESKULPT_SECRET_KEY` (random ≥16 chars). Leave `DESKULPT_DEMO_SWITCHER` unset.
-5. Health check path: `/api/health` (returns 503 if secret missing in production).
+See [`docs/railway.md`](./railway.md), `railway.json`, and optional `Dockerfile`.
+
+1. Create a Railway project from this GitHub repo (Nixpacks or Dockerfile).
+2. Attach a **volume** at `/data`; set `DESKULPT_DB_PATH=/data/deskulpt.sqlite`.
+3. Set `DESKULPT_SECRET_KEY` (random ≥16 chars). Leave `DESKULPT_DEMO_SWITCHER` unset.
+4. Health check: `/api/health` (wired in `railway.json`).
+5. Billing / OTP / KYC: set `BILLING_PROVIDER`, `OTP_SMS_PROVIDER`, `KYC_PROVIDER` as needed; keep `*_LIVE=0` for test mode.
 6. Custom domain → `easyrental.space` when ready.
-7. Do **not** enable the demo switcher on a host that holds real landlord data.
 
-Postgres migration is planned; until then SQLite on a volume is the launch path.
+Postgres migration is still planned; SQLite on a volume is the near-term path.
 
 ## Docs index
 

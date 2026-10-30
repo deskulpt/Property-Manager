@@ -40,6 +40,7 @@ const statusTint: Record<UnitStatus, string> = {
   available: "#1f6b4a",
   pending: "#8f6f1f",
   leased: "#5a6570",
+  hold: "#6b5b4a",
 }
 
 function meshName(object: THREE.Object3D): string {
