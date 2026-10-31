@@ -71,6 +71,10 @@
 }
 
 :root {
+  /* Face tokens (was next/font/google); system stacks keep e2e/offline boots unblocked. */
+  --font-sans-face: "Source Sans 3", "Helvetica Neue", Helvetica, sans-serif;
+  --font-serif-face: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-mono-face: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --background: #eef2f5;
   --foreground: #12151a;
   --card: #f7f9fb;

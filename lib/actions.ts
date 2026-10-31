@@ -511,6 +511,75 @@ export async function consoleToggleShopSku(formData: FormData) {
   refresh(["/console/shops"])
 }
 
+export async function consoleSetOpsFlag(formData: FormData) {
+  if (!(await requireConsoleAdmin())) return
+  const { setOpsFlag, OPS_FLAG_DEFS } = await import("@/lib/platform-ops")
+  const key = String(formData.get("key") ?? "") as (typeof OPS_FLAG_DEFS)[number]["key"]
+  if (!OPS_FLAG_DEFS.some((d) => d.key === key)) return
+  const on = String(formData.get("on") ?? "") === "1"
+  setOpsFlag(key, on)
+  refresh([
+    "/console",
+    "/console/flags",
+    "/console/partners",
+    "/console/referrals",
+    "/console/ask-easy",
+    "/console/listings",
+  ])
+}
+
+export async function consolePromoteCountryPack(formData: FormData) {
+  if (!(await requireConsoleAdmin())) return
+  const iso = String(formData.get("iso") ?? "")
+  const { promoteCountryPack } = await import("@/lib/markets/store")
+  promoteCountryPack(iso)
+  refresh(["/console/markets", "/console", "/cms/markets", "/account/verify"])
+}
+
+export async function consoleDemoteCountryPack(formData: FormData) {
+  if (!(await requireConsoleAdmin())) return
+  const iso = String(formData.get("iso") ?? "")
+  const { demoteCountryPack } = await import("@/lib/markets/store")
+  demoteCountryPack(iso)
+  refresh(["/console/markets", "/console", "/cms/markets", "/account/verify"])
+}
+
+export async function consolePurgeAskEasyMemory(formData: FormData) {
+  if (!(await requireConsoleAdmin())) return
+  const tenantId = String(formData.get("tenantId") ?? "")
+  if (!tenantId) return
+  const { purgeAgentMemory, writeAuditEvent } = await import("@/lib/agentic")
+  const result = purgeAgentMemory(tenantId, { mode: "all" })
+  if (result.ok) {
+    writeAuditEvent({
+      tenantId,
+      actorUserId: (await getSessionUser())?.id ?? null,
+      kind: "memory_purge",
+      summary: `L0 console purge · deleted ${result.deleted}`,
+      detail: { scope: "all", deleted: result.deleted, source: "console" },
+    })
+  }
+  refresh(["/console/ask-easy"])
+}
+
+export async function consoleSetListingVisibility(formData: FormData) {
+  if (!(await requireConsoleAdmin())) return
+  const unitId = String(formData.get("unitId") ?? "")
+  const listed = String(formData.get("listed") ?? "") === "1"
+  if (!unitId) return
+  const db = (await import("@/lib/db")).getDb()
+  const cols = db.prepare("PRAGMA table_info(units)").all() as { name: string }[]
+  const hasListedCol = cols.some((c) => c.name === "listed")
+  if (hasListedCol) {
+    db.prepare("UPDATE units SET listed = ? WHERE id = ?").run(listed ? 1 : 0, unitId)
+  }
+  db.prepare("UPDATE units SET listed_at = ? WHERE id = ?").run(
+    listed ? new Date().toISOString() : null,
+    unitId,
+  )
+  refresh(["/console/listings", "/listings", "/console"])
+}
+
 export async function setAgentLandlordForm(formData: FormData) {
   const user = await getSessionUser()
   if (!user || user.role !== "managing_agent") return
@@ -1984,15 +2053,17 @@ export async function submitCreateMarketDraft(
   const result = createMarketDraft({
     isoCode: String(formData.get("isoCode") ?? ""),
     name: String(formData.get("name") ?? ""),
+    // L0 manageMarkets may draft parked ISOs; promote still required for live pack.
+    allowParked: true,
   })
   if (!result.ok) return { error: result.error, ok: false }
   notify({
     userId: user!.id,
     title: "Draft market started",
-    body: "Finish every checklist row before this country appears on public forms.",
+    body: "Finish every checklist row, then promote the CountryPack from /console/markets. Checklist complete ≠ live schema.",
     href: `/cms/markets/${result.id}`,
   })
-  refresh(["/cms/markets", "/account/verify", "/inbox"])
+  refresh(["/cms/markets", "/console/markets", "/account/verify", "/inbox"])
   redirect(`/cms/markets/${result.id}`)
 }
 

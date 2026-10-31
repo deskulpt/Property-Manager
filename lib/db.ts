@@ -30,6 +30,7 @@ import {
   LIVE_MARKET,
   MARKET_CHECKLIST_KEYS,
   MARKET_CHECKLIST_LABELS,
+  PARKED_MARKET_ISOS,
   type MarketChecklistKey,
 } from "@/lib/market-checklist"
 import {
@@ -1816,6 +1817,12 @@ export function resetSeedDatabase() {
 
 /** Close the process-wide SQLite handle so the next getDb() reopens (tests). */
 export function closeDatabase() {
+  try {
+    const { resetCountryPacksCache } = require("@/lib/markets/store") as typeof import("@/lib/markets/store")
+    resetCountryPacksCache()
+  } catch {
+    /* markets store optional during early teardown */
+  }
   if (!globalDb.deskulptDb) return
   globalDb.deskulptDb.close()
   globalDb.deskulptDb = undefined
@@ -4667,7 +4674,12 @@ export function getMarketDraft(id: string) {
   return row ? mapDraft(row) : null
 }
 
-export function createMarketDraft(input: { isoCode: string; name: string }) {
+export function createMarketDraft(input: {
+  isoCode: string
+  name: string
+  /** L0 override to draft a parked ISO (still not live until CountryPack promote). */
+  allowParked?: boolean
+}) {
   const iso = input.isoCode.trim().toUpperCase()
   const name = input.name.trim()
   if (!/^[A-Z]{2}$/.test(iso)) {
@@ -4675,6 +4687,12 @@ export function createMarketDraft(input: { isoCode: string; name: string }) {
   }
   if (iso === LIVE_MARKET.iso) {
     return { ok: false as const, error: "India is already the live market." }
+  }
+  if ((PARKED_MARKET_ISOS as readonly string[]).includes(iso) && !input.allowParked) {
+    return {
+      ok: false as const,
+      error: `${iso} is parked. Promote via L0 CountryPack (/console/markets) or pass allowParked.`,
+    }
   }
   if (name.length < 2) {
     return { ok: false as const, error: "Enter a display name." }
@@ -4716,14 +4734,27 @@ export function setChecklistItem(
 }
 
 /**
- * Countries offered on public forms: live India plus drafts with every checklist row done.
- * Incomplete drafts never appear here.
+ * Countries offered on public forms: live CountryPacks (+ India fallback),
+ * plus checklist-complete drafts that are not yet promoted.
+ * Incomplete drafts never appear here. Checklist complete ≠ live MarketProfile.
  */
 export function publicFormCountries(): { iso: string; name: string; live: boolean }[] {
-  const ready = listMarketDrafts()
-    .filter((draft) => draft.complete)
-    .map((draft) => ({ iso: draft.isoCode, name: draft.name, live: false }))
-  return [{ iso: LIVE_MARKET.iso, name: LIVE_MARKET.name, live: true }, ...ready]
+  const byIso = new Map<string, { iso: string; name: string; live: boolean }>()
+  byIso.set(LIVE_MARKET.iso, { iso: LIVE_MARKET.iso, name: LIVE_MARKET.name, live: true })
+  try {
+    const { listLiveCountryPacks } = require("@/lib/markets/store") as typeof import("@/lib/markets/store")
+    for (const pack of listLiveCountryPacks()) {
+      byIso.set(pack.iso, { iso: pack.iso, name: pack.name, live: true })
+    }
+  } catch {
+    /* packs table may not be ready */
+  }
+  for (const draft of listMarketDrafts().filter((d) => d.complete)) {
+    if (!byIso.has(draft.isoCode)) {
+      byIso.set(draft.isoCode, { iso: draft.isoCode, name: draft.name, live: false })
+    }
+  }
+  return [...byIso.values()]
 }
 
 export function isPublicFormCountry(nameOrIso: string) {

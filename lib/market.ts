@@ -3,11 +3,11 @@ import {
   gstCents as rustGstCents,
 } from "@/lib/rust/money"
 
-export type MarketId = "IN"
+export type MarketId = string
 
 export type DisplayCurrency = "INR" | "USD" | "CAD" | "GBP"
 
-export type PaymentMethodKind = "upi" | "enach" | "card_demo"
+export type PaymentMethodKind = "upi" | "enach" | "card_demo" | "interac" | "stripe_card"
 
 export type IdDocumentKind = "kyc_provider" | "driving_licence"
 
@@ -32,6 +32,8 @@ export type MarketProfile = {
   statesLabel: string
   citiesHint: string
   displayCurrencies: DisplayCurrency[]
+  esignProviders?: string[]
+  smsProvider?: string
 }
 
 export const MARKETS: Record<MarketId, MarketProfile> = {
@@ -74,8 +76,93 @@ export const MARKETS: Record<MarketId, MarketProfile> = {
 
 export const ACTIVE_MARKET_ID: MarketId = "IN"
 
-export function activeMarket(): MarketProfile {
-  return MARKETS[ACTIVE_MARKET_ID]
+/** Session override set by MarketProvider / L0 promote tests. */
+let sessionMarketIso: string | null = null
+
+export function setSessionMarketIso(iso: string | null) {
+  sessionMarketIso = iso ? iso.toUpperCase() : null
+}
+
+export function getSessionMarketIso() {
+  return sessionMarketIso
+}
+
+function profileFromPack(pack: {
+  iso: string
+  name: string
+  locale: string
+  currency: string
+  minorExponent: number
+  gstBps: number
+  taxLabels: string[]
+  phoneCc: string
+  postalRule: string
+  postalLabel: string
+  rateUnitLabel: string
+  statesLabel: string
+  citiesHint: string
+  displayCurrencies: DisplayCurrency[]
+  paymentMethods: { kind: PaymentMethodKind; label: string; hint: string }[]
+  idDocuments: { country: string; docType: IdDocumentKind; label: string }[]
+  esignProviders?: string[]
+  smsProvider?: string
+}): MarketProfile {
+  let pinPattern = /^\d{6}$/
+  try {
+    pinPattern = new RegExp(pack.postalRule)
+  } catch {
+    pinPattern = /^\d{6}$/
+  }
+  return {
+    id: pack.iso,
+    name: pack.name,
+    locale: pack.locale,
+    currency: pack.currency,
+    currencyMinorPerMajor: 10 ** pack.minorExponent,
+    phoneCountryCode: pack.phoneCc,
+    phonePlaceholder: pack.phoneCc === "+1" ? "+1 (416) 555-0100" : `${pack.phoneCc} 98765 43210`,
+    pinLabel: pack.postalLabel,
+    pinPattern,
+    pinPlaceholder: pack.iso === "CA" ? "M5V 2T6" : "400001",
+    rateUnitLabel: pack.rateUnitLabel,
+    ratePeriod: "month",
+    gstRateBps: pack.gstBps,
+    gstLabel: pack.taxLabels[0] ?? "Tax",
+    primaryPaymentMethods: pack.paymentMethods,
+    idDocuments: pack.idDocuments,
+    defaultCountry: pack.name,
+    statesLabel: pack.statesLabel,
+    citiesHint: pack.citiesHint,
+    displayCurrencies: pack.displayCurrencies,
+    esignProviders: pack.esignProviders,
+    smsProvider: pack.smsProvider,
+  }
+}
+
+type PackJson = Parameters<typeof profileFromPack>[0]
+
+/** Injected by `lib/markets/store` after schema ensure — avoids db↔market require cycles. */
+let livePackLookup: ((iso: string) => PackJson | null) | null = null
+
+export function registerLivePackLookup(fn: ((iso: string) => PackJson | null) | null) {
+  livePackLookup = fn
+}
+
+/**
+ * Active market profile. Prefers live CountryPack (DB) for session/default ISO,
+ * falls back to static MARKETS.IN. One UI — pack swaps schema, no /ca shard.
+ */
+export function activeMarket(preferredIso?: string | null): MarketProfile {
+  const iso = (preferredIso || sessionMarketIso || ACTIVE_MARKET_ID).toUpperCase()
+  if (livePackLookup) {
+    const pack = livePackLookup(iso) || (iso !== "IN" ? livePackLookup("IN") : null)
+    if (pack) return profileFromPack(pack)
+  }
+  return MARKETS.IN ?? Object.values(MARKETS)[0]
+}
+
+export function marketProfileForIso(iso: string): MarketProfile {
+  return activeMarket(iso)
 }
 
 export function documentForCountry(country: string): {

@@ -41,9 +41,29 @@ test.describe("Platform console L0/L1", () => {
     await page.getByRole("button", { name: /log ?in|sign in/i }).click()
     await page.waitForURL(/\/console/, { timeout: 20_000 })
     await expectPageOk(page)
-    await expect(page.getByRole("heading", { name: /platform console/i }).first()).toBeVisible()
+    await expect(
+      page.getByRole("heading", { name: /l0 command center|platform console/i }).first(),
+    ).toBeVisible()
     await expect(page.getByTestId("admin-session-bar")).toBeVisible()
     await expect(page.getByTestId("demo-identity")).toBeVisible()
+  })
+
+  test("L0 command center surfaces real markets + flags", async ({ page }) => {
+    await setAdminCookies(page, "u_platform_admin")
+    await page.goto("/console", { waitUntil: "domcontentloaded" })
+    await expectPageOk(page)
+    await expect(page.getByTestId("l0-command-center")).toBeVisible()
+    await expect(page.getByTestId("console-tile-markets")).toBeVisible()
+
+    await page.goto("/console/markets", { waitUntil: "domcontentloaded" })
+    await expectPageOk(page)
+    await expect(page.getByTestId("console-markets")).toBeVisible()
+    await expect(page.getByTestId("country-pack-IN")).toBeVisible()
+    await expect(page.getByTestId("country-pack-CA")).toBeVisible()
+
+    await page.goto("/console/flags", { waitUntil: "domcontentloaded" })
+    await expectPageOk(page)
+    await expect(page.getByTestId("flag-partner_network")).toBeVisible()
   })
 
   test("L0 cookie session opens console + can impersonate landlord", async ({ page }) => {
