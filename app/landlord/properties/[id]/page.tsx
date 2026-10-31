@@ -84,6 +84,21 @@ export default async function BuildingVisualsPage({ params }: { params: Promise<
         floorPlanPath={property.floorPlanPath}
         modelPath={property.modelPath}
         modelKind={property.modelKind}
+        floors={property.floors.map((floor) => ({
+          id: floor.id,
+          label: floor.label,
+          levelIndex: floor.levelIndex,
+        }))}
+        mapVersions={property.mapVersions.map((version) => ({
+          id: version.id,
+          status: version.status,
+          sourceKind: version.sourceKind,
+          sourceFilename: version.sourceFilename,
+          platePath: version.platePath,
+          createdAt: version.createdAt,
+          publishedAt: version.publishedAt,
+        }))}
+        activeMapVersionId={property.activeMapVersionId}
         units={property.units.map((unit) => ({
           id: unit.id,
           code: unit.code,

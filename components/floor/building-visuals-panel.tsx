@@ -11,6 +11,7 @@ import {
 } from "@/lib/actions"
 import { BuildingModelDynamic } from "@/components/floor/building-model-dynamic"
 import type { ViewerBinding, ViewerUnitOption } from "@/components/floor/building-model-viewer"
+import { FloorIngestPanel } from "@/components/floor/floor-ingest-panel"
 import { HotspotEditor } from "@/components/floor/hotspot-editor"
 import { SubmitButton } from "@/components/submit-button"
 import type { UnitStatus } from "@/lib/format"
@@ -27,6 +28,18 @@ type UnitRow = {
   sqft: number
 }
 
+type FloorOpt = { id: string; label: string; levelIndex: number }
+
+type MapVersionRow = {
+  id: string
+  status: "draft" | "published"
+  sourceKind: string
+  sourceFilename: string
+  platePath: string | null
+  createdAt: string
+  publishedAt: string | null
+}
+
 export function BuildingVisualsPanel({
   propertyId,
   propertySlug,
@@ -35,6 +48,10 @@ export function BuildingVisualsPanel({
   modelKind,
   units,
   bindings,
+  floors = [],
+  mapVersions = [],
+  activeMapVersionId = null,
+  tenantId = null,
 }: {
   propertyId: string
   propertySlug: string
@@ -43,6 +60,10 @@ export function BuildingVisualsPanel({
   modelKind: "glb" | "gltf" | "ifc" | "obj" | null
   units: UnitRow[]
   bindings: { meshKey: string; unitId: string }[]
+  floors?: FloorOpt[]
+  mapVersions?: MapVersionRow[]
+  activeMapVersionId?: string | null
+  tenantId?: string | null
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
@@ -76,11 +97,20 @@ export function BuildingVisualsPanel({
 
   return (
     <div className="grid gap-8">
+      <FloorIngestPanel
+        propertyId={propertyId}
+        tenantId={tenantId}
+        floors={floors}
+        versions={mapVersions}
+        activeMapVersionId={activeMapVersionId}
+      />
+
       <section className="grid gap-3" data-testid="visuals-floor-map">
         <header>
           <h2 className="font-serif text-xl font-semibold">Floor map (2D)</h2>
           <p className="mt-1 text-sm text-ink-soft">
-            PNG, JPEG, WebP, GIF, or SVG · 5 MB max. Click the plan to place hotspots after upload.
+            PNG, JPEG, WebP, GIF, or SVG · 5 MB max. Or ingest CAD/PDF above. Click the plan to place
+            hotspots after upload.
           </p>
         </header>
         <form action={submitFloorPlan} className="flex flex-wrap items-end gap-3 bg-card p-4 ring-1 ring-foreground/10">

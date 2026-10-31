@@ -52,6 +52,8 @@ import {
   transitionTicket,
   addFloorLevel,
   bindUnitMesh,
+  createFloorMapVersion,
+  publishFloorMapVersion,
   saveBuildingModel,
   saveFloorPlan,
   saveFloorPlanDraft,
@@ -1244,6 +1246,158 @@ export async function submitFloorPlan(formData: FormData) {
   const result = saveFloorPlan(user.tenantId, propertyId, stored.publicPath)
   if (!result.ok) return
   refresh([`/properties/${result.slug}`, `/landlord/properties/${propertyId}`])
+}
+
+/**
+ * L2 landlord or L3 managing agent: upload CAD/PDF → simplify → draft map version.
+ * DWG returns a clear export-DXF/PDF message (no native converter).
+ */
+export async function submitFloorIngestAction(formData: FormData): Promise<{
+  ok: boolean
+  error?: string
+  hint?: string
+  versionId?: string
+  platePath?: string | null
+  sourceKind?: string
+  notes?: string[]
+  warnings?: string[]
+}> {
+  const { resolveImportActor } = await import("@/lib/import/auth")
+  const preferredTenant = String(formData.get("tenantId") ?? "") || null
+  const actor = await resolveImportActor(preferredTenant)
+  if ("error" in actor) return { ok: false, error: actor.error }
+
+  const propertyId = String(formData.get("propertyId") ?? "")
+  if (!/^[a-zA-Z0-9_-]+$/.test(propertyId)) {
+    return { ok: false, error: "Building not found in this organisation." }
+  }
+  const owned = propertyForLandlord(actor.tenantId, propertyId)
+  if (!owned) return { ok: false, error: "Building not found in this organisation." }
+
+  const floorIdRaw = String(formData.get("floorId") ?? "")
+  let floorId = /^[a-zA-Z0-9_-]+$/.test(floorIdRaw) ? floorIdRaw : null
+  const publishNow = String(formData.get("publish") ?? "") === "1"
+
+  const file = formData.get("floorIngest")
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: "Choose a PDF, DXF, or floor-plan image." }
+  }
+  const bytes = Buffer.from(await file.arrayBuffer())
+  const { runFloorIngest, floorMapDocumentSchema } = await import("@/lib/floor-ingest")
+  const ingested = runFloorIngest({
+    bytes,
+    filename: file.name || "upload.bin",
+    contentType: file.type,
+  })
+  if (!ingested.ok) {
+    return { ok: false, error: ingested.error, hint: ingested.hint, sourceKind: ingested.kind }
+  }
+
+  // Buildings without floor rows (e.g. single-plate Waterman) get a Ground level for drafts.
+  if (!floorId && owned.floors.length === 0) {
+    const added = addFloorLevel(actor.tenantId, propertyId, "Ground")
+    if (!added.ok) return { ok: false, error: added.error }
+    floorId = added.floorId
+  } else if (!floorId && owned.floors[0]) {
+    floorId = owned.floors[0].id
+  }
+
+  const { getObjectStore } = await import("@/lib/object-store")
+  const store = getObjectStore()
+  const sourceStored = await store.put({
+    tenantId: actor.tenantId,
+    kind: "floorplans",
+    ext: ingested.sourceExt,
+    bytes: ingested.sourceBytes,
+    contentType: ingested.sourceContentType,
+  })
+  let platePath: string | null = null
+  if (ingested.plate) {
+    const plateStored = await store.put({
+      tenantId: actor.tenantId,
+      kind: "floorplans",
+      ext: ingested.plate.ext,
+      bytes: ingested.plate.bytes,
+      contentType: ingested.plate.contentType,
+    })
+    platePath = plateStored.publicPath
+  }
+
+  const document = {
+    ...ingested.document,
+    platePath,
+    sourcePath: sourceStored.publicPath,
+  }
+  const parsedDoc = floorMapDocumentSchema.safeParse(document)
+  if (!parsedDoc.success) {
+    return { ok: false, error: "Ingested map failed validation." }
+  }
+
+  const created = createFloorMapVersion({
+    tenantId: actor.tenantId,
+    propertyId,
+    floorId,
+    sourceKind: ingested.kind,
+    sourceFilename: file.name || "upload.bin",
+    sourcePath: sourceStored.publicPath,
+    platePath,
+    documentJson: JSON.stringify(parsedDoc.data),
+    createdBy: actor.user.id,
+  })
+  if (!created.ok) return { ok: false, error: created.error }
+
+  // Apply draft immediately so UnitPlanCreator / hotspot plate can edit.
+  if (platePath) {
+    saveFloorPlan(actor.tenantId, propertyId, platePath)
+  }
+  if (created.floorId) {
+    saveFloorPlanDraft(
+      actor.tenantId,
+      propertyId,
+      created.floorId,
+      JSON.stringify(parsedDoc.data.draft),
+    )
+  }
+
+  if (publishNow) {
+    const published = publishFloorMapVersion(actor.tenantId, propertyId, created.versionId)
+    if (!published.ok) return { ok: false, error: published.error }
+  }
+
+  refresh([
+    `/properties/${created.slug}`,
+    `/landlord/properties/${propertyId}`,
+    `/agent/properties/${propertyId}`,
+  ])
+  return {
+    ok: true,
+    versionId: created.versionId,
+    platePath,
+    sourceKind: ingested.kind,
+    notes: parsedDoc.data.notes,
+    warnings: parsedDoc.data.warnings,
+  }
+}
+
+export async function publishFloorMapVersionAction(input: {
+  propertyId: string
+  versionId: string
+  tenantId?: string | null
+}): Promise<{ ok: boolean; error?: string }> {
+  const { resolveImportActor } = await import("@/lib/import/auth")
+  const actor = await resolveImportActor(input.tenantId ?? null)
+  if ("error" in actor) return { ok: false, error: actor.error }
+  if (!/^[a-zA-Z0-9_-]+$/.test(input.propertyId) || !/^[a-zA-Z0-9_-]+$/.test(input.versionId)) {
+    return { ok: false, error: "Invalid map version." }
+  }
+  const result = publishFloorMapVersion(actor.tenantId, input.propertyId, input.versionId)
+  if (!result.ok) return { ok: false, error: result.error }
+  refresh([
+    `/properties/${result.slug}`,
+    `/landlord/properties/${input.propertyId}`,
+    `/agent/properties/${input.propertyId}`,
+  ])
+  return { ok: true }
 }
 
 export async function submitBuildingModel(formData: FormData): Promise<{
