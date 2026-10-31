@@ -55,6 +55,9 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#13253A",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
@@ -89,6 +92,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     >
       <body
         className={`flex min-h-full flex-col bg-paper font-sans text-ink ${showAdminBar ? "pb-20" : ""}`}
+        data-theme="easyrental"
+        data-admin-bar={showAdminBar ? "1" : undefined}
       >
         <MarketProvider initialMarket={initialMarket} liveIsos={liveIsos.length ? liveIsos : ["IN"]}>
           <JsonLd data={[organizationJsonLd(), websiteSearchActionJsonLd()]} />

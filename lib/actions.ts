@@ -121,11 +121,14 @@ import { agentCanAccessTenant, resolveAgentTenantId } from "@/lib/agent-context"
 import {
   createAgreement,
   createUnitForProperty,
+  deletePropertyForLandlord,
+  deleteUnitListing,
   demoSignAgreement,
   getAgreement,
   saveNotifPrefs,
   updateUnitListing,
 } from "@/lib/role-cms-store"
+import { executeListUnit, executeUnlistUnit } from "@/lib/agentic/lease-onboard"
 import {
   canImpersonate,
   canOpenConsole,
@@ -2050,6 +2053,7 @@ export async function submitCreateMarketDraft(
   if (!caps?.manageMarkets) {
     return { error: "Only a Super Admin can start a draft market.", ok: false }
   }
+  const allowParked = String(formData.get("allowParked") ?? "") === "1"
   const result = createMarketDraft({
     isoCode: String(formData.get("isoCode") ?? ""),
     name: String(formData.get("name") ?? ""),
@@ -3244,11 +3248,23 @@ export async function reviewApplicationAsDesk(formData: FormData) {
   ])
 }
 
-export async function createListingUnitForm(formData: FormData) {
+async function resolveListingTenantId() {
   const user = await getSessionUser()
-  if (!user?.tenantId || (user.role !== "landlord_admin" && user.role !== "property_manager")) return
+  if (!user) return null
+  if (user.role === "landlord_admin" && user.tenantId) return { user, tenantId: user.tenantId }
+  if (user.role === "managing_agent") {
+    const tenantId = await resolveAgentTenantId(user.id)
+    if (tenantId && agentCanAccessTenant(user.id, tenantId)) return { user, tenantId }
+  }
+  if (user.role === "property_manager" && user.tenantId) return { user, tenantId: user.tenantId }
+  return null
+}
+
+export async function createListingUnitForm(formData: FormData) {
+  const ctx = await resolveListingTenantId()
+  if (!ctx) return
   const { assertFreePlanUnitSlot } = await import("@/lib/db")
-  const gate = assertFreePlanUnitSlot(user.tenantId)
+  const gate = assertFreePlanUnitSlot(ctx.tenantId)
   if (!gate.ok) return
   const propertyId = String(formData.get("propertyId") ?? "")
   const code = String(formData.get("code") ?? "").trim().toUpperCase()
@@ -3261,7 +3277,7 @@ export async function createListingUnitForm(formData: FormData) {
     return
   }
   const result = createUnitForProperty({
-    tenantId: user.tenantId,
+    tenantId: ctx.tenantId,
     propertyId,
     code,
     sqft,
@@ -3273,28 +3289,98 @@ export async function createListingUnitForm(formData: FormData) {
     description,
   })
   if (!result.ok) return
+  const desk = ctx.user.role === "managing_agent" ? "/agent/listings" : "/landlord/listings"
   refresh(["/landlord/listings", "/landlord/properties", "/listings", "/properties", "/agent/listings"])
-  redirect("/landlord/listings?notice=Unit+listing+created.")
+  redirect(`${desk}?notice=Unit+listing+created.`)
 }
 
 export async function saveListingPricingForm(formData: FormData) {
-  const user = await getSessionUser()
-  if (!user?.tenantId || (user.role !== "landlord_admin" && user.role !== "property_manager")) return
+  const ctx = await resolveListingTenantId()
+  if (!ctx) return
   const unitId = String(formData.get("unitId") ?? "")
   const ratePsf = Number(formData.get("ratePsf"))
   const listed = String(formData.get("listed") ?? "1") === "1"
   const description = String(formData.get("description") ?? "")
   const matterportRaw = String(formData.get("matterportUrl") ?? "").trim()
   if (!unitId || !Number.isFinite(ratePsf) || ratePsf <= 0) return
-  const result = updateUnitListing(user.tenantId, unitId, {
+  const result = updateUnitListing(ctx.tenantId, unitId, {
     ratePsf,
     listed,
     description,
     matterportUrl: matterportRaw || null,
+    status: listed ? "available" : undefined,
   })
   if (!result.ok) return
+  if (listed) {
+    executeListUnit({ tenantId: ctx.tenantId, unitId })
+  }
+  const desk = ctx.user.role === "managing_agent" ? "/agent/listings" : "/landlord/listings"
   refresh(["/landlord/listings", "/listings", "/properties", "/agent/listings"])
-  redirect("/landlord/listings?notice=Listing+saved.")
+  redirect(`${desk}?notice=Listing+saved.`)
+}
+
+export async function delistUnitForm(formData: FormData) {
+  const ctx = await resolveListingTenantId()
+  if (!ctx) return
+  const unitId = String(formData.get("unitId") ?? "")
+  if (!unitId) return
+  const unlist = executeUnlistUnit({ tenantId: ctx.tenantId, unitId })
+  if (!unlist.ok) {
+    const desk = ctx.user.role === "managing_agent" ? "/agent/listings" : "/landlord/listings"
+    redirect(`${desk}?error=${encodeURIComponent(unlist.error)}`)
+  }
+  updateUnitListing(ctx.tenantId, unitId, { listed: false, status: "hold" })
+  const desk = ctx.user.role === "managing_agent" ? "/agent/listings" : "/landlord/listings"
+  refresh(["/landlord/listings", "/listings", "/properties", "/agent/listings"])
+  redirect(`${desk}?notice=Unit+delisted.+Hidden+from+public+catalogue.`)
+}
+
+export async function relistUnitForm(formData: FormData) {
+  const ctx = await resolveListingTenantId()
+  if (!ctx) return
+  const unitId = String(formData.get("unitId") ?? "")
+  if (!unitId) return
+  const list = executeListUnit({ tenantId: ctx.tenantId, unitId })
+  if (!list.ok) {
+    const desk = ctx.user.role === "managing_agent" ? "/agent/listings" : "/landlord/listings"
+    redirect(`${desk}?error=${encodeURIComponent(list.error)}`)
+  }
+  updateUnitListing(ctx.tenantId, unitId, { listed: true, status: "available" })
+  const desk = ctx.user.role === "managing_agent" ? "/agent/listings" : "/landlord/listings"
+  refresh(["/landlord/listings", "/listings", "/properties", "/agent/listings"])
+  redirect(`${desk}?notice=Unit+relisted+on+public+catalogue.`)
+}
+
+export async function deleteUnitForm(formData: FormData) {
+  const ctx = await resolveListingTenantId()
+  if (!ctx) return
+  if (ctx.user.role === "managing_agent") {
+    redirect("/agent/listings?error=Managing+agents+cannot+delete+units.+Ask+the+landlord+or+delist.")
+  }
+  const unitId = String(formData.get("unitId") ?? "")
+  if (!unitId) return
+  const result = deleteUnitListing(ctx.tenantId, unitId)
+  if (!result.ok) {
+    redirect(`/landlord/listings?error=${encodeURIComponent(result.error)}`)
+  }
+  refresh(["/landlord/listings", "/landlord/properties", "/listings", "/properties", "/agent/listings"])
+  redirect("/landlord/listings?notice=Unit+deleted.")
+}
+
+export async function deletePropertyForm(formData: FormData) {
+  const ctx = await resolveListingTenantId()
+  if (!ctx) return
+  if (ctx.user.role === "managing_agent") {
+    redirect("/agent?error=Managing+agents+cannot+delete+buildings.")
+  }
+  const propertyId = String(formData.get("propertyId") ?? "")
+  if (!propertyId) return
+  const result = deletePropertyForLandlord(ctx.tenantId, propertyId)
+  if (!result.ok) {
+    redirect(`/landlord/properties?error=${encodeURIComponent(result.error)}`)
+  }
+  refresh(["/landlord/listings", "/landlord/properties", "/listings", "/properties"])
+  redirect("/landlord/properties?notice=Building+deleted.")
 }
 
 export async function generateRentalAgreement(formData: FormData) {

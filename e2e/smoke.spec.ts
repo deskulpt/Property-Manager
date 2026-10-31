@@ -56,7 +56,11 @@ test.describe("Easy Rental critical paths (India demo)", () => {
 
     const walkTab = page.getByRole("tab", { name: /walkthrough/i })
     await expect(walkTab).toBeVisible()
-    // Client gallery hydrates after SSR; retry click until aria-selected flips.
+    // Wait for gallery hydrate, then retry click until aria-selected flips.
+    await page.waitForFunction(() => {
+      const list = document.querySelector('[role="tablist"][aria-label="Unit media"]')
+      return Boolean(list && Object.keys(list).some((k) => k.startsWith("__reactFiber")))
+    }, undefined, { timeout: 30_000 })
     await expect(async () => {
       await walkTab.click()
       await expect(walkTab).toHaveAttribute("aria-selected", "true")

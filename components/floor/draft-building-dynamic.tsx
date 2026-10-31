@@ -1,7 +1,7 @@
 "use client"
 
 import dynamic from "next/dynamic"
-import type { ComponentProps } from "react"
+import { Component, type ComponentProps, type ErrorInfo, type ReactNode } from "react"
 
 const Viewer = dynamic(
   () => import("@/components/floor/draft-building-viewer").then((m) => m.DraftBuildingViewer),
@@ -19,6 +19,38 @@ const Viewer = dynamic(
   },
 )
 
+class DraftViewerBoundary extends Component<
+  { children: ReactNode },
+  { error: string | null }
+> {
+  state = { error: null as string | null }
+  static getDerivedStateFromError(err: Error) {
+    return { error: err.message || "3D viewer failed" }
+  }
+  componentDidCatch(err: Error, info: ErrorInfo) {
+    console.warn("DraftBuildingViewer", err, info.componentStack)
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div
+          className="border border-dashed border-border bg-card/60 p-6 text-sm text-ink-soft"
+          data-testid="draft-building-error"
+          role="status"
+        >
+          Draft 3D preview unavailable in this browser session. Floor ingest and plate edit still
+          work — refresh to retry the extrude viewer.
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
 export function DraftBuildingDynamic(props: ComponentProps<typeof Viewer>) {
-  return <Viewer {...props} />
+  return (
+    <DraftViewerBoundary>
+      <Viewer {...props} />
+    </DraftViewerBoundary>
+  )
 }

@@ -62,3 +62,4 @@ locales/*.json
 
 # Rust
 /crates/target/
+.next-diag/

@@ -2,6 +2,45 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+@plugin "daisyui" {
+  themes: false;
+}
+
+@plugin "daisyui/theme" {
+  name: "easyrental";
+  default: true;
+  prefersdark: false;
+  color-scheme: light;
+  --color-base-100: #f7f9fb;
+  --color-base-200: #eef2f5;
+  --color-base-300: #e3e9ef;
+  --color-base-content: #12151a;
+  --color-primary: #13253a;
+  --color-primary-content: #eef2f5;
+  --color-secondary: #0e6e8c;
+  --color-secondary-content: #eef2f5;
+  --color-accent: #8f6f1f;
+  --color-accent-content: #eef2f5;
+  --color-neutral: #13253a;
+  --color-neutral-content: #eef2f5;
+  --color-info: #0e6e8c;
+  --color-info-content: #eef2f5;
+  --color-success: #1f6b4a;
+  --color-success-content: #eef2f5;
+  --color-warning: #8f6f1f;
+  --color-warning-content: #eef2f5;
+  --color-error: #9b3b2e;
+  --color-error-content: #eef2f5;
+  --radius-selector: 0.125rem;
+  --radius-field: 0.125rem;
+  --radius-box: 0.125rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 /*
@@ -185,6 +224,40 @@
   }
   .desk-chrome {
     border-left: 3px solid var(--color-terra);
+  }
+  .desk-shell[data-role="l0"] .desk-rail,
+  .desk-shell[data-role="l1"] .desk-rail {
+    border-left-color: #13253a;
+  }
+  .desk-shell[data-role="l2"] .desk-rail,
+  .desk-shell[data-role="l3"] .desk-rail,
+  .desk-shell[data-role="l4"] .desk-rail {
+    border-left-color: #0e6e8c;
+  }
+  .desk-shell[data-role="l5"] .desk-rail {
+    border-left-color: #8f6f1f;
+  }
+  /* Safe-area + admin sticky bar clearance for mobile desk nav */
+  .desk-btm-nav {
+    padding-bottom: max(0.35rem, env(safe-area-inset-bottom));
+  }
+  body[data-admin-bar="1"] .desk-btm-nav {
+    bottom: 3.5rem;
+  }
+  body[data-desk-shell="1"] {
+    padding-bottom: calc(4.25rem + env(safe-area-inset-bottom));
+  }
+  body[data-admin-bar="1"][data-desk-shell="1"] {
+    padding-bottom: calc(7.75rem + env(safe-area-inset-bottom));
+  }
+  @media (min-width: 1024px) {
+    body[data-desk-shell="1"],
+    body[data-admin-bar="1"][data-desk-shell="1"] {
+      padding-bottom: 0;
+    }
+    body[data-admin-bar="1"] {
+      padding-bottom: 5rem;
+    }
   }
 }
 

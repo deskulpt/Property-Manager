@@ -105,38 +105,58 @@ export function useMarket() {
   return ctx
 }
 
+/** Header switch — live packs selectable; CA shown parked until CountryPack promote. */
+const SWITCHER_HINTS: { iso: string; label: string; hint: string }[] = [
+  { iso: "IN", label: "🇮🇳 IN", hint: "Live market — INR, GST 18%, +91" },
+  {
+    iso: "CA",
+    label: "🇨🇦 CA",
+    hint: "Parked until CountryPack promote — checklist alone does not switch schema",
+  },
+]
+
 export function MarketFlagSwitch({ className = "" }: { className?: string }) {
   const { market, liveIsos, setMarket, pending } = useMarket()
-  if (liveIsos.length < 2) {
-    return (
-      <span
-        className={`font-mono text-[10px] uppercase tracking-wider text-ink-faint ${className}`}
-        data-testid="market-flag-IN"
-        title="Only India pack is live"
-      >
-        IN
-      </span>
-    )
-  }
+  const live = new Set(liveIsos.map((i) => i.toUpperCase()))
+
   return (
-    <div className={`flex items-center gap-1 ${className}`} role="group" aria-label="Market">
-      {liveIsos.map((iso) => (
-        <button
-          key={iso}
-          type="button"
-          data-testid={`market-flag-${iso}`}
-          aria-pressed={market === iso}
-          disabled={pending}
-          onClick={() => setMarket(iso)}
-          className={`px-2 py-1 font-mono text-[10px] uppercase tracking-wider transition-colors ${
-            market === iso
-              ? "bg-brand text-paper"
-              : "border border-brand/20 text-ink-soft hover:border-terra hover:text-terra"
-          }`}
-        >
-          {iso}
-        </button>
-      ))}
+    <div
+      className={`inline-flex items-center gap-0.5 rounded-sm border border-ink/15 bg-paper/80 p-0.5 ${className}`}
+      role="group"
+      aria-label="Market"
+      data-testid="market-flag-switch"
+    >
+      {SWITCHER_HINTS.map((opt) => {
+        const isLive = live.has(opt.iso)
+        const selected = market === opt.iso && isLive
+        return (
+          <button
+            key={opt.iso}
+            type="button"
+            data-testid={`market-flag-${opt.iso}`}
+            data-market-status={isLive ? "live" : "parked"}
+            title={opt.hint}
+            aria-pressed={selected}
+            aria-disabled={!isLive}
+            disabled={!isLive || pending}
+            onClick={() => {
+              if (isLive) setMarket(opt.iso)
+            }}
+            className={
+              isLive
+                ? selected
+                  ? "rounded-sm bg-brand px-2 py-1 font-mono text-[10px] font-semibold uppercase tracking-wide text-paper"
+                  : "rounded-sm px-2 py-1 font-mono text-[10px] font-semibold uppercase tracking-wide text-ink-soft hover:bg-paper-2 hover:text-brand"
+                : "cursor-not-allowed rounded-sm px-2 py-1 font-mono text-[10px] font-semibold uppercase tracking-wide text-ink-faint opacity-70"
+            }
+          >
+            {opt.label}
+            {!isLive ? (
+              <span className="ml-1 font-sans text-[9px] normal-case tracking-normal">parked</span>
+            ) : null}
+          </button>
+        )
+      })}
     </div>
   )
 }

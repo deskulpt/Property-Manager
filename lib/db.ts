@@ -68,7 +68,7 @@ import {
   type RewardStatus,
 } from "@/lib/referrals"
 
-const SEED_VERSION = "26"
+const SEED_VERSION = "27"
 
 function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
@@ -618,6 +618,7 @@ function createSchema(db: Sql) {
       description TEXT NOT NULL,
       featured_until TEXT,
       listed_at TEXT,
+      listed INTEGER NOT NULL DEFAULT 1,
       UNIQUE (property_id, code)
     );
     CREATE TABLE unit_media (
@@ -4159,7 +4160,8 @@ export function searchListings(filters: ListingFilters = {}): ListingCard[] {
            ) AS cover_url
          FROM units u
          JOIN properties p ON p.id = u.property_id
-         JOIN tenants t ON t.id = u.tenant_id AND t.kind = 'landlord'`,
+         JOIN tenants t ON t.id = u.tenant_id AND t.kind = 'landlord'
+         WHERE COALESCE(u.listed, 1) = 1 AND u.status != 'hold'`,
       )
       .all(),
   )

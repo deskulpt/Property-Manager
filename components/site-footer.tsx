@@ -76,8 +76,11 @@ export function SiteFooter() {
               Industrial leasing desk for India — warehouses, yards, and parks. A product of
               DeSkulpt Inc.
             </p>
-            <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.14em] text-paper/45">
-              INR · +91 · India
+            <p
+              className="mt-3 font-mono text-[11px] uppercase tracking-[0.14em] text-paper/45"
+              data-testid="footer-market-badge"
+            >
+              INR · +91 · India live · CA parked
             </p>
           </div>
           <nav

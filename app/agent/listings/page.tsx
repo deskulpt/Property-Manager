@@ -21,18 +21,19 @@ export default async function AgentListingsPage() {
   return (
     <div>
       <PageHeader kicker="Listings" title="Create and edit" lede="Same listing tools as the landlord desk, scoped to the current landlord context." />
-      <ListingEditor listings={listings} properties={properties} />
-      <section className="mt-8" data-testid="agent-floor-ingest-links">
-        <h2 className="font-serif text-lg font-semibold">Floor plan ingest</h2>
+      <ListingEditor listings={listings} properties={properties} allowDelete={false} />
+      <section className="mt-8" id="floors" data-testid="agent-floor-ingest-links">
+        <h2 className="font-serif text-lg font-semibold text-primary">Floors · CAD · 3D</h2>
         <p className="mt-1 text-sm text-ink-soft">
-          Upload PDF or DXF for a building — walls, units, doors, stairs, and lifts only.
+          Upload PDF or DXF for a building — walls, units, doors, stairs, and lifts only. Open the
+          building desk for plan creator and 3D mesh binds.
         </p>
-        <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-sm">
+        <ul className="mt-3 flex flex-wrap gap-2 text-sm">
           {portfolio.map((property) => (
             <li key={property.id}>
               <Link
-                href={`/agent/properties/${property.id}`}
-                className="font-semibold text-terra hover:underline"
+                href={`/agent/properties/${property.id}#cad-ingest`}
+                className="btn btn-secondary btn-sm rounded-sm"
               >
                 {property.name} · CAD/PDF ingest
               </Link>

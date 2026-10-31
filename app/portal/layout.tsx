@@ -16,16 +16,16 @@ export default async function PortalLayout({ children }: { children: React.React
     )
   }
   const links = [
-    { href: "/portal", label: "Home" },
+    { href: "/portal", label: "Home", primary: true },
+    { href: "/portal/payments", label: "Payments", primary: true },
+    { href: "/portal/tickets", label: "Tickets", primary: true },
+    { href: "/shop", label: "Shop", primary: true },
     { href: "/portal/ledger", label: "Ledger" },
-    { href: "/portal/tickets", label: "Tickets" },
-    { href: "/portal/payments", label: "Payments" },
-    { href: "/shop", label: "Shop" },
     { href: "/portal/documents", label: "Documents" },
     { href: "/profile", label: "Profile" },
   ]
   return (
-    <PortalFrame kicker="Occupant" title={leases[0].propertyName} links={links}>
+    <PortalFrame kicker="Occupant · L4" title={leases[0].propertyName} links={links} role="l4">
       {children}
     </PortalFrame>
   )

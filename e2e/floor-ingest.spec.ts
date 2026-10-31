@@ -16,6 +16,10 @@ test.describe("CAD/PDF floor ingest (L2 landlord)", () => {
     await expect(panel.getByText(/CAD \/ PDF floor ingest/i)).toBeVisible()
     await expect(page.getByTestId("floor-ingest-dwg-guidance")).toContainText(/DXF|PDF/i)
     await expect(page.getByTestId("floor-ingest-empty").or(page.getByTestId("floor-ingest-versions"))).toBeVisible()
+    await page.waitForFunction(() => {
+      const el = document.querySelector('[data-testid="floor-ingest-panel"]')
+      return Boolean(el && Object.keys(el).some((k) => k.startsWith("__reactFiber")))
+    })
 
     // Client ingest panel hydrates after SSR; retry file set until loading/success appears.
     await expect(async () => {
@@ -50,6 +54,10 @@ test.describe("CAD/PDF floor ingest (L2 landlord)", () => {
     const panel = page.getByTestId("floor-ingest-panel")
     await panel.scrollIntoViewIfNeeded()
     await expect(page.getByTestId("floor-ingest-dwg-guidance")).toBeVisible()
+    await page.waitForFunction(() => {
+      const el = document.querySelector('[data-testid="floor-ingest-panel"]')
+      return Boolean(el && Object.keys(el).some((k) => k.startsWith("__reactFiber")))
+    })
 
     await page.getByTestId("floor-ingest-input").setInputFiles({
       name: "office-12-story-floor-plans.dwg",
