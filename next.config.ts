@@ -20,6 +20,14 @@ const nextConfig: NextConfig = {
   turbopack: {
     resolveExtensions: [".tsx", ".ts", ".jsx", ".js", ".mjs", ".json", ".wasm"],
   },
+  // Playwright local `next dev --webpack` needs explicit WASM (Turbopack already resolves .wasm).
+  webpack: (config) => {
+    config.experiments = {
+      ...config.experiments,
+      asyncWebAssembly: true,
+    }
+    return config
+  },
   async headers() {
     return [
       {

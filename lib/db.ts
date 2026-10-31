@@ -67,7 +67,7 @@ import {
   type RewardStatus,
 } from "@/lib/referrals"
 
-const SEED_VERSION = "25"
+const SEED_VERSION = "26"
 
 function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
@@ -147,6 +147,24 @@ export type FloorRecord = {
   planDraftJson: string | null
 }
 
+export type FloorMapVersionStatus = "draft" | "published"
+
+export type FloorMapVersionRecord = {
+  id: string
+  tenantId: string
+  propertyId: string
+  floorId: string | null
+  status: FloorMapVersionStatus
+  sourceKind: string
+  sourceFilename: string
+  sourcePath: string | null
+  platePath: string | null
+  documentJson: string
+  createdAt: string
+  publishedAt: string | null
+  createdBy: string | null
+}
+
 /** Plan alias: `floors` is the Slice B floor_levels table. */
 export type FloorLevelRecord = FloorRecord
 
@@ -213,6 +231,7 @@ export type PropertyRecord = {
   segment: PropertySegment
   subtype: string
   floorPlanPath: string | null
+  activeMapVersionId: string | null
   modelPath: string | null
   modelKind: "glb" | "gltf" | "ifc" | "obj" | null
   latitude: number | null
@@ -226,6 +245,7 @@ export type PropertyRecord = {
   floors: FloorRecord[]
   units: UnitRecord[]
   meshBindings: MeshBindingRecord[]
+  mapVersions: FloorMapVersionRecord[]
 }
 
 type Sql = DatabaseSync
@@ -509,6 +529,7 @@ function createSchema(db: Sql) {
       segment TEXT NOT NULL DEFAULT 'warehouse',
       subtype TEXT NOT NULL DEFAULT 'logistics_park',
       floor_plan_path TEXT,
+      active_map_version_id TEXT,
       model_path TEXT,
       model_kind TEXT,
       latitude REAL,
@@ -529,6 +550,21 @@ function createSchema(db: Sql) {
       plan_path TEXT,
       plan_draft_json TEXT,
       UNIQUE (property_id, level_index)
+    );
+    CREATE TABLE floor_map_versions (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      property_id TEXT NOT NULL,
+      floor_id TEXT,
+      status TEXT NOT NULL,
+      source_kind TEXT NOT NULL,
+      source_filename TEXT NOT NULL,
+      source_path TEXT,
+      plate_path TEXT,
+      document_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      published_at TEXT,
+      created_by TEXT
     );
     CREATE TABLE unit_mesh_bindings (
       id TEXT PRIMARY KEY,
@@ -1183,6 +1219,7 @@ function reset(db: Sql) {
     "unit_media",
     "unit_mesh_bindings",
     "units",
+    "floor_map_versions",
     "floors",
     "properties",
     "provider_approvals",
@@ -1990,6 +2027,35 @@ function meshBindingsFor(propertyId: string): MeshBindingRecord[] {
   )
 }
 
+function mapFloorMapVersion(row: Record<string, unknown>): FloorMapVersionRecord {
+  const statusRaw = String(row.status ?? "draft")
+  return {
+    id: String(row.id),
+    tenantId: String(row.tenant_id),
+    propertyId: String(row.property_id),
+    floorId: str(row, "floor_id"),
+    status: statusRaw === "published" ? "published" : "draft",
+    sourceKind: String(row.source_kind),
+    sourceFilename: String(row.source_filename),
+    sourcePath: str(row, "source_path"),
+    platePath: str(row, "plate_path"),
+    documentJson: String(row.document_json),
+    createdAt: String(row.created_at),
+    publishedAt: str(row, "published_at"),
+    createdBy: str(row, "created_by"),
+  }
+}
+
+function floorMapVersionsFor(propertyId: string): FloorMapVersionRecord[] {
+  return asRows(
+    getDb()
+      .prepare(
+        "SELECT * FROM floor_map_versions WHERE property_id = ? ORDER BY created_at DESC",
+      )
+      .all(propertyId),
+  ).map(mapFloorMapVersion)
+}
+
 function mapProperty(row: Record<string, unknown>): PropertyRecord {
   const id = String(row.id)
   const segmentRaw = String(row.segment ?? "warehouse")
@@ -2008,6 +2074,7 @@ function mapProperty(row: Record<string, unknown>): PropertyRecord {
     segment,
     subtype: String(row.subtype ?? "logistics_park"),
     floorPlanPath: str(row, "floor_plan_path"),
+    activeMapVersionId: str(row, "active_map_version_id"),
     modelPath: str(row, "model_path"),
     modelKind:
       kind === "glb" || kind === "gltf" || kind === "ifc" || kind === "obj" ? kind : null,
@@ -2022,6 +2089,7 @@ function mapProperty(row: Record<string, unknown>): PropertyRecord {
     floors: floorsFor(id),
     units: unitsFor(id, segment),
     meshBindings: meshBindingsFor(id),
+    mapVersions: floorMapVersionsFor(id),
   }
 }
 
@@ -3544,6 +3612,122 @@ export function addFloorLevel(
     )
     .run(id, tenantId, propertyId, label, nextIndex)
   return { ok: true as const, slug: property.slug, floorId: id, levelIndex: nextIndex, label }
+}
+
+/** Persist a draft floor-map version from CAD/PDF ingest (tenant-scoped). */
+export function createFloorMapVersion(input: {
+  tenantId: string
+  propertyId: string
+  floorId?: string | null
+  sourceKind: string
+  sourceFilename: string
+  sourcePath: string | null
+  platePath: string | null
+  documentJson: string
+  createdBy?: string | null
+}) {
+  const property = propertyForLandlord(input.tenantId, input.propertyId)
+  if (!property) return { ok: false as const, error: "Building not found in this organisation." }
+  if (input.documentJson.length > 400_000) {
+    return { ok: false as const, error: "Floor map document is too large." }
+  }
+  let floorId = input.floorId ?? null
+  if (floorId) {
+    const floor = property.floors.find((f) => f.id === floorId)
+    if (!floor) return { ok: false as const, error: "Floor not found on this building." }
+  } else if (property.floors[0]) {
+    floorId = property.floors[0].id
+  }
+  const id = `fmv_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`
+  const createdAt = new Date().toISOString()
+  getDb()
+    .prepare(
+      `INSERT INTO floor_map_versions (
+        id, tenant_id, property_id, floor_id, status, source_kind, source_filename,
+        source_path, plate_path, document_json, created_at, published_at, created_by
+      ) VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, NULL, ?)`,
+    )
+    .run(
+      id,
+      input.tenantId,
+      input.propertyId,
+      floorId,
+      input.sourceKind,
+      input.sourceFilename.slice(0, 200),
+      input.sourcePath,
+      input.platePath,
+      input.documentJson,
+      createdAt,
+      input.createdBy ?? null,
+    )
+  return {
+    ok: true as const,
+    slug: property.slug,
+    versionId: id,
+    floorId,
+    createdAt,
+  }
+}
+
+/**
+ * Publish a map version: set active on property, sync plate + plan draft to floor/property
+ * so FloorPlanView / UnitPlanCreator / stack pick it up.
+ */
+export function publishFloorMapVersion(tenantId: string, propertyId: string, versionId: string) {
+  const property = propertyForLandlord(tenantId, propertyId)
+  if (!property) return { ok: false as const, error: "Building not found in this organisation." }
+  const version = asRow(
+    getDb()
+      .prepare(
+        "SELECT * FROM floor_map_versions WHERE id = ? AND property_id = ? AND tenant_id = ?",
+      )
+      .get(versionId, propertyId, tenantId),
+  )
+  if (!version) return { ok: false as const, error: "Map version not found." }
+
+  let document: { draft?: unknown; platePath?: string | null } = {}
+  try {
+    document = JSON.parse(String(version.document_json)) as typeof document
+  } catch {
+    return { ok: false as const, error: "Map version document is corrupt." }
+  }
+
+  const platePath = str(version, "plate_path") ?? (typeof document.platePath === "string" ? document.platePath : null)
+  const draftJson =
+    document.draft != null ? JSON.stringify(document.draft).slice(0, 200_000) : null
+  const publishedAt = new Date().toISOString()
+  const db = getDb()
+
+  db.prepare(
+    "UPDATE floor_map_versions SET status = 'draft' WHERE property_id = ? AND tenant_id = ? AND status = 'published'",
+  ).run(propertyId, tenantId)
+  db.prepare(
+    "UPDATE floor_map_versions SET status = 'published', published_at = ? WHERE id = ? AND tenant_id = ?",
+  ).run(publishedAt, versionId, tenantId)
+  db.prepare(
+    "UPDATE properties SET active_map_version_id = ?, floor_plan_path = COALESCE(?, floor_plan_path) WHERE id = ? AND tenant_id = ?",
+  ).run(versionId, platePath, propertyId, tenantId)
+
+  const floorId = str(version, "floor_id") ?? property.floors[0]?.id ?? null
+  if (floorId && (platePath || draftJson)) {
+    db.prepare(
+      `UPDATE floors SET
+         plan_path = COALESCE(?, plan_path),
+         plan_draft_json = COALESCE(?, plan_draft_json)
+       WHERE id = ? AND property_id = ? AND tenant_id = ?`,
+    ).run(platePath, draftJson, floorId, propertyId, tenantId)
+  }
+
+  return { ok: true as const, slug: property.slug, versionId, floorId, platePath }
+}
+
+export function getFloorMapVersion(tenantId: string, versionId: string) {
+  const row = asRow(
+    getDb()
+      .prepare("SELECT * FROM floor_map_versions WHERE id = ? AND tenant_id = ?")
+      .get(versionId, tenantId),
+  )
+  return row ? mapFloorMapVersion(row) : null
 }
 
 export function saveBuildingModel(
