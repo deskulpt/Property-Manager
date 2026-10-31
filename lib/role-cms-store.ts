@@ -420,6 +420,80 @@ export function demoSignAgreement(
   return { ok: true as const, agreement: getAgreement(id)! }
 }
 
+export function deleteUnitListing(tenantId: string, unitId: string) {
+  const row = asRow(
+    getDb()
+      .prepare("SELECT id, status FROM units WHERE id = ? AND tenant_id = ?")
+      .get(unitId, tenantId),
+  )
+  if (!row) return { ok: false as const, error: "Unit not in this organisation." }
+  if (String(row.status) === "leased") {
+    return { ok: false as const, error: "Leased units cannot be deleted — delist instead." }
+  }
+  const apps = asRow(
+    getDb()
+      .prepare(
+        "SELECT COUNT(*) AS c FROM applications WHERE unit_id = ? AND status = 'submitted'",
+      )
+      .get(unitId),
+  )
+  if (Number(apps?.c ?? 0) > 0) {
+    return {
+      ok: false as const,
+      error: "Open applications exist — deny them or delist the unit instead of deleting.",
+    }
+  }
+  getDb().prepare("DELETE FROM unit_media WHERE unit_id = ? AND tenant_id = ?").run(unitId, tenantId)
+  getDb()
+    .prepare("DELETE FROM unit_mesh_bindings WHERE unit_id = ? AND tenant_id = ?")
+    .run(unitId, tenantId)
+  getDb()
+    .prepare("DELETE FROM units WHERE id = ? AND tenant_id = ?")
+    .run(unitId, tenantId)
+  return { ok: true as const }
+}
+
+export function deletePropertyForLandlord(tenantId: string, propertyId: string) {
+  const property = asRow(
+    getDb()
+      .prepare("SELECT id FROM properties WHERE id = ? AND tenant_id = ?")
+      .get(propertyId, tenantId),
+  )
+  if (!property) return { ok: false as const, error: "Property not in this organisation." }
+  const leased = asRow(
+    getDb()
+      .prepare(
+        "SELECT COUNT(*) AS c FROM units WHERE property_id = ? AND tenant_id = ? AND status = 'leased'",
+      )
+      .get(propertyId, tenantId),
+  )
+  if (Number(leased?.c ?? 0) > 0) {
+    return { ok: false as const, error: "A leased bay is on this building — cannot delete." }
+  }
+  const units = asRows(
+    getDb()
+      .prepare("SELECT id FROM units WHERE property_id = ? AND tenant_id = ?")
+      .all(propertyId, tenantId),
+  )
+  for (const unit of units) {
+    const result = deleteUnitListing(tenantId, String(unit.id))
+    if (!result.ok) return result
+  }
+  getDb()
+    .prepare("DELETE FROM floor_map_versions WHERE property_id = ? AND tenant_id = ?")
+    .run(propertyId, tenantId)
+  getDb()
+    .prepare("DELETE FROM unit_mesh_bindings WHERE property_id = ? AND tenant_id = ?")
+    .run(propertyId, tenantId)
+  getDb()
+    .prepare("DELETE FROM floors WHERE property_id = ? AND tenant_id = ?")
+    .run(propertyId, tenantId)
+  getDb()
+    .prepare("DELETE FROM properties WHERE id = ? AND tenant_id = ?")
+    .run(propertyId, tenantId)
+  return { ok: true as const }
+}
+
 export function updateUnitListing(
   tenantId: string,
   unitId: string,
@@ -428,7 +502,7 @@ export function updateUnitListing(
     description?: string
     listed?: boolean
     matterportUrl?: string | null
-    status?: "available" | "pending" | "leased"
+    status?: "available" | "pending" | "leased" | "hold"
   },
 ) {
   const row = asRow(

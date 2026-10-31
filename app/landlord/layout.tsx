@@ -4,12 +4,14 @@ import { SUBSCRIBE_PATH } from "@/lib/plans"
 import { subscriptionAllowsDesk } from "@/lib/role-level"
 import { getSessionUser } from "@/lib/session"
 
+/** Nav order from docs/full-funnel-ia.md + USP: floor/CAD/3D via Properties. */
 const links = [
-  { href: "/landlord", label: "Overview" },
-  { href: "/landlord/properties", label: "Properties" },
-  { href: "/landlord/import", label: "Import listing" },
-  { href: "/landlord/applications", label: "Applications" },
+  { href: "/landlord", label: "Overview", primary: true },
+  { href: "/landlord/properties", label: "Floors & 3D", primary: true },
+  { href: "/landlord/listings", label: "Listings", primary: true },
+  { href: "/landlord/applications", label: "Applications", primary: true },
   { href: "/landlord/visits", label: "Visits" },
+  { href: "/landlord/import", label: "Import listing" },
   { href: "/landlord/tickets", label: "Tickets" },
   { href: "/landlord/reminders", label: "Reminders" },
   { href: "/landlord/esign", label: "E-sign" },
@@ -18,7 +20,7 @@ const links = [
   { href: "/landlord/ledger", label: "Ledger" },
   { href: "/landlord/ask", label: "Ask Easy" },
   { href: "/landlord/shop", label: "Shop" },
-  { href: "/landlord/billing", label: "Billing" },
+  { href: "/landlord/billing", label: "Billing", primary: true },
   { href: "/landlord/settings", label: "Settings" },
 ]
 
@@ -63,9 +65,10 @@ export default async function LandlordLayout({ children }: { children: React.Rea
   const seatHint = user.seatRole ? ` · ${user.seatRole.replace("_", " ")}` : ""
   return (
     <PortalFrame
-      kicker="Landlord"
+      kicker="Landlord · L2"
       title={`${user.tenantName ?? "Portfolio"}${seatHint}`}
       links={links}
+      role="l2"
     >
       {children}
     </PortalFrame>

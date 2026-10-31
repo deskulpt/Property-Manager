@@ -113,15 +113,17 @@ export function BuildingVisualsPanel({
 
   return (
     <div className="grid gap-8">
-      <FloorIngestPanel
-        propertyId={propertyId}
-        tenantId={tenantId}
-        floors={floors}
-        versions={mapVersions}
-        activeMapVersionId={activeMapVersionId}
-      />
+      <div id="cad-ingest" className="scroll-mt-28">
+        <FloorIngestPanel
+          propertyId={propertyId}
+          tenantId={tenantId}
+          floors={floors}
+          versions={mapVersions}
+          activeMapVersionId={activeMapVersionId}
+        />
+      </div>
 
-      <section className="grid gap-3" data-testid="visuals-floor-map">
+      <section id="floor-map" className="grid scroll-mt-28 gap-3" data-testid="visuals-floor-map">
         <header>
           <h2 className="font-serif text-xl font-semibold">Floor map (2D)</h2>
           <p className="mt-1 text-sm text-ink-soft">
@@ -156,7 +158,7 @@ export function BuildingVisualsPanel({
         />
       </section>
 
-      <section className="grid gap-3" data-testid="visuals-3d-model">
+      <section id="building-3d" className="grid scroll-mt-28 gap-3" data-testid="visuals-3d-model">
         <header>
           <h2 className="font-serif text-xl font-semibold">3D model (glTF / GLB / IFC / OBJ)</h2>
           <p className="mt-1 text-sm text-ink-soft">

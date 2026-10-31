@@ -12,7 +12,11 @@ export function StartMarketDraftForm({
 }) {
   const [state, action] = useActionState(submitCreateMarketDraft, initial)
   return (
-    <form action={action} className="grid gap-3 md:grid-cols-[8rem_1fr_auto]" data-testid="start-market-draft">
+    <form
+      action={action}
+      className="grid gap-3 md:grid-cols-[8rem_1fr_auto]"
+      data-testid="start-market-draft"
+    >
       <label className="grid gap-1 text-sm">
         {labels.iso}
         <input
@@ -22,7 +26,7 @@ export function StartMarketDraftForm({
           maxLength={2}
           autoComplete="off"
           defaultValue=""
-          className="h-9 border border-input bg-background px-2 uppercase"
+          className="input input-bordered input-sm rounded-sm uppercase"
           required
         />
       </label>
@@ -34,7 +38,7 @@ export function StartMarketDraftForm({
           name="name"
           autoComplete="off"
           defaultValue=""
-          className="h-9 border border-input bg-background px-2"
+          className="input input-bordered input-sm rounded-sm"
           required
         />
       </label>
@@ -42,13 +46,26 @@ export function StartMarketDraftForm({
         <button
           type="submit"
           data-testid="market-start-submit"
-          className="h-9 bg-brand px-4 font-sans text-sm font-bold text-paper"
+          className="btn btn-primary btn-sm rounded-sm h-9"
         >
           {labels.submit}
         </button>
       </div>
+      <label className="flex items-start gap-2 text-xs text-ink-soft md:col-span-3">
+        <input
+          type="checkbox"
+          name="allowParked"
+          value="1"
+          className="checkbox checkbox-sm mt-0.5 rounded-sm"
+          data-testid="market-allow-parked"
+        />
+        <span>
+          Allow parked ISO (CA / US / BR / GB) — starts a <strong>checklist draft only</strong>. Complete ≠
+          live CountryPack; header CA stays parked until promote.
+        </span>
+      </label>
       {state.error ? (
-        <p className="text-sm text-destructive md:col-span-3" data-testid="market-start-error">
+        <p className="text-sm text-error md:col-span-3" data-testid="market-start-error">
           {state.error}
         </p>
       ) : null}

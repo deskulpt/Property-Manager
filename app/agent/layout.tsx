@@ -3,6 +3,15 @@ import { RoleGate } from "@/components/product"
 import { agentLandlords, resolveAgentTenantId } from "@/lib/agent-context"
 import { getSessionUser } from "@/lib/session"
 
+/** Full L3 powers — docs/full-funnel-ia.md §6. Floors/CAD via listings → building. */
+const links = [
+  { href: "/agent", label: "Landlords", primary: true },
+  { href: "/agent/applications", label: "Applications", primary: true },
+  { href: "/agent/listings", label: "Floors & listings", primary: true },
+  { href: "/agent/import", label: "Import", primary: true },
+  { href: "/agent/pricing", label: "Pricing" },
+]
+
 export default async function AgentLayout({ children }: { children: React.ReactNode }) {
   const user = await getSessionUser()
   if (!user || user.role !== "managing_agent") {
@@ -17,15 +26,13 @@ export default async function AgentLayout({ children }: { children: React.ReactN
   const landlords = agentLandlords(user.id)
   const tenantId = await resolveAgentTenantId(user.id)
   const current = landlords.find((l) => l.id === tenantId) ?? null
-  const links = [
-    { href: "/agent", label: "Landlords" },
-    { href: "/agent/import", label: "Import listing" },
-  ]
+
   return (
     <PortalFrame
-      kicker="Managing agent"
+      kicker="Managing agent · L3"
       title={current ? current.name : "Select a landlord"}
       links={links}
+      role="l3"
     >
       {children}
     </PortalFrame>

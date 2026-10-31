@@ -85,14 +85,17 @@ export function FloorIngestPanel({
   return (
     <section className="grid gap-3" data-testid="floor-ingest-panel">
       <header>
-        <h2 className="font-serif text-xl font-semibold">CAD / PDF floor ingest</h2>
+        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-secondary">
+          Main USP · CAD ingest
+        </p>
+        <h2 className="mt-1 font-serif text-xl font-semibold text-primary">CAD / PDF floor ingest</h2>
         <p className="mt-1 text-sm text-ink-soft">
           Upload a PDF or DXF. We extract exterior and partition walls, unit outlines, doors,
           stairs, lifts, and openings — not furniture, dims, or titleblocks. Publish to stack the
           plate into the 3D building visualizer.
         </p>
         <div
-          className="alert alert-warning mt-2 border border-[#8f6f1f]/40 bg-[#8f6f1f]/10 px-3 py-2 text-sm text-ink"
+          className="alert alert-warning mt-2 rounded-sm border border-[#8f6f1f]/40 bg-[#8f6f1f]/10 py-2 text-sm text-ink"
           role="note"
           data-testid="floor-ingest-dwg-guidance"
         >
@@ -104,12 +107,12 @@ export function FloorIngestPanel({
         </div>
       </header>
 
-      <div className="flex flex-wrap items-end gap-3 bg-card p-4 ring-1 ring-foreground/10">
+      <div className="flex flex-wrap items-end gap-3 rounded-sm border border-base-300 bg-base-100 p-4">
         {floors.length > 0 ? (
           <label className="form-control grid gap-1 text-sm">
             <span className="label-text">Target floor</span>
             <select
-              className="select select-bordered border border-ink/15 bg-paper px-2 py-1.5 text-sm"
+              className="select select-bordered select-sm rounded-sm"
               value={floorId}
               onChange={(e) => setFloorId(e.target.value)}
               data-testid="floor-ingest-floor"
@@ -189,7 +192,7 @@ export function FloorIngestPanel({
         <input
           ref={inputRef}
           type="file"
-          className="file-input file-input-bordered sr-only"
+          className="hidden"
           accept=".pdf,.dxf,.dwg,application/pdf,image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
           data-testid="floor-ingest-input"
           disabled={pending}

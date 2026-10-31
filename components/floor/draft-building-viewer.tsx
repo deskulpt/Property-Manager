@@ -191,7 +191,16 @@ export function DraftBuildingViewer({
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
-    setReady(true)
+    let cancelled = false
+    // Defer Canvas until after mount; clear on unmount to avoid R3F removeChild races.
+    const id = window.requestAnimationFrame(() => {
+      if (!cancelled) setReady(true)
+    })
+    return () => {
+      cancelled = true
+      window.cancelAnimationFrame(id)
+      setReady(false)
+    }
   }, [])
 
   useEffect(() => {
@@ -259,9 +268,9 @@ export function DraftBuildingViewer({
           </div>
         ) : (
           <Canvas
-            shadows
+            shadows={{ type: THREE.PCFShadowMap }}
             camera={{ position: [28, 22, 28], fov: 42, near: 0.1, far: 200 }}
-            gl={{ antialias: true }}
+            gl={{ antialias: true, powerPreference: "high-performance" }}
             onPointerMissed={() => setSelectedUnitCode(null)}
           >
             <Suspense fallback={null}>

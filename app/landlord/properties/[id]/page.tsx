@@ -18,12 +18,44 @@ export default async function BuildingVisualsPage({ params }: { params: Promise<
   return (
     <div>
       <PageHeader
-        kicker={property.area}
+        kicker={`${property.area} · USP`}
         title={property.name}
-        lede="Plan creator drafts orthogonal layouts from areas. Building visuals cover floor-map hotspots, interactive 3D mesh binds, and Matterport walkthrough links. Public visitors open bays from pins or coloured meshes."
+        lede="Plan creator drafts orthogonal layouts. CAD/PDF ingest builds plates. Interactive 3D mesh binds and Matterport tours let prospects open bays from pins or coloured meshes."
+        actions={
+          <>
+            <a href="#plan-creator" className="btn btn-primary btn-sm rounded-sm">
+              Plan creator
+            </a>
+            <a href="#cad-ingest" className="btn btn-secondary btn-sm rounded-sm">
+              CAD / PDF ingest
+            </a>
+            <a href="#building-3d" className="btn btn-outline btn-sm rounded-sm">
+              3D viewer
+            </a>
+          </>
+        }
       />
 
-      <section className="mb-10">
+      <nav
+        className="mb-6 flex flex-wrap gap-2 text-sm"
+        aria-label="Building visualizer sections"
+        data-testid="building-visualizer-jump"
+      >
+        <a href="#plan-creator" className="btn btn-ghost btn-xs rounded-sm">
+          Plan creator
+        </a>
+        <a href="#cad-ingest" className="btn btn-ghost btn-xs rounded-sm">
+          CAD / PDF
+        </a>
+        <a href="#building-3d" className="btn btn-ghost btn-xs rounded-sm">
+          Floor map &amp; 3D
+        </a>
+        <Link href="/landlord/listings" className="btn btn-ghost btn-xs rounded-sm">
+          Edit listings
+        </Link>
+      </nav>
+
+      <section id="plan-creator" className="mb-10 scroll-mt-28">
         <h2 className="font-serif text-xl font-semibold">Plan creator</h2>
         <p className="mt-1 text-sm text-ink-soft">
           Start from an empty canvas or auto-partition by sq ft / sq yd. Add floors when the first

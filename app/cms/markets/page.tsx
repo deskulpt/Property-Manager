@@ -23,13 +23,25 @@ export default async function CmsMarketsPage() {
   const drafts = listMarketDrafts()
   return (
     <div>
-      <PageHeader kicker="Markets" title={t("cms.markets.title")} lede={t("cms.markets.lede")} />
-      <section className="mb-8 bg-card p-4 ring-1 ring-foreground/10">
-        <p className="font-mono text-[10px] uppercase tracking-wider text-terra">{t("cms.markets.live")}</p>
-        <p className="mt-1 font-sans text-xl font-extrabold">
+      <PageHeader
+        kicker="Markets · CountryPack"
+        title={t("cms.markets.title")}
+        lede="India is the only live MarketProfile. Parked ISOs (CA/US/BR/GB) need L0 allowParked for a checklist draft — complete ≠ promote. Header CA stays parked until CountryPack."
+      />
+      <section className="mb-8 rounded-sm border border-base-300 bg-base-100 p-4">
+        <p className="font-mono text-[10px] uppercase tracking-wider text-secondary">{t("cms.markets.live")}</p>
+        <p className="mt-1 font-serif text-xl font-semibold text-primary">
           {LIVE_MARKET.name} ({LIVE_MARKET.iso})
         </p>
-        <p className="mt-1 text-sm text-ink-soft">INR ledger · always offered on public forms.</p>
+        <p className="mt-1 text-sm text-ink-soft">
+          INR ledger · GST 18% · +91 · UPI/eNACH demo · always on public forms.
+        </p>
+        <div className="alert alert-warning mt-3 rounded-sm py-2 text-sm">
+          <span>
+            Canada is <strong>parked</strong> until CountryPack promote. Do not claim a live CA schema from
+            checklist alone.
+          </span>
+        </div>
       </section>
       <section className="mb-8">
         <h2 className="mb-3 font-sans text-lg font-extrabold">{t("cms.markets.start")}</h2>
