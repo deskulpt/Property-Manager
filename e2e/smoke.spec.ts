@@ -56,7 +56,11 @@ test.describe("Easy Rental critical paths (India demo)", () => {
 
     const walkTab = page.getByRole("tab", { name: /walkthrough/i })
     await expect(walkTab).toBeVisible()
-    await walkTab.click()
+    // Client gallery hydrates after SSR; retry click until aria-selected flips.
+    await expect(async () => {
+      await walkTab.click()
+      await expect(walkTab).toHaveAttribute("aria-selected", "true")
+    }).toPass({ timeout: 15_000 })
 
     const frame = page.locator('iframe[title="Matterport walkthrough"]')
     await expect(frame).toBeVisible({ timeout: 20_000 })

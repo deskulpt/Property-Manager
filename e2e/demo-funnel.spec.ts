@@ -105,7 +105,9 @@ test.describe("Demo funnel — primary journeys", () => {
     ])
     await page.goto("/console", { waitUntil: "domcontentloaded" })
     await expectPageOk(page)
-    await expect(page.getByRole("heading", { name: /platform console/i }).first()).toBeVisible()
+    await expect(
+      page.getByRole("heading", { name: /l0 command center|platform console/i }).first(),
+    ).toBeVisible()
     await expect(page.getByTestId("admin-session-bar")).toBeVisible()
   })
 

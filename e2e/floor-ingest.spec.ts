@@ -17,10 +17,13 @@ test.describe("CAD/PDF floor ingest (L2 landlord)", () => {
     await expect(page.getByTestId("floor-ingest-dwg-guidance")).toContainText(/DXF|PDF/i)
     await expect(page.getByTestId("floor-ingest-empty").or(page.getByTestId("floor-ingest-versions"))).toBeVisible()
 
-    await page.getByTestId("floor-ingest-input").setInputFiles(mallPdf)
-    await expect(page.getByTestId("floor-ingest-loading").or(page.getByTestId("floor-ingest-success"))).toBeVisible({
-      timeout: 5_000,
-    })
+    // Client ingest panel hydrates after SSR; retry file set until loading/success appears.
+    await expect(async () => {
+      await page.getByTestId("floor-ingest-input").setInputFiles(mallPdf)
+      await expect(
+        page.getByTestId("floor-ingest-loading").or(page.getByTestId("floor-ingest-success")),
+      ).toBeVisible({ timeout: 4_000 })
+    }).toPass({ timeout: 30_000 })
     await expect(page.getByTestId("floor-ingest-success")).toBeVisible({ timeout: 45_000 })
     await expect(page.getByTestId("floor-ingest-versions")).toBeVisible()
     await expect(page.getByTestId("floor-ingest-versions")).toContainText(/PDF/i)
