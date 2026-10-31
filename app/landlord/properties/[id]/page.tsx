@@ -88,6 +88,7 @@ export default async function BuildingVisualsPage({ params }: { params: Promise<
           id: floor.id,
           label: floor.label,
           levelIndex: floor.levelIndex,
+          planDraftJson: floor.planDraftJson,
         }))}
         mapVersions={property.mapVersions.map((version) => ({
           id: version.id,

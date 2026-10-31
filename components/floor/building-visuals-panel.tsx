@@ -11,9 +11,12 @@ import {
 } from "@/lib/actions"
 import { BuildingModelDynamic } from "@/components/floor/building-model-dynamic"
 import type { ViewerBinding, ViewerUnitOption } from "@/components/floor/building-model-viewer"
+import { DraftBuildingDynamic } from "@/components/floor/draft-building-dynamic"
 import { FloorIngestPanel } from "@/components/floor/floor-ingest-panel"
 import { HotspotEditor } from "@/components/floor/hotspot-editor"
 import { SubmitButton } from "@/components/submit-button"
+import { floorsWithDrafts } from "@/lib/floor-extrude"
+import { parsePlanDraft } from "@/lib/plan-draft"
 import type { UnitStatus } from "@/lib/format"
 
 type UnitRow = {
@@ -28,7 +31,12 @@ type UnitRow = {
   sqft: number
 }
 
-type FloorOpt = { id: string; label: string; levelIndex: number }
+type FloorOpt = {
+  id: string
+  label: string
+  levelIndex: number
+  planDraftJson?: string | null
+}
 
 type MapVersionRow = {
   id: string
@@ -93,6 +101,14 @@ export function BuildingVisualsPanel({
     code: u.code,
     floorId: u.floorId,
     status: u.status,
+  }))
+
+  const extrudedFloors = floorsWithDrafts(floors, parsePlanDraft)
+  const draftUnits = units.map((u) => ({
+    code: u.code,
+    status: u.status,
+    href: `/properties/${propertySlug}/units/${u.code}`,
+    floorId: u.floorId,
   }))
 
   return (
@@ -219,9 +235,21 @@ export function BuildingVisualsPanel({
               })
             }}
           />
+        ) : extrudedFloors.length > 0 ? (
+          <div data-testid="landlord-draft-3d">
+            <p className="mb-3 text-sm text-ink-soft">
+              No GLB/IFC uploaded — showing extruded plates from published CAD/PDF drafts. Upload a
+              mesh anytime to replace this preview.
+            </p>
+            <DraftBuildingDynamic floors={extrudedFloors} units={draftUnits} mode="edit" />
+          </div>
         ) : (
-          <p className="border border-dashed border-border bg-card/50 p-6 text-sm text-ink-soft">
-            No 3D model yet. Upload a GLB seed (Kenney-style) or IFC Duplex sample to map bays.
+          <p
+            className="border border-dashed border-border bg-card/50 p-6 text-sm text-ink-soft"
+            data-testid="landlord-3d-empty"
+          >
+            No 3D yet. Ingest and publish a PDF/DXF plate above (extrudes automatically), or upload a
+            GLB/IFC mesh to map bays.
           </p>
         )}
       </section>

@@ -5,12 +5,16 @@ import { installTempDatabase } from "./helpers/temp-db"
 import {
   classifyLayerName,
   extractDxfEntities,
+  extractPdfVectors,
   floorMapDocumentSchema,
   parseDxfPairs,
+  pdfVectorsToDraft,
   runFloorIngest,
   shouldKeepEntity,
   sniffFloorIngest,
 } from "@/lib/floor-ingest"
+import { buildExtrudeMeshes } from "@/lib/floor-extrude"
+import { seedFromSha256 } from "@/lib/floor-ingest/propose"
 
 installTempDatabase()
 
@@ -45,6 +49,20 @@ describe("floor-ingest sniff + simplify", () => {
 })
 
 describe("floor-ingest pipeline", () => {
+  it("extracts PDF content-stream vectors from mall sample", () => {
+    const pdf = fs.readFileSync(path.join(fixtures, "mall-floor-plan.pdf"))
+    const vectors = extractPdfVectors(pdf, 857, 1192)
+    expect(vectors.streamCount).toBeGreaterThan(0)
+    expect(vectors.segments.length + vectors.rects.length).toBeGreaterThan(0)
+    const seed = seedFromSha256("a".repeat(64))
+    const converted = pdfVectorsToDraft(vectors, seed)
+    // Mall PDF is drawing-heavy; either real vectors or null (then stub path in ingest).
+    if (converted) {
+      expect(converted.wallCount + converted.unitCount).toBeGreaterThan(0)
+      expect(converted.draft.elements.length).toBeGreaterThan(0)
+    }
+  })
+
   it("ingests mall PDF into a versioned map document with unit boxes", () => {
     const pdf = fs.readFileSync(path.join(fixtures, "mall-floor-plan.pdf"))
     const result = runFloorIngest({ bytes: pdf, filename: "mall-floor-plan.pdf" })
@@ -61,6 +79,18 @@ describe("floor-ingest pipeline", () => {
     expect(result.document.draft.elements.some((e) => e.kind === "lift")).toBe(true)
     expect(result.document.keep).toContain("unit_outlines")
     expect(result.document.drop).toContain("furniture")
+    // Notes should mention vectors or deterministic fallback — never silent stub.
+    expect(result.document.notes.join(" ").length).toBeGreaterThan(20)
+    const meshes = buildExtrudeMeshes([
+      {
+        id: "f1",
+        label: "L1",
+        levelIndex: 0,
+        draft: result.document.draft,
+      },
+    ])
+    expect(meshes.some((m) => m.kind === "slab")).toBe(true)
+    expect(meshes.some((m) => m.kind === "wall" || m.kind === "unit")).toBe(true)
   })
 
   it("simplifies DXF entities and drops furniture layer geometry", () => {

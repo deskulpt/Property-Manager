@@ -1,12 +1,15 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { BuildingModelDynamic } from "@/components/floor/building-model-dynamic"
+import { DraftBuildingDynamic } from "@/components/floor/draft-building-dynamic"
 import { FloorPlanView } from "@/components/floor/floor-plan"
 import { FloorStackViewer } from "@/components/floor/floor-stack-viewer"
 import { PropertyMap } from "@/components/map/property-map"
 import { PageHeader, StatusBadge } from "@/components/product"
 import { getPropertyBySlug } from "@/lib/db"
 import { money, monthlyRentCents, rateLabel, sqft } from "@/lib/format"
+import { floorsWithDrafts } from "@/lib/floor-extrude"
+import { parsePlanDraft } from "@/lib/plan-draft"
 
 export default async function PropertyPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
@@ -23,6 +26,13 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
       floorId: unit.floorId,
     }))
   const multiFloor = property.floors.length >= 2
+  const extrudedFloors = floorsWithDrafts(property.floors, parsePlanDraft)
+  const draftUnits = property.units.map((unit) => ({
+    code: unit.code,
+    status: unit.status,
+    href: `/properties/${property.slug}/units/${unit.code}`,
+    floorId: unit.floorId,
+  }))
 
   return (
     <div className="mx-auto max-w-[1200px] px-4 py-10 md:px-8">
@@ -94,9 +104,20 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
             />
           </div>
         </section>
+      ) : extrudedFloors.length > 0 ? (
+        <section className="mt-10" data-testid="property-3d-section">
+          <h2 className="font-serif text-xl font-semibold">3D building</h2>
+          <p className="mt-1 text-sm text-ink-soft">
+            Extruded from published CAD/PDF floor plates — walls, units, lifts, stairs only. Select a
+            floor, then a bay for Matterport / gallery unit view.
+          </p>
+          <div className="mt-4">
+            <DraftBuildingDynamic floors={extrudedFloors} units={draftUnits} mode="public" />
+          </div>
+        </section>
       ) : multiFloor ? (
         <p className="mt-3 font-mono text-[11px] uppercase tracking-wider text-ink-soft">
-          Progressive 2D stack · upload a GLB/IFC on the landlord building visuals desk
+          Progressive 2D stack · ingest CAD/PDF or upload a GLB/IFC on the landlord visuals desk
         </p>
       ) : null}
       <div className="mt-4 flex flex-wrap gap-4 font-mono text-[11px] uppercase tracking-wider text-ink-soft">

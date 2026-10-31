@@ -3,6 +3,12 @@ export { sniffFloorIngest, extensionOf, maxBytesForKind } from "@/lib/floor-inge
 export { classifyLayerName, shouldKeepEntity, defaultKeepDropSummary } from "@/lib/floor-ingest/simplify"
 export { proposePlanDraft, seedFromSha256 } from "@/lib/floor-ingest/propose"
 export { readPdfPageInfo, pdfPageToSvgPlate, ingestPdf } from "@/lib/floor-ingest/pdf"
+export {
+  extractPdfContentStreams,
+  extractPdfVectors,
+  parsePdfPathOps,
+  pdfVectorsToDraft,
+} from "@/lib/floor-ingest/pdf-vectors"
 export { parseDxfPairs, extractDxfEntities, dxfEntitiesToDraft, ingestDxf } from "@/lib/floor-ingest/dxf"
 export { ingestDwg } from "@/lib/floor-ingest/dwg"
 export {
