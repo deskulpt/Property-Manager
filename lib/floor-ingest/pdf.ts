@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto"
 import { proposePlanDraft, seedFromSha256 } from "@/lib/floor-ingest/propose"
+import {
+  extractPdfVectors,
+  pdfVectorsToDraft,
+} from "@/lib/floor-ingest/pdf-vectors"
 import { defaultKeepDropSummary } from "@/lib/floor-ingest/simplify"
 import {
   emptyFloorMapDocument,
@@ -99,9 +103,57 @@ export function ingestPdf(bytes: Buffer, filename: string): FloorIngestResult {
   const info = readPdfPageInfo(bytes)
   const sha256 = createHash("sha256").update(bytes).digest("hex")
   const seed = seedFromSha256(sha256)
-  const draft = proposePlanDraft({ filename, kind: "pdf", seed, pageWidth: info.width, pageHeight: info.height })
+  const vectors = extractPdfVectors(bytes, info.width, info.height)
+  const fromVectors = pdfVectorsToDraft(vectors, seed)
+  const notes: string[] = []
+  const warnings: string[] = []
+
+  let draft
+  if (fromVectors && (fromVectors.wallCount >= 2 || fromVectors.unitCount >= 1)) {
+    draft = fromVectors.draft
+    // Ensure lift/stairs affordances exist for multi-floor align even if PDF lacked labelled cores.
+    if (!draft.elements.some((e) => e.kind === "lift")) {
+      const stub = proposePlanDraft({
+        filename,
+        kind: "pdf",
+        seed,
+        pageWidth: info.width,
+        pageHeight: info.height,
+      })
+      draft.elements = [
+        ...draft.elements,
+        ...stub.elements.filter((e) => e.kind === "lift" || (e.kind === "room" && /stair/i.test(e.label))),
+      ].slice(0, 200)
+    }
+    notes.push(
+      `PDF vectors extracted: ${fromVectors.wallCount} wall segments, ${fromVectors.unitCount} unit rects from ${vectors.streamCount} content stream(s).`,
+    )
+    notes.push("Keep set: walls, units, doors, stairs, lifts — furniture/dims/titleblocks not proposed.")
+  } else {
+    draft = proposePlanDraft({
+      filename,
+      kind: "pdf",
+      seed,
+      pageWidth: info.width,
+      pageHeight: info.height,
+    })
+    notes.push(
+      "PDF had sparse vectors — deterministic leasing plate proposed (no Gemini). Edit walls/units before publish.",
+    )
+    if (vectors.streamCount === 0) {
+      warnings.push("No FlateDecode/content streams parsed; plate uses seeded stub geometry.")
+    } else {
+      warnings.push(
+        `Parsed ${vectors.segments.length} segments / ${vectors.rects.length} rects but below leasing threshold — stub grid applied.`,
+      )
+    }
+  }
+
   const plate = pdfPageToSvgPlate(info, filename, draft.elements)
   const { keep, drop } = defaultKeepDropSummary()
+  if (info.pageCount > 1) {
+    warnings.push(`PDF has ${info.pageCount} pages; first page MediaBox used for the plate.`)
+  }
   const document = emptyFloorMapDocument(draft, {
     source: {
       kind: "pdf",
@@ -115,14 +167,8 @@ export function ingestPdf(bytes: Buffer, filename: string): FloorIngestResult {
     createdAt: new Date().toISOString(),
     keep,
     drop,
-    notes: [
-      "PDF page rasterized to SVG leasing plate (deterministic fallback — no Gemini key required).",
-      "Furniture, dims, and titleblocks are not proposed; edit walls/units in the plan creator.",
-    ],
-    warnings:
-      info.pageCount > 1
-        ? [`PDF has ${info.pageCount} pages; first page MediaBox used for the plate.`]
-        : [],
+    notes,
+    warnings,
   })
   return {
     ok: true,

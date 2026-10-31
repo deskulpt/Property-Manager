@@ -69,7 +69,9 @@ export function FloorIngestPanel({
       ].filter(Boolean)
       setMessage(bits.join(" · "))
       if (result.notes?.length) setHint(result.notes.join(" "))
-      if (result.warnings?.length) setHint((prev) => [prev, ...result.warnings!].filter(Boolean).join(" "))
+      if (result.warnings?.length) {
+        setHint((prev) => [prev, ...result.warnings!].filter(Boolean).join(" "))
+      }
       router.refresh()
     })
   }
@@ -85,24 +87,29 @@ export function FloorIngestPanel({
       <header>
         <h2 className="font-serif text-xl font-semibold">CAD / PDF floor ingest</h2>
         <p className="mt-1 text-sm text-ink-soft">
-          Drag a PDF or DXF. We keep exterior and partition walls, unit outlines, doors, stairs,
-          lifts, and openings — not furniture, dims, or titleblocks.
+          Upload a PDF or DXF. We extract exterior and partition walls, unit outlines, doors,
+          stairs, lifts, and openings — not furniture, dims, or titleblocks. Publish to stack the
+          plate into the 3D building visualizer.
         </p>
-        <p
-          className="mt-2 border border-[#8f6f1f]/40 bg-[#8f6f1f]/10 px-3 py-2 text-sm text-ink"
+        <div
+          className="alert alert-warning mt-2 border border-[#8f6f1f]/40 bg-[#8f6f1f]/10 px-3 py-2 text-sm text-ink"
+          role="note"
           data-testid="floor-ingest-dwg-guidance"
         >
-          Native DWG is not ingested here — export <strong>DXF (ASCII)</strong> or a single-page{" "}
-          <strong>PDF</strong> from CAD, then upload that file.
-        </p>
+          <span>
+            Native DWG is not ingested here — export <strong>DXF (ASCII)</strong> or a single-page{" "}
+            <strong>PDF</strong> from CAD (ODA / AutoCAD / LibreDWG convert path), then upload that
+            file.
+          </span>
+        </div>
       </header>
 
       <div className="flex flex-wrap items-end gap-3 bg-card p-4 ring-1 ring-foreground/10">
         {floors.length > 0 ? (
-          <label className="grid gap-1 text-sm">
-            Target floor
+          <label className="form-control grid gap-1 text-sm">
+            <span className="label-text">Target floor</span>
             <select
-              className="border border-ink/15 bg-paper px-2 py-1.5 text-sm"
+              className="select select-bordered border border-ink/15 bg-paper px-2 py-1.5 text-sm"
               value={floorId}
               onChange={(e) => setFloorId(e.target.value)}
               data-testid="floor-ingest-floor"
@@ -118,14 +125,15 @@ export function FloorIngestPanel({
             </select>
           </label>
         ) : null}
-        <label className="flex items-center gap-2 text-sm">
+        <label className="label cursor-pointer justify-start gap-2 text-sm">
           <input
             type="checkbox"
+            className="checkbox checkbox-sm checkbox-primary"
             checked={publish}
             onChange={(e) => setPublish(e.target.checked)}
             data-testid="floor-ingest-publish"
           />
-          Publish after ingest
+          <span className="label-text">Publish after ingest</span>
         </label>
       </div>
 
@@ -134,6 +142,7 @@ export function FloorIngestPanel({
         tabIndex={0}
         data-testid="floor-ingest-dropzone"
         data-dragover={dragOver ? "true" : "false"}
+        aria-busy={pending}
         className="grid place-items-center border border-dashed border-brand/40 bg-[#0a1624] px-6 py-10 text-center transition-colors data-[dragover=true]:border-cyan-400 data-[dragover=true]:bg-[#13253a]"
         onDragOver={(e) => {
           e.preventDefault()
@@ -149,51 +158,73 @@ export function FloorIngestPanel({
           }
         }}
       >
-        <p className="font-serif text-lg text-[#e8f4f8]">Drop PDF or DXF here</p>
-        <p className="mt-2 max-w-md text-sm text-[#9bb4c7]">
-          Mall PDF and office DXF preferred. DWG uploads show an export message. Stub proposals work
-          without a Gemini key — edit walls and units in Plan creator after ingest.
-        </p>
-        <button
-          type="button"
-          disabled={pending}
-          className="mt-4 bg-[#0e6e8c] px-4 py-2 text-sm font-bold text-paper disabled:opacity-50"
-          onClick={(e) => {
-            e.stopPropagation()
-            inputRef.current?.click()
-          }}
-        >
-          {pending ? "Ingesting…" : "Choose file"}
-        </button>
+        {pending ? (
+          <div className="grid place-items-center gap-3" data-testid="floor-ingest-loading">
+            <span className="loading loading-spinner loading-md inline-block h-8 w-8 animate-spin rounded-full border-2 border-[#0e6e8c]/30 border-t-[#0e6e8c]" />
+            <p className="font-serif text-lg text-[#e8f4f8]">Extracting walls &amp; units…</p>
+            <p className="max-w-md text-sm text-[#9bb4c7]">
+              Simplifying CAD noise, building the editable plate, then{" "}
+              {publish ? "publishing to the 3D stack" : "saving a draft version"}.
+            </p>
+          </div>
+        ) : (
+          <>
+            <p className="font-serif text-lg text-[#e8f4f8]">Drop PDF or DXF here</p>
+            <p className="mt-2 max-w-md text-sm text-[#9bb4c7]">
+              Prefer mall PDF or office DXF. PDF content streams are inflated and path-ops extracted
+              when present; otherwise a deterministic plate is proposed for edit.
+            </p>
+            <button
+              type="button"
+              className="btn btn-primary mt-4 bg-[#0e6e8c] px-4 py-2 text-sm font-bold text-paper"
+              onClick={(e) => {
+                e.stopPropagation()
+                inputRef.current?.click()
+              }}
+            >
+              Choose file
+            </button>
+          </>
+        )}
         <input
           ref={inputRef}
           type="file"
-          className="sr-only"
+          className="file-input file-input-bordered sr-only"
           accept=".pdf,.dxf,.dwg,application/pdf,image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
           data-testid="floor-ingest-input"
+          disabled={pending}
           onChange={(e) => onFiles(e.target.files)}
         />
       </div>
 
       {error ? (
-        <p className="text-sm text-red-800" role="alert" data-testid="floor-ingest-error">
+        <div className="alert alert-error border border-red-800/30 bg-red-50 px-3 py-2 text-sm text-red-900" role="alert" data-testid="floor-ingest-error">
           {error}
-        </p>
+        </div>
       ) : null}
       {hint ? (
-        <p className="text-sm text-ink-soft" data-testid="floor-ingest-hint">
+        <div className="alert alert-info border border-brand/20 bg-card px-3 py-2 text-sm text-ink-soft" data-testid="floor-ingest-hint">
           {hint}
-        </p>
+        </div>
       ) : null}
       {message ? (
-        <p className="text-sm font-semibold text-[#1f6b4a]" data-testid="floor-ingest-success">
+        <div className="alert alert-success border border-[#1f6b4a]/30 bg-[#1f6b4a]/10 px-3 py-2 text-sm font-semibold text-[#1f6b4a]" data-testid="floor-ingest-success">
           {message}
-        </p>
+        </div>
+      ) : null}
+
+      {versions.length === 0 && !pending && !message ? (
+        <div
+          className="border border-dashed border-border bg-card/50 px-4 py-6 text-center text-sm text-ink-soft"
+          data-testid="floor-ingest-empty"
+        >
+          No map versions yet. Upload a sample floor plan to create the first editable plate.
+        </div>
       ) : null}
 
       {versions.length > 0 ? (
         <div className="overflow-x-auto" data-testid="floor-ingest-versions">
-          <table className="w-full min-w-[28rem] text-left text-sm">
+          <table className="table w-full min-w-[28rem] text-left text-sm">
             <thead className="font-mono text-[11px] uppercase tracking-wider text-ink-faint">
               <tr>
                 <th className="py-2 pr-3">Version</th>
@@ -212,15 +243,17 @@ export function FloorIngestPanel({
                       {version.sourceKind.toUpperCase()} · {version.sourceFilename}
                     </td>
                     <td className="py-2 pr-3">
-                      {version.status}
-                      {active ? " · active" : ""}
+                      <span className={`badge badge-sm ${version.status === "published" ? "badge-success" : "badge-ghost"}`}>
+                        {version.status}
+                        {active ? " · active" : ""}
+                      </span>
                     </td>
                     <td className="py-2">
                       {version.status !== "published" || !active ? (
                         <button
                           type="button"
                           disabled={pending}
-                          className="text-sm font-semibold text-[#0e6e8c] hover:underline disabled:opacity-50"
+                          className="btn btn-link btn-sm h-auto min-h-0 p-0 text-sm font-semibold text-[#0e6e8c] hover:underline disabled:opacity-50"
                           onClick={() => {
                             startTransition(async () => {
                               const result = await publishFloorMapVersionAction({
