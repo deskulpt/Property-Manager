@@ -483,5 +483,12 @@ export function matchActiveServiceProviders(
 }
 
 export function partnerNetworkEnabled() {
-  return process.env.PARTNER_NETWORK !== "0"
+  if (process.env.PARTNER_NETWORK === "0") return false
+  try {
+    // Lazy import avoids circular init with platform-ops → db → partners.
+    const { isOpsFlagOn } = require("@/lib/platform-ops") as typeof import("@/lib/platform-ops")
+    return isOpsFlagOn("partner_network")
+  } catch {
+    return true
+  }
 }

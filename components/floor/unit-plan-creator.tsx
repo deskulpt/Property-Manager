@@ -33,7 +33,7 @@ import {
   type PlanDraft,
   type PlanElement,
 } from "@/lib/plan-draft"
-import { ensureBrowserRust } from "@/lib/rust/load"
+import { ensureBrowserRust } from "@/lib/rust/load.browser"
 import "./unit-plan-creator.css"
 
 type Tool = "select" | "wall" | "door" | "room" | "bathroom" | "lift" | "unit"

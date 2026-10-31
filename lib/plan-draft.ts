@@ -1,6 +1,11 @@
 import { z } from "zod"
-import { getRust } from "@/lib/rust/load"
+import { peekBrowserRustCache } from "@/lib/rust/load.browser"
 import { autoPartitionLayoutFallback } from "@/lib/rust/pack-fallback"
+
+/** Prefer WASM already loaded into the shared cache (Node getRust or browser ensure). */
+function getRust() {
+  return peekBrowserRustCache() ?? null
+}
 
 /** Area unit for auto-partition form. */
 export type PlanAreaUnit = "sqft" | "sqyd"

@@ -43,6 +43,8 @@ export default defineConfig({
       DESKULPT_DIST_DIR: distDir,
       DESKULPT_SECRET_KEY: process.env.DESKULPT_SECRET_KEY || "deskulpt-e2e-secret-key-32b",
       DESKULPT_DEMO_SWITCHER: "1",
+      // Skip Google font network fetch during e2e webServer boot.
+      DESKULPT_OFFLINE_FONTS: "1",
       // Keyless demo path — no Dodo/Stripe/PayPal credentials required
       BILLING_PROVIDER: "demo",
       BILLING_INTL_PROVIDER: "demo",

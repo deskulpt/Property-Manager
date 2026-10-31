@@ -2,8 +2,8 @@ import { NextResponse } from "next/server"
 import {
   convertFromInrMinorDisplayCents,
   normalizeSlug,
-} from "@/lib/rust/money"
-import { getRust, rustCoreBackend } from "@/lib/rust/load"
+} from "@/lib/rust/money.server"
+import { getRust, rustCoreBackend } from "@/lib/rust/load.node"
 
 /**
  * Tiny probe for the Rust/wasm compute bridge.

@@ -37,7 +37,9 @@ describe("easyrent-core WASM parity", () => {
   })
 
   it("packing WASM matches TS fallback element geometry for fixed seed", () => {
+    resetRustCache()
     expect(rustAvailable()).toBe(true)
+    expect(getRust()).not.toBeNull()
     const input = {
       totalArea: 10000,
       partitions: [
@@ -66,6 +68,8 @@ describe("easyrent-core WASM parity", () => {
   })
 
   it("sanitize / snap / slug helpers", () => {
+    resetRustCache()
+    expect(getRust()).not.toBeNull()
     expect(sanitizePlanLabel("<script>x</script>")).toBe("scriptx/script")
     expect(snapPct(13.4)).toBe(14)
     expect(normalizeSlug("BBM Logistics Parks")).toBe("bbm-logistics-parks")

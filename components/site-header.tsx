@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { BrandLogo } from "@/components/brand-logo"
+import { MarketFlagSwitch } from "@/components/market-provider"
 import { Mail, Menu, MessageCircle, Phone } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -211,6 +212,7 @@ export function SiteHeader({
           </nav>
 
           <div className="flex items-center gap-2">
+            <MarketFlagSwitch className="hidden sm:inline-flex" />
             {visitor ? (
               <div className="hidden items-center gap-2 sm:flex" data-testid="auth-nav">
                 <Link
