@@ -33,7 +33,7 @@ export default async function ConsoleAskEasyPage() {
         <EmptyState
           title="No memory rows"
           body="Landlords create memory via Ask Easy on the desk. Nothing to purge."
-          action={{ href: "/landlord/ask", label: "Landlord Ask Easy" }}
+          action={{ href: "/landlord?ask=open", label: "Landlord Ask Easy" }}
         />
       ) : (
         <div className="grid gap-3">

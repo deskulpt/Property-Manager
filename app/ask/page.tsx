@@ -5,7 +5,7 @@ import Link from "next/link"
 
 export const metadata = { title: "Ask · Easy Rental" }
 
-/** Public catalog assistant only. Landlord desk = `/landlord/ask`. */
+/** Public catalog assistant only. Landlord Ask Easy = floating island on desk. */
 export default function PublicAskPage() {
   const runtime = adkRuntimeMode()
   return (
@@ -19,7 +19,7 @@ export default function PublicAskPage() {
         Runtime: <span className="text-[var(--color-brand-2)]">{runtime}</span>
         {" · "}
         Landlord desk:{" "}
-        <Link href="/landlord/ask" className="underline underline-offset-4">
+        <Link href="/landlord?ask=open" className="underline underline-offset-4">
           Ask Easy
         </Link>
       </p>

@@ -124,7 +124,7 @@ export default async function LandlordHome() {
         <ActionLink href="/landlord/visits" variant="ghost">
           Confirm visits
         </ActionLink>
-        <ActionLink href="/landlord/ask" variant="ghost">
+        <ActionLink href="/landlord?ask=open" variant="ghost">
           Ask Easy
         </ActionLink>
         <ActionLink href="/pricing" variant="accent">

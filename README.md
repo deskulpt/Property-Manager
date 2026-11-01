@@ -278,7 +278,7 @@ Playwright downloads a browser on first use (`npx playwright install` if the run
 
 ## Ask Easy (Slice L · unified ADK desk)
 
-**Canonical landlord path:** `/landlord/ask` (`/landlord/ask-easy` redirects). Public catalog chat: `/ask` + `POST /api/ask`. Thin ADK-style registries in `lib/agentic` + `lib/adk`. **No** `@cursor/bdk` / `@google/adk` required.
+**Canonical landlord UX:** floating Ask Easy island on the L2 desk (`/landlord?ask=open`; `/landlord/ask` and `/landlord/ask-easy` redirect). Public catalog chat: `/ask` + `POST /api/ask`. Thin ADK-style registries in `lib/agentic` + `lib/adk`. **No** `@cursor/bdk` / `@google/adk` required.
 
 | Path | Behaviour |
 | --- | --- |

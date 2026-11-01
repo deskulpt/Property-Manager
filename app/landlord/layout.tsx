@@ -1,3 +1,4 @@
+import { AskEasyIslandHost } from "@/components/ask-easy/ask-easy-island-host"
 import { PortalFrame } from "@/components/portal-frame"
 import { RoleGate } from "@/components/product"
 import { SUBSCRIBE_PATH } from "@/lib/plans"
@@ -18,7 +19,7 @@ const links = [
   { href: "/landlord/jobs", label: "Concierge" },
   { href: "/landlord/providers", label: "Providers" },
   { href: "/landlord/ledger", label: "Ledger" },
-  { href: "/landlord/ask", label: "Ask Easy" },
+  { href: "/landlord?ask=open", label: "Ask Easy" },
   { href: "/landlord/shop", label: "Shop" },
   { href: "/landlord/billing", label: "Billing", primary: true },
   { href: "/landlord/settings", label: "Settings" },
@@ -71,6 +72,7 @@ export default async function LandlordLayout({ children }: { children: React.Rea
       role="l2"
     >
       {children}
+      <AskEasyIslandHost />
     </PortalFrame>
   )
 }

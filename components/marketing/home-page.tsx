@@ -99,7 +99,7 @@ export function HomePage({
                   />
                 </Link>
                 <Link
-                  href="/landlord/ask"
+                  href="/landlord?ask=open"
                   className="group overflow-hidden border border-ink/20 bg-paper"
                 >
                   <div className="border-b border-ink/10 bg-paper-2 px-2.5 py-1.5 font-mono text-[9px] uppercase tracking-[0.14em] text-ink-faint">

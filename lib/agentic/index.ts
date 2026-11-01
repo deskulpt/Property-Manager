@@ -1,6 +1,6 @@
 /**
  * Ask Easy / Slice L — ADK-style thin agent loop on-platform.
- * Landlord desk: `/landlord/ask` (unified onboard + lease pack). Public catalog chat: `/ask` via `lib/adk`.
+ * Landlord desk: floating Ask Easy island (`/landlord?ask=open`; `/landlord/ask` redirects). Public catalog chat: `/ask` via `lib/adk`.
  * Patterns mirror BDK / Google ADK-JS. No `@cursor/bdk` dependency.
  */
 export { tenantHasAskEasy, askEasyGateReason } from "@/lib/agentic/gate"
