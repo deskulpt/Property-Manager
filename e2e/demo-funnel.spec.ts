@@ -66,10 +66,10 @@ test.describe("Demo funnel — primary journeys", () => {
     await expect(page).toHaveURL(/\/landlord/)
     await expectPageOk(page)
 
-    await page.goto("/landlord/ask", { waitUntil: "domcontentloaded" })
+    await page.goto("/landlord?ask=open", { waitUntil: "domcontentloaded" })
     await expectPageOk(page)
-    await expect(page.getByRole("heading", { name: /landlord assistant|ask easy/i }).first()).toBeVisible()
-    await expect(page.locator("body")).toContainText(/stub|Ask Easy|onboard/i)
+    await expect(page.getByTestId("ask-easy-island")).toBeVisible()
+    await expect(page.getByTestId("ask-easy-island")).toContainText(/Ask Easy|stub|onboard/i)
 
     await page.goto("/landlord/billing", { waitUntil: "domcontentloaded" })
     await expectPageOk(page)
@@ -78,9 +78,10 @@ test.describe("Demo funnel — primary journeys", () => {
 
   test("seeded desks: landlord Ask Easy, portal, provider, L0 console", async ({ page }) => {
     await setDemoIdentity(page, "u_nadia")
-    await page.goto("/landlord/ask", { waitUntil: "domcontentloaded" })
+    await page.goto("/landlord?ask=open", { waitUntil: "domcontentloaded" })
     await expectPageOk(page)
-    await expect(page.locator("body")).toContainText(/Ask Easy|assistant|stub/i)
+    await expect(page.getByTestId("ask-easy-island")).toBeVisible()
+    await expect(page.getByTestId("ask-easy-island")).toContainText(/Ask Easy|stub|onboard/i)
 
     await setDemoIdentity(page, "u_devon")
     await page.goto("/portal", { waitUntil: "domcontentloaded" })

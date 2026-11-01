@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 
-/** Canonical landlord Ask Easy surface is `/landlord/ask` (unified with #12/#13). */
+/** Alias → floating island open on landlord desk. */
 export default function AskEasyAliasPage() {
-  redirect("/landlord/ask")
+  redirect("/landlord?ask=open")
 }

@@ -259,6 +259,30 @@
       padding-bottom: 5rem;
     }
   }
+
+  /* Ask Easy floating island — clears mobile desk bottom nav + safe area */
+  .ask-easy-island-anchor {
+    right: max(0.75rem, env(safe-area-inset-right));
+    bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+  body[data-desk-shell="1"] .ask-easy-island-anchor {
+    bottom: calc(4.75rem + env(safe-area-inset-bottom));
+  }
+  body[data-admin-bar="1"] .ask-easy-island-anchor {
+    bottom: calc(4.25rem + env(safe-area-inset-bottom));
+  }
+  body[data-admin-bar="1"][data-desk-shell="1"] .ask-easy-island-anchor {
+    bottom: calc(8.25rem + env(safe-area-inset-bottom));
+  }
+  @media (min-width: 1024px) {
+    body[data-desk-shell="1"] .ask-easy-island-anchor,
+    body[data-admin-bar="1"][data-desk-shell="1"] .ask-easy-island-anchor {
+      bottom: max(1.25rem, env(safe-area-inset-bottom));
+    }
+    body[data-admin-bar="1"] .ask-easy-island-anchor {
+      bottom: calc(5.25rem + env(safe-area-inset-bottom));
+    }
+  }
 }
 
 

@@ -47,7 +47,7 @@ export default async function AgreementPreviewPage({
 
       <div className="flex flex-wrap gap-3">
         <Link
-          href="/landlord/ask"
+          href="/landlord?ask=open"
           className="inline-flex h-9 items-center border border-brand/20 bg-background px-3 text-sm font-bold hover:bg-muted"
         >
           ← Back to Ask Easy
