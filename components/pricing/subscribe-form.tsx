@@ -71,7 +71,7 @@ export function SubscribeForm({
         <p className="mt-2 text-ink-soft">
           <span className="font-serif text-3xl font-semibold text-brand">{card.priceLabel}</span>
           <span className="ml-2 font-mono text-[11px] uppercase tracking-wider text-ink-faint">
-            / active listed property / year · proposed · excl. GST
+            {card.meterLabel}
           </span>
         </p>
       ) : null}
@@ -88,7 +88,12 @@ export function SubscribeForm({
           Custom domain: <strong>{limits.customDomain ? "Yes" : "Upgrade to Pro"}</strong>
         </li>
         <li>
-          Ask Easy: <strong>{limits.askEasy ? "Yes" : "Upgrade / stub"}</strong>
+          assistant.read:{" "}
+          <strong>{limits.entitlements["assistant.read"] ? "Yes" : "—"}</strong>
+        </li>
+        <li>
+          Ask Easy draft/propose:{" "}
+          <strong>{limits.askEasy ? "Yes" : "Upgrade to Pro"}</strong>
         </li>
       </ul>
 

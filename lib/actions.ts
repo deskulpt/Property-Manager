@@ -334,7 +334,7 @@ export async function activateSubscriptionPlan(
     body:
       seats > 1
         ? `${label} activated for ${seats} listing seats (demo — billing not charged).`
-        : `${label} activated (demo — proposed INR / year / active listing; billing not charged).`,
+        : `${label} activated (demo — package entitlements only; per-unit billing not charged).`,
     href: "/landlord",
   })
   refresh(["/landlord", "/landlord/settings", "/pricing", SUBSCRIBE_PATH, "/inbox"])

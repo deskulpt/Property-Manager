@@ -22,7 +22,7 @@ export default async function ConsolePricingPage() {
       <PageHeader
         kicker="Entitlements"
         title="Pricing packages"
-        lede="Assign Basic / Growth / Pro per landlord tenant. Public copy lives at /pricing (proposed INR / property / year)."
+        lede="Assign Free / Growth / Pro / Enterprise per landlord tenant. Public copy at /pricing uses the per-unit metre (D01) + package entitlements (D02)."
       />
       <p className="mb-6 text-sm text-ink-soft">
         <Link href="/pricing" className="font-semibold text-terra hover:underline">

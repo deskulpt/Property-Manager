@@ -46,7 +46,7 @@ export default async function ConsoleHomePage() {
     { href: "/console/ask-easy", title: "Ask Easy memory", body: "DPDP purge per landlord org.", meta: `${memoryTenants.reduce((n, t) => n + t.count, 0)} rows` },
     { href: "/console/flags", title: "Feature flags", body: "Durable ops toggles (meta-backed).", meta: `${flagsOn}/${listOpsFlags().length} on` },
     { href: "/console/providers", title: "Service providers", body: "Verify trades + landlord approvals.", meta: `${kpi.providers} providers` },
-    { href: "/console/pricing", title: "Pricing packages", body: "Basic / Growth / Pro entitlements.", meta: "per tenant" },
+    { href: "/console/pricing", title: "Pricing packages", body: "Free / Growth / Pro / Enterprise entitlements.", meta: "per tenant" },
     { href: "/console/shops", title: "Shops catalog", body: "SKU enable across landlord tenants.", meta: money(kpi.shopGmvCents) },
     { href: "/console/analytics", title: "Analytics", body: "Listings, applications, visits, GMV.", meta: money(kpi.ledgerGmvCents) },
   ]

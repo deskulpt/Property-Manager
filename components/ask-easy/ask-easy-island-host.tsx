@@ -12,14 +12,16 @@ import { getSessionUser } from "@/lib/session"
 
 /**
  * Server host for the landlord Ask Easy floating island.
- * Soft-open gate matches tip `askEasyGateReason` — does not invent D02 entitlements.
+ * D02: soft-open demo is labelled; hard gate uses package entitlements.
  */
 export async function AskEasyIslandHost() {
   const user = await getSessionUser()
   if (!user?.tenantId || user.role !== "landlord_admin") return null
 
   const tenantId = user.tenantId
-  const gated = askEasyGateReason(tenantId) === "upgrade"
+  const gate = askEasyGateReason(tenantId)
+  const gated = gate === "upgrade"
+  const softOpen = gate === "soft_open"
   const properties = listPortfolio()
     .filter((property) => property.tenantId === tenantId)
     .map((property) => ({
@@ -51,6 +53,7 @@ export async function AskEasyIslandHost() {
     <Suspense fallback={null}>
       <AskEasyIsland
         gated={gated}
+        softOpenLabel={softOpen}
         properties={properties}
         pending={gated ? [] : pendingProposals(tenantId)}
         drafts={gated ? [] : listingDraftsForTenant(tenantId)}
