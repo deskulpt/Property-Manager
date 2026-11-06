@@ -1,9 +1,16 @@
 /**
- * Subscription packages (PRD §7). Public ladder is Basic → Growth → Pro.
- * Code id `starter` is the Basic successor until a rename pass.
+ * Subscription packages — mirrors `lib/plans.ts` limits for auth/seat soft caps.
+ * Money meter lives in `lib/billing/pricing.ts` (D01). Entitlements split per D02.
  */
 
-export type SubscriptionPackage = "starter" | "growth" | "pro" | "enterprise"
+import {
+  PLAN_LIMITS,
+  type PlanEntitlements,
+  type PlanId,
+  parsePlanId,
+} from "@/lib/plans"
+
+export type SubscriptionPackage = PlanId
 
 export type PackageLimits = {
   id: SubscriptionPackage
@@ -13,58 +20,58 @@ export type PackageLimits = {
   maxUnitsPerProperty: number
   maxSeats: number
   customDomain: boolean
+  /** Legacy Ask Easy draft/propose gate (Pro+). Prefer entitlements. */
   askEasy: boolean
+  entitlements: PlanEntitlements
 }
 
 export const PACKAGE_LIMITS: Record<SubscriptionPackage, PackageLimits> = {
   starter: {
     id: "starter",
-    label: "Free",
-    maxProperties: 50,
-    maxUnitsPerProperty: 1,
-    maxSeats: 2,
-    customDomain: false,
-    askEasy: false,
+    label: PLAN_LIMITS.starter.label,
+    maxProperties: PLAN_LIMITS.starter.maxProperties,
+    maxUnitsPerProperty: PLAN_LIMITS.starter.maxUnitsPerProperty,
+    maxSeats: PLAN_LIMITS.starter.maxSeats,
+    customDomain: PLAN_LIMITS.starter.customDomain,
+    askEasy: PLAN_LIMITS.starter.askEasy,
+    entitlements: PLAN_LIMITS.starter.entitlements,
   },
   growth: {
     id: "growth",
-    label: "Growth",
-    maxProperties: 10,
-    maxUnitsPerProperty: 80,
-    maxSeats: 5,
-    customDomain: false,
-    askEasy: false,
+    label: PLAN_LIMITS.growth.label,
+    maxProperties: PLAN_LIMITS.growth.maxProperties,
+    maxUnitsPerProperty: PLAN_LIMITS.growth.maxUnitsPerProperty,
+    maxSeats: PLAN_LIMITS.growth.maxSeats,
+    customDomain: PLAN_LIMITS.growth.customDomain,
+    askEasy: PLAN_LIMITS.growth.askEasy,
+    entitlements: PLAN_LIMITS.growth.entitlements,
   },
   pro: {
     id: "pro",
-    label: "Pro",
-    maxProperties: 50,
-    maxUnitsPerProperty: 200,
-    maxSeats: 15,
-    customDomain: true,
-    askEasy: true,
+    label: PLAN_LIMITS.pro.label,
+    maxProperties: PLAN_LIMITS.pro.maxProperties,
+    maxUnitsPerProperty: PLAN_LIMITS.pro.maxUnitsPerProperty,
+    maxSeats: PLAN_LIMITS.pro.maxSeats,
+    customDomain: PLAN_LIMITS.pro.customDomain,
+    askEasy: PLAN_LIMITS.pro.askEasy,
+    entitlements: PLAN_LIMITS.pro.entitlements,
   },
   enterprise: {
     id: "enterprise",
-    label: "Enterprise",
-    maxProperties: 10_000,
-    maxUnitsPerProperty: 10_000,
-    maxSeats: 500,
-    customDomain: true,
-    askEasy: true,
+    label: PLAN_LIMITS.enterprise.label,
+    maxProperties: PLAN_LIMITS.enterprise.maxProperties,
+    maxUnitsPerProperty: PLAN_LIMITS.enterprise.maxUnitsPerProperty,
+    maxSeats: PLAN_LIMITS.enterprise.maxSeats,
+    customDomain: PLAN_LIMITS.enterprise.customDomain,
+    askEasy: PLAN_LIMITS.enterprise.askEasy,
+    entitlements: PLAN_LIMITS.enterprise.entitlements,
   },
 }
 
 export const DEFAULT_PACKAGE: SubscriptionPackage = "starter"
 
 export function parsePackage(value: string | null | undefined): SubscriptionPackage {
-  if (value === "growth" || value === "pro" || value === "enterprise" || value === "starter") {
-    return value
-  }
-  // Legacy aliases from earlier drafts
-  if (value === "basic") return "starter"
-  if (value === "portfolio") return "pro"
-  return DEFAULT_PACKAGE
+  return parsePlanId(value)
 }
 
 export function packageLimits(pkg: SubscriptionPackage): PackageLimits {

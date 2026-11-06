@@ -3,7 +3,13 @@
  * Landlord desk: floating Ask Easy island (`/landlord?ask=open`; `/landlord/ask` redirects). Public catalog chat: `/ask` via `lib/adk`.
  * Patterns mirror BDK / Google ADK-JS. No `@cursor/bdk` dependency.
  */
-export { tenantHasAskEasy, askEasyGateReason } from "@/lib/agentic/gate"
+export {
+  tenantHasAskEasy,
+  askEasyGateReason,
+  askEasySoftOpenEnabled,
+  tenantHasEntitlement,
+  tenantPackageId,
+} from "@/lib/agentic/gate"
 export { runStubAskEasy, type StubTurnResult } from "@/lib/agentic/stub"
 export { runAskEasy, runAskEasyStub, type AskEasyTurnResult } from "@/lib/agentic/runtime"
 export {

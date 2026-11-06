@@ -69,7 +69,7 @@ export type PricingQuote = {
   /** Inclusive of GST — show at checkout */
   totalInclusivePaise: number
   savingsPaise: number
-  pricingPath: "sale" | "volume" | "standard" | "free"
+  pricingPath: "sale" | "volume" | "standard" | "free" | "enterprise_quote"
   volumeDiscountPct: 0 | 15 | 25
   saleEligible: boolean
   saleActive: boolean
@@ -78,7 +78,19 @@ export type PricingQuote = {
   lockedUntilIso: string | null
 }
 
+/** Self-serve volume caps at 50 units; above that is sales-led (D01). */
+export const ENTERPRISE_QUOTE_MIN_UNITS = 51
+
+export function requiresEnterpriseQuote(totalUnits: number): boolean {
+  return totalUnits >= ENTERPRISE_QUOTE_MIN_UNITS
+}
+
+/**
+ * Self-serve volume discount only. Returns 0 for 1–5 units and for >50
+ * (enterprise quote — not a silent 0% catalogue price).
+ */
 export function volumeDiscountPct(totalUnits: number): 0 | 15 | 25 {
+  if (requiresEnterpriseQuote(totalUnits)) return 0
   if (totalUnits >= 21 && totalUnits <= 50) return 25
   if (totalUnits >= 6 && totalUnits <= 20) return 15
   return 0
@@ -161,6 +173,40 @@ export function quotePlatformBilling(input: QuoteInput): PricingQuote {
       totalInclusivePaise: 0,
       savingsPaise: 0,
       pricingPath: "free",
+      volumeDiscountPct: 0,
+      saleEligible: saleActive,
+      saleActive,
+      strikeStandard: false,
+      standardFromLabel: STANDARD_FROM_LABEL,
+      lockedUntilIso: input.priceLockUntilIso ?? null,
+    }
+  }
+
+  // D01: >50 units are enterprise quote — no self-serve volume % (not 0% catalogue).
+  if (requiresEnterpriseQuote(units) && !(input.lockedMonthlyPaise && Object.keys(input.lockedMonthlyPaise).length > 0)) {
+    const standardSubtotalPaise = subtotalAtRates(mix, STANDARD_MONTHLY_PAISE, cadence)
+    const lines: QuoteLine[] = mix.map((row) => {
+      const unitStandardPaise = STANDARD_MONTHLY_PAISE[row.segment] * factor
+      return {
+        segment: row.segment,
+        label: SEGMENT_LABEL[row.segment],
+        count: row.count,
+        unitStandardPaise,
+        unitChargedPaise: unitStandardPaise,
+        lineStandardPaise: unitStandardPaise * row.count,
+        lineChargedPaise: unitStandardPaise * row.count,
+      }
+    })
+    return {
+      cadence,
+      units,
+      lines,
+      standardSubtotalPaise,
+      chargedSubtotalPaise: 0,
+      gstPaise: 0,
+      totalInclusivePaise: 0,
+      savingsPaise: 0,
+      pricingPath: "enterprise_quote",
       volumeDiscountPct: 0,
       saleEligible: saleActive,
       saleActive,

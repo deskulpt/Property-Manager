@@ -248,8 +248,47 @@ describe("Ask Easy — ADK tools + approval hard gate", () => {
     expect(kinds).not.toContain("execute")
   })
 
-  it("soft Pro gate opens Ask Easy when subscription_package column is absent", async () => {
-    const { tenantHasAskEasy } = await agentic()
+  it("soft-open demo allows Ask Easy and is labelled via gate reason", async () => {
+    const prevRequire = process.env.ASK_EASY_REQUIRE_PRO
+    const prevSoft = process.env.ASK_EASY_SOFT_OPEN
+    delete process.env.ASK_EASY_REQUIRE_PRO
+    delete process.env.ASK_EASY_SOFT_OPEN
+    const { tenantHasAskEasy, askEasyGateReason } = await agentic()
     expect(tenantHasAskEasy("t_bbm")).toBe(true)
+    // Seeded BBM is Pro — entitlement ok; soft_open only when package lacks askEasy.
+    expect(["ok", "soft_open"]).toContain(askEasyGateReason("t_bbm"))
+    if (prevRequire === undefined) delete process.env.ASK_EASY_REQUIRE_PRO
+    else process.env.ASK_EASY_REQUIRE_PRO = prevRequire
+    if (prevSoft === undefined) delete process.env.ASK_EASY_SOFT_OPEN
+    else process.env.ASK_EASY_SOFT_OPEN = prevSoft
+  })
+
+  it("hard Pro gate denies Free package when ASK_EASY_REQUIRE_PRO=1", async () => {
+    const prevRequire = process.env.ASK_EASY_REQUIRE_PRO
+    const prevSoft = process.env.ASK_EASY_SOFT_OPEN
+    process.env.ASK_EASY_REQUIRE_PRO = "1"
+    process.env.ASK_EASY_SOFT_OPEN = "0"
+    const { getDb, createLandlordAccount, setTenantPackage } = await import("@/lib/db")
+    getDb()
+    const created = createLandlordAccount({
+      name: "Free Gate",
+      email: `free-gate-${Date.now()}@example.com`,
+      passwordHash: "$2a$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUV",
+      company: "Free Co",
+      packageTier: "starter",
+    })
+    expect(created.ok).toBe(true)
+    if (!created.ok) return
+    setTenantPackage(created.tenantId, "starter")
+    const { tenantHasAskEasy, askEasyGateReason } = await agentic()
+    expect(tenantHasAskEasy(created.tenantId)).toBe(false)
+    expect(askEasyGateReason(created.tenantId)).toBe("upgrade")
+    setTenantPackage(created.tenantId, "pro")
+    expect(tenantHasAskEasy(created.tenantId)).toBe(true)
+    expect(askEasyGateReason(created.tenantId)).toBe("ok")
+    if (prevRequire === undefined) delete process.env.ASK_EASY_REQUIRE_PRO
+    else process.env.ASK_EASY_REQUIRE_PRO = prevRequire
+    if (prevSoft === undefined) delete process.env.ASK_EASY_SOFT_OPEN
+    else process.env.ASK_EASY_SOFT_OPEN = prevSoft
   })
 })

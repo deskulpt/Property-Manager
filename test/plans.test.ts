@@ -19,26 +19,43 @@ describe("pricing plans catalog + activate", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true })
   })
 
-  it("exposes Basic ₹499 / Growth ₹1,499 / Pro ₹2,999 proposed ladder", async () => {
+  it("exposes Free / Growth / Pro unit-metre cards + D02 entitlements (not per-property/year)", async () => {
     const {
       PUBLIC_PLANS,
+      PLAN_LIMITS,
       parsePlanId,
       packageHasAskEasy,
       packageHasCustomDomain,
+      planHasEntitlement,
       planLabel,
+      PUBLIC_HOMES_SALE_INR,
     } = await import("@/lib/plans")
 
     const byId = Object.fromEntries(PUBLIC_PLANS.map((p) => [p.id, p]))
-    expect(byId.starter.priceInr).toBe(499)
-    expect(byId.growth.priceInr).toBe(1499)
-    expect(byId.pro.priceInr).toBe(2999)
+    expect(byId.starter.priceInr).toBe(0)
+    expect(byId.starter.label).toBe("Free")
+    expect(byId.growth.priceInr).toBe(PUBLIC_HOMES_SALE_INR)
+    expect(byId.pro.priceInr).toBe(PUBLIC_HOMES_SALE_INR)
     expect(byId.enterprise.priceInr).toBeNull()
+    expect(byId.growth.meterLabel.toLowerCase()).toContain("unit")
+    expect(byId.growth.meterLabel.toLowerCase()).not.toContain("property / year")
     expect(planLabel("starter")).toBe("Free")
     expect(parsePlanId("basic")).toBe("starter")
     expect(packageHasCustomDomain("pro")).toBe(true)
     expect(packageHasCustomDomain("growth")).toBe(false)
     expect(packageHasAskEasy("pro")).toBe(true)
+    expect(packageHasAskEasy("growth")).toBe(false)
     expect(packageHasAskEasy("starter")).toBe(false)
+
+    expect(planHasEntitlement("starter", "assistant.read")).toBe(false)
+    expect(planHasEntitlement("growth", "assistant.read")).toBe(true)
+    expect(planHasEntitlement("growth", "assistant.draft")).toBe(false)
+    expect(planHasEntitlement("pro", "assistant.propose")).toBe(true)
+    expect(planHasEntitlement("enterprise", "mcp.access")).toBe(true)
+    expect(planHasEntitlement("enterprise", "api.access")).toBe(true)
+    expect(planHasEntitlement("enterprise", "automation.policies")).toBe(true)
+    expect(planHasEntitlement("pro", "mcp.access")).toBe(false)
+    expect(PLAN_LIMITS.pro.entitlements["assistant.draft"]).toBe(true)
   })
 
   it("setTenantPackage upgrades landlord org package", async () => {
