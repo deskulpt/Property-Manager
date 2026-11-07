@@ -11,6 +11,11 @@ export const CountryPackSchema = z.object({
     .regex(/^[a-z]{2}$/),
   /** Operating legal entity for this pack (Aloke Nov7). */
   legalEntity: z.string().min(2),
+  /**
+   * Tax registration id for statements/invoices (e.g. CA GST/HST).
+   * Optional — omit until registered. Live tax still gated by LEGAL_FEATURE_FLAGS.
+   */
+  taxRegistrationId: z.string().min(2).optional(),
   locale: z.string().min(2),
   currency: z.string().min(3).max(3),
   minorExponent: z.number().int().min(0).max(4),

@@ -96,6 +96,8 @@ export const CANADA_PACK: CountryPack = {
   name: "Canada",
   pathSegment: "ca",
   legalEntity: "Deskulpt Inc",
+  // Sourced from PRD checklist Entities row (Aloke Nov7) — for statements when tax flag ON.
+  taxRegistrationId: "739660629RT0001",
   locale: "en-CA",
   currency: "CAD",
   minorExponent: 2,
@@ -104,7 +106,8 @@ export const CANADA_PACK: CountryPack = {
   taxAdapter: {
     kind: "ca_stripe_tax_hst",
     enabled: false,
-    notes: "Stripe Tax / HST gated OFF. Deskulpt Inc federal CA; GST/HST # TBD accountant. Aloke AwC.",
+    notes:
+      "Stripe Tax / HST adapter gated OFF (caStripeTaxHst). Deskulpt Inc federal CA; GST/HST registration recorded on pack. Aloke AwC; flags OFF.",
   },
   paymentRails: {
     kinds: ["interac_demo", "stripe_subscriptions_ca", "stripe_connect_direct_pad"],
