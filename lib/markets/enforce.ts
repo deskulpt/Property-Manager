@@ -4,6 +4,10 @@
  *
  * dataResidency on packs is **declarative** until storage/region pinning lands;
  * do not treat notes as an enforcement boundary.
+ *
+ * Ontario RTA product rules (residential-only, deposits, forms, imports) live in
+ * ontario-rta / ontario-forms / ontario-privacy and are re-exported here so call
+ * sites stay on one enforce surface.
  */
 
 import { normalizeMarketIso } from "@/lib/markets/cookie"
@@ -13,6 +17,22 @@ import {
 } from "@/lib/markets/account-country"
 import { assertAiPiiAllowed } from "@/lib/markets/ai-policy"
 import { legalFlag, type LegalFeatureFlagKey } from "@/lib/markets/legal-flags"
+import {
+  assertOntarioAutomatedEvictionBlocked,
+  assertOntarioFormSendAllowed,
+  type OntarioFormDraft,
+} from "@/lib/markets/ontario-forms"
+import { assertCaslMarketingAllowed } from "@/lib/markets/ontario-privacy"
+import {
+  isOntarioMarket,
+  ontarioAllowsSegment,
+  ontarioBlocksListingImportSite,
+  ontarioKeyDepositAllowed,
+  ontarioResidentialDepositMonths,
+  ONTARIO_DAMAGE_DEPOSITS_ALLOWED,
+  ONTARIO_PAD_REQUIRED,
+  ONTARIO_TENANT_CARD_FEE,
+} from "@/lib/markets/ontario-rta"
 import {
   canUseOntarioConnectDirectPad,
   canUseRazorpayIndianEntity,
@@ -123,4 +143,146 @@ export function assertLiveModelAllowed(iso: string): EnforceOk | EnforceErr {
 /** CA statement helper — registration id may be present while tax adapter stays OFF. */
 export function caTaxRegistrationForStatements(iso = "CA"): string | null {
   return taxRegistrationIdForIso(iso)
+}
+
+/** RTA residential only — block commercial / warehouse / sales for Ontario (CA). */
+export function assertOntarioResidentialOnly(input: {
+  iso: string | null | undefined
+  segment?: string | null
+  listingPurpose?: "rent" | "sale" | string | null
+}): EnforceOk | EnforceErr {
+  if (!isOntarioMarket(input.iso)) return { ok: true }
+  const purpose = String(input.listingPurpose ?? "rent").toLowerCase()
+  if (purpose === "sale" || purpose === "sell" || purpose === "sales") {
+    return {
+      ok: false,
+      code: "ontario_sales_blocked",
+      error:
+        "Ontario EasyRental is RTA residential rentals only (TRESA s5(1)(j) — no sales brokerage).",
+    }
+  }
+  if (input.segment && !ontarioAllowsSegment(input.iso, input.segment)) {
+    return {
+      ok: false,
+      code: "ontario_commercial_blocked",
+      error:
+        "Ontario demo/staging allows Residential Tenancies Act residential listings only — commercial and warehouse are blocked.",
+    }
+  }
+  return { ok: true }
+}
+
+/** Landlord-direct listings only — block MLS / PropTx / REALTOR.ca / LoopNet imports. */
+export function assertOntarioListingImportAllowed(input: {
+  iso: string | null | undefined
+  siteId: string
+}): EnforceOk | EnforceErr {
+  if (!ontarioBlocksListingImportSite(input.iso, input.siteId)) return { ok: true }
+  return {
+    ok: false,
+    code: "ontario_import_blocked",
+    error:
+      "Ontario listings are landlord-direct only. MLS, PropTx, REALTOR.ca, and commercial board scrape/import paths are disabled.",
+  }
+}
+
+/** Deposits: no damage deposits; LMR ≤ 1 month; key deposits at cost only. */
+export function assertOntarioDepositAllowed(input: {
+  iso: string | null | undefined
+  kind: "last_months_rent" | "damage" | "security" | "key"
+  months?: number | null
+  amountCents?: number
+  costCents?: number
+}): EnforceOk | EnforceErr {
+  if (!isOntarioMarket(input.iso)) return { ok: true }
+  if (input.kind === "damage" || input.kind === "security") {
+    if (!ONTARIO_DAMAGE_DEPOSITS_ALLOWED) {
+      return {
+        ok: false,
+        code: "ontario_damage_deposit_blocked",
+        error: "Ontario residential tenancies cannot collect damage or security deposits.",
+      }
+    }
+  }
+  if (input.kind === "last_months_rent" || input.kind === "security") {
+    const capped = ontarioResidentialDepositMonths(input.iso, input.months ?? null)
+    if (!capped.ok) return { ok: false, code: capped.code, error: capped.error }
+  }
+  if (input.kind === "key") {
+    const key = ontarioKeyDepositAllowed({
+      iso: input.iso,
+      amountCents: input.amountCents ?? 0,
+      costCents: input.costCents ?? 0,
+    })
+    if (!key.ok) return { ok: false, code: key.code, error: key.error }
+  }
+  return { ok: true }
+}
+
+/**
+ * PAD is optional for tenants — never require autopay/PAD to proceed.
+ * Connect DIRECT+PAD rail remains gated by ontarioConnectDirectPad.
+ */
+export function assertOntarioPadOptional(input: {
+  iso: string | null | undefined
+  padRequired?: boolean
+}): EnforceOk | EnforceErr {
+  if (!isOntarioMarket(input.iso)) return { ok: true }
+  if (input.padRequired === true || ONTARIO_PAD_REQUIRED === true) {
+    return {
+      ok: false,
+      code: "ontario_pad_not_required",
+      error: "Ontario PAD / pre-authorized debit must stay optional for tenants — never required.",
+    }
+  }
+  return { ok: true }
+}
+
+/** Tenant card convenience fees — hard OFF (product policy + RTA s134). */
+export function assertOntarioTenantCardFeeOff(input: {
+  iso: string | null | undefined
+  chargingTenantCardFee?: boolean
+}): EnforceOk | EnforceErr {
+  if (!isOntarioMarket(input.iso)) return { ok: true }
+  if (input.chargingTenantCardFee === true || ONTARIO_TENANT_CARD_FEE.enabled) {
+    return {
+      ok: false,
+      code: "ontario_tenant_card_fee_locked",
+      error: ONTARIO_TENANT_CARD_FEE.label,
+    }
+  }
+  return { ok: true }
+}
+
+export function assertOntarioFormHumanReview(input: {
+  iso: string | null | undefined
+  draft: OntarioFormDraft | null
+  intent?: "send" | "evict_auto"
+}): EnforceOk | EnforceErr {
+  return assertOntarioFormSendAllowed({
+    countryIso: input.iso,
+    draft: input.draft,
+    intent: input.intent,
+  })
+}
+
+export function assertOntarioNoAutomatedEviction(
+  iso: string | null | undefined,
+): EnforceOk | EnforceErr {
+  return assertOntarioAutomatedEvictionBlocked(iso)
+}
+
+export function assertOntarioCaslMarketing(input: {
+  iso: string | null | undefined
+  email: string
+}): EnforceOk | EnforceErr {
+  return assertCaslMarketingAllowed(input)
+}
+
+/** Demo/staging: payments plane stays OFF unless a LEGAL/pay-plane flag is explicitly ON. */
+export function assertOntarioPaymentsDemoOff(iso: string | null | undefined): EnforceOk | EnforceErr {
+  if (!isOntarioMarket(iso)) return { ok: true }
+  const pad = assertOntarioConnectPadAllowed(iso ?? "CA")
+  if (!pad.ok) return pad
+  return { ok: true }
 }

@@ -67,6 +67,11 @@ import {
   type RewardKind,
   type RewardStatus,
 } from "@/lib/referrals"
+import {
+  isOntarioMarket,
+  ontarioAllowsSegment,
+  ontarioResidentialDepositMonths,
+} from "@/lib/markets/ontario-rta"
 
 const SEED_VERSION = "28"
 
@@ -3237,10 +3242,50 @@ export function decideApplication(
           rentId,
         )
       }
-      const depositMonths =
+      const tenantCountry = asRow(
+        tx.prepare("SELECT country_iso FROM tenants WHERE id = ?").get(tenantId),
+      )
+      const countryIso = str(tenantCountry, "country_iso") ?? "IN"
+      const requestedMonths =
         unit.securityDepositMonths ?? leaseProfile(segment).defaultDepositMonths
-      if (depositMonths != null && depositMonths > 0) {
-        const deposit = Math.round(amount * depositMonths)
+      if (isOntarioMarket(countryIso) && segment === "residential") {
+        const capped = ontarioResidentialDepositMonths(countryIso, requestedMonths ?? 1)
+        const lmrMonths = capped.ok ? capped.months : 1
+        if (lmrMonths > 0) {
+          const deposit = Math.round(amount * lmrMonths)
+          tx.prepare(
+            `INSERT INTO ledger_entries (
+              id, tenant_id, unit_id, user_id, kind, description, amount_cents, status, due_on, created_at, source_id
+            ) VALUES (?, ?, ?, ?, 'deposit', ?, ?, 'due', ?, ?, ?)`,
+          ).run(
+            crypto.randomUUID(),
+            tenantId,
+            application.unitId,
+            application.applicantId,
+            `Last month's rent deposit · ${lmrMonths} month · interest tracked · Unit ${application.unitCode}`,
+            deposit,
+            dueOn,
+            now,
+            rentId,
+          )
+          tx.prepare(
+            `INSERT INTO ledger_entries (
+              id, tenant_id, unit_id, user_id, kind, description, amount_cents, status, due_on, created_at, source_id
+            ) VALUES (?, ?, ?, ?, 'interest', ?, ?, 'due', ?, ?, ?)`,
+          ).run(
+            crypto.randomUUID(),
+            tenantId,
+            application.unitId,
+            application.applicantId,
+            `LMR interest accrual placeholder · Unit ${application.unitCode} (Ontario RTA)`,
+            0,
+            dueOn,
+            now,
+            rentId,
+          )
+        }
+      } else if (requestedMonths != null && requestedMonths > 0) {
+        const deposit = Math.round(amount * requestedMonths)
         tx.prepare(
           `INSERT INTO ledger_entries (
             id, tenant_id, unit_id, user_id, kind, description, amount_cents, status, due_on, created_at, source_id
@@ -3250,7 +3295,7 @@ export function decideApplication(
           tenantId,
           application.unitId,
           application.applicantId,
-          `Security deposit · ${depositMonths} month${depositMonths === 1 ? "" : "s"} · Unit ${application.unitCode}`,
+          `Security deposit · ${requestedMonths} month${requestedMonths === 1 ? "" : "s"} · Unit ${application.unitCode}`,
           deposit,
           dueOn,
           now,
@@ -3493,9 +3538,26 @@ export function createPropertyForLandlord(input: {
 }) {
   const db = getDb()
   const tenant = asRow(
-    db.prepare("SELECT id FROM tenants WHERE id = ? AND kind = 'landlord'").get(input.tenantId),
+    db
+      .prepare("SELECT id, country_iso FROM tenants WHERE id = ? AND kind = 'landlord'")
+      .get(input.tenantId),
   )
   if (!tenant) return { ok: false as const, error: "Landlord organisation not found." }
+  const countryIso = str(tenant, "country_iso") ?? "IN"
+  if (isOntarioMarket(countryIso) && !ontarioAllowsSegment(countryIso, input.segment)) {
+    return {
+      ok: false as const,
+      error:
+        "Ontario demo/staging allows Residential Tenancies Act residential listings only — commercial and warehouse are blocked.",
+    }
+  }
+  if (input.unit?.securityDepositMonths != null && isOntarioMarket(countryIso)) {
+    const deposit = ontarioResidentialDepositMonths(
+      countryIso,
+      input.unit.securityDepositMonths,
+    )
+    if (!deposit.ok) return { ok: false as const, error: deposit.error }
+  }
   if (input.unit) {
     const gate = assertFreePlanUnitSlot(input.tenantId)
     if (!gate.ok) return gate

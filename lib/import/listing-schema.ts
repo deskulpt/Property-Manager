@@ -115,6 +115,16 @@ export function siteById(id: ListingSiteId): ListingSiteMeta {
   return site
 }
 
+/** Ontario / CA: landlord-direct only — hide MLS / REALTOR.ca / LoopNet scrape paths. */
+export function listingSitesForMarket(iso: string | null | undefined): ListingSiteMeta[] {
+  const market = String(iso ?? "").toUpperCase()
+  if (market !== "CA") return LISTING_SITES
+  return LISTING_SITES.filter((site) => {
+    if (site.market !== "CA") return true
+    return site.id === "kijiji"
+  })
+}
+
 export function hostMatchesSite(hostname: string, site: ListingSiteMeta) {
   const host = hostname.toLowerCase().replace(/^www\./, "")
   return site.hosts.some((allowed) => {
