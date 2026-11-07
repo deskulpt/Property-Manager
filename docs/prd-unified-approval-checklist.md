@@ -6,7 +6,7 @@
 **CFO apply:** [`cfo-review-applied-nov7.md`](./cfo-review-applied-nov7.md) · **Advisor vs Aloke:** [`advisor-vs-aloke-approval-summary.md`](./advisor-vs-aloke-approval-summary.md)  
 **Repo mirror:** `docs/prd-unified-approval-checklist.md`  
 **Stack base:** `cursor/d01-d02-pricing-entitlements-6564` @ `039b379` — **do not merge #44**  
-**Checklist commit (link when recording Eng review):** see `CHECKLIST_COMMIT_SHA` after CFO branch push (repo file on `cursor/cfo-review-pricing-tax-0ae5`)  
+**Checklist commit (link when recording Eng review):** **`16a549b9f53f0d3f749f8b3094e5a140ddc26665`** on `cursor/cfo-review-pricing-tax-0ae5` (Eng review baseline GH main `5ca1b25` — checklist was absent there)  
 **Eng review baseline:** GH `main` @ `5ca1b25` (checklist **absent** there — Eng verdicts are conditional on the checklist commit on the CFO branch)  
 **Date:** 7 Nov 2026  
 
