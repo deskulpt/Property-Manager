@@ -5,7 +5,7 @@ Date: 6 November 2026
 Product: Easy Rental / DeSkulpt Inc.  
 Repository: https://github.com/deskulpt/Property-Manager  
 Document owner: Product owner; engineering, security, finance and legal jointly approve their sections.  
-Status: **PARTIAL — not fully approved.** Finance + Eng/Security + Legal advisor columns recorded 7 Nov 2026. Aloke Approve on several rows is preserved but **no D0x is fully approved** (advisor AwC/Reject). **D11/D12/D13/D15 not Aloke-approved.** D07 Eng Reject · D09 Eng Reject · D13 Legal Reject. India wording: **demo only** until country/state/feature gates. See [`prd-decisions-d01-d15.md`](./prd-decisions-d01-d15.md) · [`advisor-vs-aloke-approval-summary.md`](./advisor-vs-aloke-approval-summary.md).
+Status: **PARTIAL — not fully approved.** Finance + Eng/Security + Legal recorded. **No D0x fully approved.** **D11/D12/D13/D15 not Aloke-approved.** D07/D09 Eng Reject. **D13 Legal → Approve with changes:** “Telangana and Ontario selected; synthetic demos allowed; production gated by feature.” **OPEN Legal↔CFO** on Stripe UPI vs landlord Razorpay. See [`prd-decisions-d01-d15.md`](./prd-decisions-d01-d15.md) · [`advisor-vs-aloke-approval-summary.md`](./advisor-vs-aloke-approval-summary.md).
 
 ## 0. Document authority, evidence and corrections
 
