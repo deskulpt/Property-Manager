@@ -35,6 +35,7 @@ import {
   D13_LEGAL_WORDING,
   LEGAL_CFO_RENT_RAIL_CONFLICT,
   LEGAL_FEATURE_FLAGS,
+  ONTARIO_COMMISSION_LEGAL,
   evaluateRouteDepositGates,
 } from "@/lib/billing/legal-flags"
 import {
@@ -289,19 +290,30 @@ describe("D11 BM — Stripe subscriptions; no Route; surcharge separate", () => 
     )
   })
 
-  it("Ontario Connect DIRECT+PAD Finance AwC stub; flag OFF; no tenant fees", () => {
+  it("Ontario Connect DIRECT+PAD Legal design/test only; HST we compute; no tenant card fee", () => {
     expect(ONTARIO_CONNECT_FEATURE.enabled).toBe(false)
+    expect(ONTARIO_CONNECT_FEATURE.legalMode).toBe("design_test_only_not_live")
     expect(ONTARIO_CONNECT_FEATURE.chargeType).toBe("direct")
     expect(ONTARIO_CONNECT_FEATURE.feesToTenants).toBe(false)
+    expect(ONTARIO_CONNECT_FEATURE.tenantCardConvenienceFeePermanentOff).toBe(true)
+    expect(ONTARIO_CONNECT_FEATURE.connectAppFeeCalculatesHst).toBe(false)
+    expect(ONTARIO_CONNECT_FEATURE.computeAndRemitHstOurselves).toBe(true)
     expect(ONTARIO_CONNECT_FEATURE.alokeApproved).toBe(false)
     expect(ONTARIO_PRICING_CONFIG.amountsFinal).toBe(false)
     expect(LEGAL_FEATURE_FLAGS.ontarioConnectDirectPad).toBe(false)
+    expect(LEGAL_FEATURE_FLAGS.tenantCardConvenienceFee).toBe(false)
+    expect(LEGAL_FEATURE_FLAGS.quebecCardSurcharge).toBe(false)
+    expect(ONTARIO_COMMISSION_LEGAL.live).toBe(false)
+    expect(ONTARIO_COMMISSION_LEGAL.padOptionalNeverMandatory).toBe(true)
     expect(useSeparateInvoicePath("ontario")).toBe(true)
     const fee = quoteOntarioApplicationFee({ rentCadCents: 200_000, paymentsFeeBps: 50 })
     expect(fee.feesToTenant).toBe(false)
+    expect(fee.hstComputedBy).toBe("deskulpt")
     expect(fee.applicationFeeInclusiveCadCents).toBe(
       fee.applicationFeeExclusiveCadCents + fee.hstCadCents,
     )
     expect(D11_DOCUMENTED.ontario.financeStatus).toBe("approve_with_changes")
+    expect(ALOKE_INDIAN_ENTITY_DECISION.plannedForm).toBe("in_pvt_ltd_subsidiary")
+    expect(ALOKE_INDIAN_ENTITY_DECISION.incorporatingDoesNotEqualRouteEligibility).toBe(true)
   })
 })
