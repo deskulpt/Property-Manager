@@ -37,6 +37,12 @@ import {
   LEGAL_FEATURE_FLAGS,
   evaluateRouteDepositGates,
 } from "@/lib/billing/legal-flags"
+import {
+  ONTARIO_CONNECT_FEATURE,
+  ONTARIO_PRICING_CONFIG,
+  quoteOntarioApplicationFee,
+  useSeparateInvoicePath,
+} from "@/lib/billing/ontario-connect"
 import { quoteLandlordSurcharge } from "@/lib/billing/surcharge"
 import { quoteSubscriptionTax } from "@/lib/billing/tax"
 import { PLAN_LIMITS } from "@/lib/plans"
@@ -273,6 +279,7 @@ describe("D11 BM — Stripe subscriptions; no Route; surcharge separate", () => 
   it("Legal flags OFF; D13 wording; OPEN Legal↔CFO narrowed to CA Stripe UPI", () => {
     expect(LEGAL_FEATURE_FLAGS.routeRentSplits).toBe(false)
     expect(LEGAL_FEATURE_FLAGS.depositHoldsOnDeskulpt).toBe(false)
+    expect(LEGAL_FEATURE_FLAGS.ontarioConnectDirectPad).toBe(false)
     expect(LEGAL_FEATURE_FLAGS.affiliateLive).toBe(false)
     expect(LEGAL_FEATURE_FLAGS.realPiiAiConnectorsMedia).toBe(false)
     expect(D13_LEGAL_WORDING).toContain("Telangana and Ontario selected")
@@ -280,5 +287,21 @@ describe("D11 BM — Stripe subscriptions; no Route; surcharge separate", () => 
     expect(LEGAL_CFO_RENT_RAIL_CONFLICT.codeFollows).toBe(
       "aloke_indian_entity_razorpay_design_flags_off",
     )
+  })
+
+  it("Ontario Connect DIRECT+PAD Finance AwC stub; flag OFF; no tenant fees", () => {
+    expect(ONTARIO_CONNECT_FEATURE.enabled).toBe(false)
+    expect(ONTARIO_CONNECT_FEATURE.chargeType).toBe("direct")
+    expect(ONTARIO_CONNECT_FEATURE.feesToTenants).toBe(false)
+    expect(ONTARIO_CONNECT_FEATURE.alokeApproved).toBe(false)
+    expect(ONTARIO_PRICING_CONFIG.amountsFinal).toBe(false)
+    expect(LEGAL_FEATURE_FLAGS.ontarioConnectDirectPad).toBe(false)
+    expect(useSeparateInvoicePath("ontario")).toBe(true)
+    const fee = quoteOntarioApplicationFee({ rentCadCents: 200_000, paymentsFeeBps: 50 })
+    expect(fee.feesToTenant).toBe(false)
+    expect(fee.applicationFeeInclusiveCadCents).toBe(
+      fee.applicationFeeExclusiveCadCents + fee.hstCadCents,
+    )
+    expect(D11_DOCUMENTED.ontario.financeStatus).toBe("approve_with_changes")
   })
 })
