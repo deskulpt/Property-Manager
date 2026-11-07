@@ -24,17 +24,28 @@ import { taxRegistrationIdForIso } from "@/lib/markets/tax-adapters"
 export type EnforceOk = { ok: true }
 export type EnforceErr = { ok: false; error: string; code: string }
 
-/** Declarative-only — returns notes; never blocks. Storage enforcement TBD. */
+/**
+ * Declarative-only demo declaration — never blocks.
+ * Target location (pack intent) is separate from actual location (always unverified
+ * until storage/region pinning lands). No compliant/verified badges.
+ */
 export function dataResidencyDeclarative(iso: string): {
   declarative: true
+  /** @deprecated Prefer targetLocation — pack region intent for demo. */
   region: string | null
+  targetLocation: string | null
+  /** Always unverified in demo/staging — do not treat as compliant. */
+  actualLocation: "unverified"
   notes: string | null
   enforcedByStorage: false
 } {
   const pack = builtinPack(iso)
+  const target = pack?.dataResidency?.region ?? null
   return {
     declarative: true,
-    region: pack?.dataResidency?.region ?? null,
+    region: target,
+    targetLocation: target,
+    actualLocation: "unverified",
     notes: pack?.dataResidency?.notes ?? null,
     enforcedByStorage: false,
   }

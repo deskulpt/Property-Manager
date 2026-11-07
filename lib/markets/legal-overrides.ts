@@ -11,6 +11,7 @@ import { getDb } from "@/lib/db"
 import {
   catalogEntryFor,
   COMPLIANCE_CATALOG,
+  COMPLIANCE_PROPOSAL_TTL_MS,
   INDIA_COMPLIANCE_PARKED,
   INDIA_MONEY_FLAG_KEYS,
   isIndiaMoneyParked,
@@ -20,8 +21,10 @@ import {
   PAY_PLANE_FLAG_IDS,
   PAY_PLANE_HOSTS,
   payPlaneMetaKey,
+  TENANT_CARD_FEE_POLICY_LABEL,
   type PayPlaneFlagId,
 } from "@/lib/markets/compliance-catalog"
+import { notifyMany } from "@/lib/notifications"
 import {
   LEGAL_OVERRIDE_META_PREFIX,
   clearLegalFlagOverride,
@@ -115,6 +118,8 @@ function writeAudit(input: {
   peerUserId?: string | null
   detail?: unknown
   bindingHash?: string | null
+  /** When false, skip dual-admin alert (e.g. India park force-off on load). */
+  alertAdmins?: boolean
 }) {
   ensureComplianceAuditSchema()
   const id = crypto.randomUUID()
@@ -137,7 +142,93 @@ function writeAudit(input: {
       input.bindingHash ?? null,
       createdAt,
     )
+  if (input.alertAdmins !== false) {
+    alertPlatformAdmins({
+      title: `Compliance · ${input.action}`,
+      body: input.summary,
+      sourceId: `compliance_audit:${id}`,
+      actorUserId: input.actorUserId ?? null,
+      peerUserId: input.peerUserId ?? null,
+    })
+  }
   return { id, createdAt }
+}
+
+/** L0/L1 platform admins — dual-alert target for money/compliance changes. */
+export function listPlatformAdminUserIds(): string[] {
+  ensureComplianceAuditSchema()
+  try {
+    return (
+      getDb()
+        .prepare(
+          `SELECT id FROM users WHERE CAST(role_level AS INTEGER) <= 1 ORDER BY role_level ASC, id ASC`,
+        )
+        .all() as { id: string }[]
+    ).map((r) => String(r.id))
+  } catch {
+    return []
+  }
+}
+
+function alertPlatformAdmins(input: {
+  title: string
+  body: string
+  sourceId: string
+  actorUserId?: string | null
+  peerUserId?: string | null
+}) {
+  const ids = new Set(listPlatformAdminUserIds())
+  if (input.actorUserId) ids.add(input.actorUserId)
+  if (input.peerUserId) ids.add(input.peerUserId)
+  if (ids.size === 0) return
+  notifyMany(
+    [...ids].map((userId) => ({
+      userId,
+      title: input.title,
+      body: input.body,
+      href: "/console/compliance",
+      sourceId: `${input.sourceId}:${userId}`,
+    })),
+  )
+}
+
+function proposalExpired(createdAt: string, now = Date.now()): boolean {
+  const created = Date.parse(createdAt)
+  if (Number.isNaN(created)) return true
+  return now - created > COMPLIANCE_PROPOSAL_TTL_MS
+}
+
+/** Expire pending money proposals older than 24h; audit + alert both admins. */
+export function expireStaleComplianceProposals(now = new Date()): number {
+  ensureComplianceAuditSchema()
+  const pending = (
+    getDb()
+      .prepare(`SELECT * FROM compliance_flag_proposals WHERE status = 'pending'`)
+      .all() as Record<string, unknown>[]
+  ).map(mapProposal)
+  let expired = 0
+  const nowIso = now.toISOString()
+  for (const proposal of pending) {
+    if (!proposalExpired(proposal.createdAt, now.getTime())) continue
+    getDb()
+      .prepare(
+        `UPDATE compliance_flag_proposals
+         SET status = 'expired', resolved_at = ?, resolved_by = ?
+         WHERE id = ? AND status = 'pending'`,
+      )
+      .run(nowIso, "system:proposal-ttl", proposal.id)
+    writeAudit({
+      iso: proposal.iso,
+      flagKey: proposal.flagKey,
+      action: "proposal_expired",
+      actorUserId: proposal.requestedBy,
+      summary: `Enable proposal for ${proposal.flagKey} (${proposal.iso}) expired after 24h`,
+      bindingHash: proposal.bindingHash,
+      detail: { proposalId: proposal.id, ttlMs: COMPLIANCE_PROPOSAL_TTL_MS },
+    })
+    expired += 1
+  }
+  return expired
 }
 
 export type ComplianceAuditRow = {
@@ -203,6 +294,7 @@ function mapProposal(row: Record<string, unknown>): ComplianceProposal {
 
 export function listPendingComplianceProposals(iso?: string): ComplianceProposal[] {
   ensureComplianceAuditSchema()
+  expireStaleComplianceProposals()
   if (iso) {
     return (
       getDb()
@@ -287,6 +379,7 @@ export function forceIndiaMoneyOff(actorUserId = "system:india-parked") {
           action: "force_off_india_parked",
           actorUserId,
           summary: `Forced OFF ${key} — India money parked (Canada focus)`,
+          alertAdmins: false,
         })
       }
       continue
@@ -299,6 +392,7 @@ export function forceIndiaMoneyOff(actorUserId = "system:india-parked") {
         action: "force_off_india_parked",
         actorUserId,
         summary: `Forced OFF ${key} — India money parked (Canada focus)`,
+        alertAdmins: false,
       })
     }
     getDb()
@@ -434,7 +528,11 @@ export function adminRequestEnableFlag(input: {
   const entry = catalogEntryFor(input.key)
   if (!entry) return { ok: false, error: "Unknown compliance flag.", code: "unknown" }
   if (entry.hardLocked) {
-    return { ok: false, error: "Hard-locked OFF — not toggleable.", code: "hard_locked" }
+    return {
+      ok: false,
+      error: `${TENANT_CARD_FEE_POLICY_LABEL}. Changing requires counsel review + code release.`,
+      code: "hard_locked",
+    }
   }
 
   const iso = entry.payPlane && isPayPlaneFlagId(entry.key)
@@ -520,6 +618,14 @@ export function adminApproveEnableProposal(input: {
   if (proposal.status !== "pending") {
     return { ok: false, error: "Proposal is not pending.", code: "not_pending" }
   }
+  if (proposalExpired(proposal.createdAt)) {
+    expireStaleComplianceProposals()
+    return {
+      ok: false,
+      error: "Proposal expired after 24h. Request enable again.",
+      code: "proposal_expired",
+    }
+  }
   if (proposal.requestedBy === input.actorUserId) {
     const audit = writeAudit({
       iso: proposal.iso,
@@ -603,7 +709,10 @@ export function adminRejectEnableProposal(input: {
   return { ok: true, auditId: audit.id, proposalId: proposal.id }
 }
 
-/** Disable immediately (single actor OK — fail-closed). */
+/**
+ * Disable immediately (single actor OK — fail-closed).
+ * Money / pay-plane flags use kill-switch semantics: any single admin can turn payments OFF instantly.
+ */
 export function adminDisableFlag(input: {
   iso: string
   key: string
@@ -613,7 +722,11 @@ export function adminDisableFlag(input: {
   const entry = catalogEntryFor(input.key)
   if (!entry) return { ok: false, error: "Unknown flag.", code: "unknown" }
   if (entry.hardLocked) {
-    return { ok: false, error: "Hard-locked OFF.", code: "hard_locked" }
+    return {
+      ok: false,
+      error: `${TENANT_CARD_FEE_POLICY_LABEL}. Counsel review + code release required.`,
+      code: "hard_locked",
+    }
   }
   const iso = entry.payPlane && isPayPlaneFlagId(entry.key)
     ? PAY_PLANE_COUNTRY[entry.key]
@@ -635,14 +748,187 @@ export function adminDisableFlag(input: {
     )
     .run(new Date().toISOString(), input.actorUserId, iso, entry.key)
 
+  const action = entry.money ? "kill_switch_off" : "disable"
   const audit = writeAudit({
     iso,
     flagKey: entry.key,
-    action: "disable",
+    action,
     actorUserId: input.actorUserId,
-    summary: `Disabled ${entry.key} for ${iso}`,
+    summary: entry.money
+      ? `Kill-switch OFF ${entry.key} for ${iso} (single-admin instant)`
+      : `Disabled ${entry.key} for ${iso}`,
   })
   return { ok: true, auditId: audit.id }
+}
+
+export type ComplianceAuditExportRow = {
+  eventId: string
+  createdAtUtc: string
+  actor: string
+  approver: string
+  action: string
+  accountLandlord: string
+  stripeRazorpayRef: string
+  amount: string
+  currency: string
+  tax: string
+  status: string
+}
+
+export type ComplianceAuditExport = {
+  rows: ComplianceAuditExportRow[]
+  rowCount: number
+  exportHash: string
+  csv: string
+  fromUtc: string | null
+  toUtc: string | null
+}
+
+function csvEscape(value: string): string {
+  if (/[",\n\r]/.test(value)) return `"${value.replace(/"/g, '""')}"`
+  return value
+}
+
+function detailField(detail: Record<string, unknown> | null, ...keys: string[]): string {
+  if (!detail) return ""
+  for (const key of keys) {
+    const v = detail[key]
+    if (v == null || v === "") continue
+    return String(v)
+  }
+  return ""
+}
+
+/** Plain decimal string for export — never cents/minor units. */
+function plainDecimalAmount(raw: unknown): string {
+  if (raw == null || raw === "") return ""
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw.toFixed(2)
+  const s = String(raw).trim()
+  if (!s) return ""
+  const n = Number(s)
+  if (Number.isFinite(n)) return n.toFixed(2)
+  return s
+}
+
+/**
+ * Append-only audit export (UTF-8 CSV). UTC timestamps; amount + currency + tax columns.
+ * Footer carries row_count + sha256 export hash.
+ */
+export function exportComplianceAuditCsv(input?: {
+  fromUtc?: string | null
+  toUtc?: string | null
+}): ComplianceAuditExport {
+  ensureComplianceAuditSchema()
+  expireStaleComplianceProposals()
+  const fromUtc = input?.fromUtc?.trim() || null
+  const toUtc = input?.toUtc?.trim() || null
+  const clauses: string[] = []
+  const params: string[] = []
+  if (fromUtc) {
+    clauses.push("created_at >= ?")
+    params.push(fromUtc)
+  }
+  if (toUtc) {
+    clauses.push("created_at <= ?")
+    params.push(toUtc)
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""
+  const dbRows = getDb()
+    .prepare(
+      `SELECT * FROM compliance_audit_events ${where} ORDER BY created_at ASC, id ASC`,
+    )
+    .all(...params) as Record<string, unknown>[]
+
+  const rows: ComplianceAuditExportRow[] = dbRows.map((row) => {
+    let detail: Record<string, unknown> | null = null
+    if (row.detail_json != null && String(row.detail_json)) {
+      try {
+        detail = JSON.parse(String(row.detail_json)) as Record<string, unknown>
+      } catch {
+        detail = null
+      }
+    }
+    const action = String(row.action)
+    const status =
+      detailField(detail, "status") ||
+      (action === "approve_enable"
+        ? "approved"
+        : action === "reject_enable"
+          ? "rejected"
+          : action === "propose_enable"
+            ? "pending"
+            : action === "proposal_expired"
+              ? "expired"
+              : action === "kill_switch_off" || action === "disable"
+                ? "off"
+                : action === "self_approval_blocked"
+                  ? "blocked"
+                  : "recorded")
+    return {
+      eventId: String(row.id),
+      createdAtUtc: String(row.created_at),
+      actor: row.actor_user_id == null ? "" : String(row.actor_user_id),
+      approver: row.peer_user_id == null ? "" : String(row.peer_user_id),
+      action,
+      accountLandlord: detailField(detail, "accountLandlord", "account", "landlord", "tenantId"),
+      stripeRazorpayRef: detailField(
+        detail,
+        "stripeRazorpayRef",
+        "stripeRef",
+        "razorpayRef",
+        "paymentRef",
+      ),
+      amount: plainDecimalAmount(detail?.amount),
+      currency: detailField(detail, "currency"),
+      tax: plainDecimalAmount(detail?.tax),
+      status,
+    }
+  })
+
+  const header = [
+    "event_id",
+    "created_at_utc",
+    "actor",
+    "approver",
+    "action",
+    "account_landlord",
+    "stripe_razorpay_ref",
+    "amount",
+    "currency",
+    "tax",
+    "status",
+  ]
+  const lines = [
+    header.join(","),
+    ...rows.map((r) =>
+      [
+        r.eventId,
+        r.createdAtUtc,
+        r.actor,
+        r.approver,
+        r.action,
+        r.accountLandlord,
+        r.stripeRazorpayRef,
+        r.amount,
+        r.currency,
+        r.tax,
+        r.status,
+      ]
+        .map((c) => csvEscape(c))
+        .join(","),
+    ),
+  ]
+  const body = lines.join("\n")
+  const exportHash = `sha256:${createHash("sha256").update(body, "utf8").digest("hex")}`
+  const csv = `${body}\n# row_count=${rows.length}\n# export_hash=${exportHash}\n`
+  return {
+    rows,
+    rowCount: rows.length,
+    exportHash,
+    csv,
+    fromUtc,
+    toUtc,
+  }
 }
 
 export { LEGAL_OVERRIDE_META_PREFIX, PAY_PLANE_FLAG_IDS, PAY_PLANE_ENV_KEYS, PAY_PLANE_HOSTS }
