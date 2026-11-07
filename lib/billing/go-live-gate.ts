@@ -64,15 +64,16 @@ export function evaluateGoLiveGate(
     },
     {
       id: "no_route_splits_confirmed",
-      label: "No Razorpay Route / linked accounts / splits",
+      label: "Route splits remain OFF (or 3 gates + Legal passed)",
       satisfied: overrides?.no_route_splits_confirmed ?? envFlag("NO_ROUTE_CONFIRMED"),
-      evidenceNote: "CFO BLOCKER — landlords own UPI/Razorpay; surcharge is separate Stripe invoice",
+      evidenceNote:
+        "Aloke: Route OFF until Indian entity exists + Razorpay written acceptance + Legal sign-off; Stripe=CA subscriptions",
     },
     {
       id: "deposits_not_held_confirmed",
-      label: "Deskulpt does not hold deposits",
+      label: "Deposit holds remain OFF (or 3 gates + Legal passed)",
       satisfied: overrides?.deposits_not_held_confirmed ?? envFlag("DEPOSITS_NOT_HELD_CONFIRMED"),
-      evidenceNote: "CFO REJECT — landlord or licensed escrow only",
+      evidenceNote: "Deposit holds flagged OFF until same three gates; else landlord/licensed escrow",
     },
   ]
 

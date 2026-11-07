@@ -31,9 +31,11 @@ import {
 } from "@/lib/billing/pricing"
 import { resolvePrimaryProviderName } from "@/lib/billing/routing"
 import {
+  ALOKE_INDIAN_ENTITY_DECISION,
   D13_LEGAL_WORDING,
   LEGAL_CFO_RENT_RAIL_CONFLICT,
   LEGAL_FEATURE_FLAGS,
+  evaluateRouteDepositGates,
 } from "@/lib/billing/legal-flags"
 import { quoteLandlordSurcharge } from "@/lib/billing/surcharge"
 import { quoteSubscriptionTax } from "@/lib/billing/tax"
@@ -231,14 +233,27 @@ describe("go-live gate fail-closed (D10) — Stripe + no Route", () => {
 })
 
 describe("D11 BM — Stripe subscriptions; no Route; surcharge separate", () => {
-  it("Stripe is subscription processor; Route forbidden; deposits not held", () => {
+  it("Stripe CA subscriptions; Route/deposits OFF until 3 gates; Indian entity planned", () => {
     expect(resolvePrimaryProviderName()).toBe("stripe")
     expect(commerceRoleForProvider("stripe")).toBe("processor")
     expect(razorpayRouteAllowed()).toBe(false)
     expect(deskulptMayHoldDeposits()).toBe(false)
     expect(rentMaySettleOnPlatformBooks()).toBe(false)
     expect(D11_DOCUMENTED.alokeApproved).toBe(false)
-    expect(D11_DOCUMENTED.razorpayRoute).toBe(false)
+    expect(D11_DOCUMENTED.indianEntityWillRegister).toBe(true)
+    expect(D11_DOCUMENTED.razorpayMerchantAccount).toBe("indian_entity")
+    expect(ALOKE_INDIAN_ENTITY_DECISION.alokeApproveD11D12D13D15).toBe(false)
+    const gated = evaluateRouteDepositGates()
+    expect(gated.routeSplitsAllowed).toBe(false)
+    expect(gated.blockers.length).toBe(3)
+    const open = evaluateRouteDepositGates({
+      indian_entity_exists: true,
+      razorpay_written_acceptance: true,
+      legal_signoff: true,
+    })
+    // Catalogue flags still false — gates alone do not enable Route
+    expect(open.routeSplitsAllowed).toBe(false)
+    expect(open.depositHoldsAllowed).toBe(false)
   })
 
   it("surcharge is separate Stripe invoice after settlement — not Route", () => {
@@ -255,13 +270,15 @@ describe("D11 BM — Stripe subscriptions; no Route; surcharge separate", () => 
     expect(PLAN_LIMITS.pro.matterportIncluded).toBe(false)
   })
 
-  it("Legal flags OFF; D13 wording; OPEN Legal↔CFO rent-rail conflict", () => {
+  it("Legal flags OFF; D13 wording; OPEN Legal↔CFO narrowed to CA Stripe UPI", () => {
     expect(LEGAL_FEATURE_FLAGS.routeRentSplits).toBe(false)
     expect(LEGAL_FEATURE_FLAGS.depositHoldsOnDeskulpt).toBe(false)
     expect(LEGAL_FEATURE_FLAGS.affiliateLive).toBe(false)
     expect(LEGAL_FEATURE_FLAGS.realPiiAiConnectorsMedia).toBe(false)
     expect(D13_LEGAL_WORDING).toContain("Telangana and Ontario selected")
     expect(LEGAL_CFO_RENT_RAIL_CONFLICT.status).toBe("OPEN")
-    expect(LEGAL_CFO_RENT_RAIL_CONFLICT.codeFollows).toBe("cfo_bm")
+    expect(LEGAL_CFO_RENT_RAIL_CONFLICT.codeFollows).toBe(
+      "aloke_indian_entity_razorpay_design_flags_off",
+    )
   })
 })

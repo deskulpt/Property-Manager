@@ -1,37 +1,20 @@
-# Advisor vs Aloke approval summary — 7 Nov 2026 (Legal update)
+# Advisor vs Aloke approval summary — 7 Nov 2026 (Indian-entity decision)
 
-**Rule:** Fully approved only when Aloke + all required advisors signed. **D11/D12/D13/D15 not Aloke-approved.**  
-**Legal:** updated this pass (D13 Reject → **Approve with changes**). Conditional advisory only.
+**D11/D12/D13/D15 not Aloke-approved.** Aloke’s Indian-entity/Razorpay note is **owner direction**, not Approve on those IDs.
 
-| ID | Aloke | Blocking advisor signal(s) | Fully approved? |
+| ID | Aloke | Blocking advisors | Fully approved? |
 | --- | --- | --- | --- |
-| D01 | Approve | Legal AwC · Finance AwC · Eng AwC | **No** |
-| D02 | Approve | Legal AwC · Finance AwC · Eng AwC | **No** |
-| D03 | Approve | Eng AwC | **No** |
-| D04 | Approve | Legal AwC · Eng AwC | **No** |
-| D05 | Approve | Legal AwC · Finance AwC · Eng AwC | **No** |
-| D06 | Approve | Legal AwC · Finance AwC · Eng AwC | **No** |
-| D07 | Approve | **Eng Reject** · Legal AwC | **No** |
-| D08 | Approve | Eng AwC | **No** |
-| D09 | Approve | **Eng Reject** · Legal AwC · Finance **Approve** | **No** |
-| D14 | Approve | Legal AwC · Eng AwC | **No** |
+| D01–D06, D08, D14 | Approve | AwC and/or Eng Pending issues | **No** |
+| D07 | Approve | **Eng Reject** | **No** |
+| D09 | Approve | **Eng Reject** (Finance Approve) | **No** |
+| D10 | Pending | AwC | **No** |
+| D11 | Pending ◇ | AwC | **No** — Indian entity + Razorpay design recorded; Route/deposits OFF until 3 gates |
+| D12 | Pending ◇ | AwC | **No** |
+| D13 | Pending ◇ | Legal/Finance/Eng AwC | **No** — Legal wording stands; entity supports TG gate |
+| D15 | Pending ◇ | AwC | **No** |
 
-### Gated (Aloke Pending)
+### Aloke direction snapshot (not Approve)
 
-| ID | Legal | Finance | Note |
-| --- | --- | --- | --- |
-| D10 | AwC | AwC | Go-live + feature-flag OFF list |
-| D11 | AwC | AwC | **OPEN Legal↔CFO** Stripe UPI vs landlord Razorpay |
-| D12 | AwC | AwC | Affiliate flag OFF |
-| D13 | **AwC** (was Reject) | AwC | Wording: Telangana+Ontario selected; synthetic demos; production feature-gated |
-| D15 | AwC | AwC | Real-PII media blocked |
+Indian entity **will register** for Razorpay · Razorpay keyed to Indian-entity merchant · Stripe = CA subscriptions · Route + deposit holds flagged OFF until entity + Razorpay acceptance + Legal sign-off.
 
-### Rejects still open
-
-- **D07 Eng Reject** · **D09 Eng Reject**  
-- Legal Reject on D13: **cleared** (now AwC)
-
-### Counts
-
-- Fully approved: **0**  
-- OPEN conflicts: Legal↔CFO rent rails (Stripe UPI verify vs landlord Razorpay/UPI)
+Fully approved: **0**.

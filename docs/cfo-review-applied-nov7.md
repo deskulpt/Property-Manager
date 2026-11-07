@@ -45,6 +45,13 @@ Fully approved: **0**. D11/D12/D13/D15 not Aloke-approved.
 - **OPEN Legal↔CFO:** Stripe UPI (verify) vs landlord-owned Razorpay/UPI — code follows CFO/BM until closed.
 - D11/D12/D13/D15 still **not** Aloke-approved.
 
+## Aloke Indian-entity Razorpay decision (not Aloke Approve on D11–D15)
+
+- Indian entity **will be registered** for Razorpay; integration keyed to **Indian-entity merchant account**.
+- Stripe remains Deskulpt **Canada** subscriptions.
+- Route splits + deposit holds: flags **OFF** until (1) entity exists (2) Razorpay written acceptance (3) Legal sign-off.
+- Code: `evaluateRouteDepositGates()` / `ALOKE_INDIAN_ENTITY_DECISION` in `lib/billing/legal-flags.ts`.
+
 ### LEGAL
 
 1. Re-review D13 Reject wording vs Aloke BM (Telangana + Ontario launch) — Legal update pending.  
