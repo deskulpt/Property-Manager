@@ -20,11 +20,16 @@ import {
   inviteOrgSeat,
   setPasswordHash,
 } from "@/lib/db"
+import { assertAccountCountryMatch } from "@/lib/markets/account-country"
+import { listLiveCountryPacks } from "@/lib/markets/store"
+import { normalizeMarketIso } from "@/lib/markets/cookie"
 
 export class CredentialsAuthProvider implements AuthProvider {
   readonly kind = "credentials" as const
 
-  async signUp(input: AuthCredentials & { name: string }): Promise<AuthResult> {
+  async signUp(
+    input: AuthCredentials & { name: string; countryIso?: string },
+  ): Promise<AuthResult> {
     const email = input.email.trim().toLowerCase()
     const name = input.name.trim()
     if (!email || !name) return { ok: false, error: "Name and email are required." }
@@ -34,18 +39,22 @@ export class CredentialsAuthProvider implements AuthProvider {
     if (findUserByEmail(email)) {
       return { ok: false, error: "That email already has an account." }
     }
+    const countryIso = normalizeMarketIso(input.countryIso ?? "IN")
     const passwordHash = hashPassword(input.password)
     const created = createUserAccount({
       name,
       email,
       passwordHash,
       role: "applicant",
+      countryIso,
     })
     if (!created.ok) return created
     return { ok: true, userId: created.userId }
   }
 
-  async logIn(input: AuthCredentials): Promise<AuthResult> {
+  async logIn(
+    input: AuthCredentials & { requestCountryIso?: string },
+  ): Promise<AuthResult> {
     const email = input.email.trim().toLowerCase()
     const user = findUserByEmail(email)
     if (!user) return { ok: false, error: "Email or password is incorrect." }
@@ -73,15 +82,30 @@ export class CredentialsAuthProvider implements AuthProvider {
     if (!ok) {
       return { ok: false, error: "Email or password is incorrect." }
     }
+    if (input.requestCountryIso) {
+      const bound = assertAccountCountryMatch({
+        accountIso: user.countryIso,
+        requestIso: input.requestCountryIso,
+        roleLevel: user.roleLevel,
+      })
+      if (!bound.ok) return { ok: false, error: bound.error }
+    }
     return { ok: true, userId: user.id, tenantId: user.tenantId ?? undefined }
   }
 
   async createOrg(userId: string, input: OrgCreateInput): Promise<AuthResult> {
     const country = input.country.trim()
-    if (country.toLowerCase() !== "india" && country.toUpperCase() !== "IN") {
+    const iso =
+      country.toLowerCase() === "india" || country.toUpperCase() === "IN"
+        ? "IN"
+        : country.toLowerCase() === "canada" || country.toUpperCase() === "CA"
+          ? "CA"
+          : country.toUpperCase()
+    const live = new Set(listLiveCountryPacks().map((p) => p.iso))
+    if (!live.has(iso)) {
       return {
         ok: false,
-        error: "Public signup is India-only until another market clears the checklist.",
+        error: "That country is not live yet — promote its CountryPack from the command center.",
       }
     }
     const pkg = parsePackage(input.packageId ?? DEFAULT_PACKAGE)

@@ -150,7 +150,8 @@ export function registerLivePackLookup(fn: ((iso: string) => PackJson | null) | 
 
 /**
  * Active market profile. Prefers live CountryPack (DB) for session/default ISO,
- * falls back to static MARKETS.IN. One UI — pack swaps schema, no /ca shard.
+ * falls back to static MARKETS.IN. One UI — pack swaps schema; URL segment `/in`|`/ca`
+ * selects the pack (proxy + consent).
  */
 export function activeMarket(preferredIso?: string | null): MarketProfile {
   const iso = (preferredIso || sessionMarketIso || ACTIVE_MARKET_ID).toUpperCase()

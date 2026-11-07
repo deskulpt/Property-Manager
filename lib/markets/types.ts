@@ -1,14 +1,54 @@
 import { z } from "zod"
 
-/** Country business schema pack — one UI, pack-swapped money/tax/payments/eSign/SMS. */
+/** Country business schema pack — one UI, pack-swapped money/tax/payments/eSign/SMS + path segment. */
 export const CountryPackSchema = z.object({
   iso: z.string().length(2),
   name: z.string().min(2),
+  /** Lowercase URL segment (`in`, `ca`). New countries = config-only. */
+  pathSegment: z
+    .string()
+    .length(2)
+    .regex(/^[a-z]{2}$/),
+  /** Operating legal entity for this pack (Aloke Nov7). */
+  legalEntity: z.string().min(2),
   locale: z.string().min(2),
   currency: z.string().min(3).max(3),
   minorExponent: z.number().int().min(0).max(4),
   gstBps: z.number().int().min(0),
   taxLabels: z.array(z.string()).min(1),
+  taxAdapter: z
+    .object({
+      kind: z.enum(["ca_stripe_tax_hst", "in_gst_matrix", "labels_only"]),
+      /** Live adapter; still gated by LEGAL_FEATURE_FLAGS. */
+      enabled: z.boolean().default(false),
+      notes: z.string().optional(),
+    })
+    .default({ kind: "labels_only", enabled: false }),
+  paymentRails: z
+    .object({
+      kinds: z.array(z.string()).default([]),
+      notes: z.string().optional(),
+    })
+    .default({ kinds: [] }),
+  /** Per-country legal/product gates — omit or false = fail-closed OFF. */
+  legalFeatureFlags: z.record(z.string(), z.boolean()).default({}),
+  dataResidency: z
+    .object({
+      region: z.string().min(2),
+      notes: z.string().min(2),
+    })
+    .optional(),
+  leaseTemplates: z
+    .array(
+      z.object({
+        id: z.string().min(2),
+        label: z.string().min(2),
+        jurisdiction: z.string().min(2),
+        status: z.enum(["draft", "ready", "live"]).default("draft"),
+        disclaimerKey: z.string().optional(),
+      }),
+    )
+    .default([]),
   phoneCc: z.string().min(2),
   postalRule: z.string().min(2),
   postalLabel: z.string().min(2),

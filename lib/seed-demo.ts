@@ -27,7 +27,16 @@ export function seedDemoDatabase(db: Sql) {
   const tenant = db.prepare(
     "INSERT INTO tenants (id, name, slug, city, kind, display_currency, package, status, is_demo) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?)",
   )
-  tenant.run("t_deskulpt", "DeSkulpt India Pvt Ltd", "deskulpt", "Hyderabad", "platform", "INR", "pro", 1)
+  tenant.run(
+    "t_deskulpt",
+    "Deskulpt Commerce India Pvt Ltd",
+    "deskulpt",
+    "Hyderabad",
+    "platform",
+    "INR",
+    "pro",
+    1,
+  )
   tenant.run(
     "t_bbm",
     "DEMO · EasyRent Hyderabad",
@@ -50,12 +59,12 @@ export function seedDemoDatabase(db: Sql) {
   // Real staff login (not a public demo hop target).
   user.run(
     "u_platform_admin",
-    "DeSkulpt SuperAdmin",
+    "Deskulpt SuperAdmin",
     "admindeskulpt@gmail.com",
     "super_admin",
     0,
     "t_deskulpt",
-    "DeSkulpt Inc",
+    "Deskulpt Inc",
     null,
     null,
     0,
@@ -63,15 +72,15 @@ export function seedDemoDatabase(db: Sql) {
     SEED_L0_PASSWORD_HASH,
     0,
   )
-  // L1 staff login (DeSkulpt Inc admin).
+  // L1 staff login (Deskulpt Inc — CA federal parent).
   user.run(
     "u_platform_l1",
-    "DeSkulpt Staff Admin",
+    "Deskulpt Staff Admin",
     "staff@deskulpt.example",
     "account_manager",
     1,
     "t_deskulpt",
-    "DeSkulpt Inc",
+    "Deskulpt Inc",
     null,
     null,
     0,
@@ -79,8 +88,8 @@ export function seedDemoDatabase(db: Sql) {
     SEED_L0_PASSWORD_HASH,
     0,
   )
-  user.run("u_avery", "Avery Quinn", "avery@deskulpt.example", "super_admin", 0, "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+918012345678", null, 1)
-  user.run("u_chris", "Chris Vogel", "chris@deskulpt.example", "property_manager", 1, "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+918022334455", null, 1)
+  user.run("u_avery", "Avery Quinn", "avery@deskulpt.example", "super_admin", 0, "t_deskulpt", "Deskulpt Commerce India Pvt Ltd", null, null, 0, "+918012345678", null, 1)
+  user.run("u_chris", "Chris Vogel", "chris@deskulpt.example", "property_manager", 1, "t_deskulpt", "Deskulpt Commerce India Pvt Ltd", null, null, 0, "+918022334455", null, 1)
   user.run("u_jordan", "Jordan Blake", "jordan@deskulpt.example", "merchandiser", 1, "t_deskulpt", "DeSkulpt India Pvt Ltd", null, null, 0, "+919900112233", null, 1)
   user.run("u_maya", "Maya Chen", "maya@apexlogistics.example", "applicant", 4, null, "Apex Logistics India", null, null, 0, "+919876543210", null, 1)
   user.run("u_devon", "Devon Hale", "devon@northline.example", "applicant", 4, null, "Northline Distribution India", null, null, 0, "+919811223344", null, 1)

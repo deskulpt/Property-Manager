@@ -202,10 +202,13 @@ export async function signupAccount(
   const policy = passwordPolicyError(parsed.data.password)
   if (policy) return { error: policy, fieldErrors: { password: policy } }
   const passwordHash = await hashPassword(parsed.data.password)
+  const { requestCountryIso } = await import("@/lib/markets/request-country")
+  const countryIso = await requestCountryIso()
   const result = createPendingAccount({
     name: parsed.data.name,
     email: parsed.data.email,
     passwordHash,
+    countryIso,
   })
   if (!result.ok) return { error: result.error, fieldErrors: {} }
   recordConsentEvent({
@@ -2818,7 +2821,9 @@ export async function signUpAction(
     return { ...emptyAuth, error: "Check the form.", fieldErrors: issues(parsed.error) }
   }
   const auth = getAuthProvider()
-  const result = await auth.signUp(parsed.data)
+  const { requestCountryIso } = await import("@/lib/markets/request-country")
+  const countryIso = await requestCountryIso()
+  const result = await auth.signUp({ ...parsed.data, countryIso })
   if (!result.ok) return { ...emptyAuth, error: result.error }
   await setSessionUserId(result.userId)
   {
@@ -2836,7 +2841,9 @@ export async function logInAction(
   const email = String(formData.get("email") ?? "").trim()
   const password = String(formData.get("password") ?? "")
   const auth = getAuthProvider()
-  const result = await auth.logIn({ email, password })
+  const { requestCountryIso } = await import("@/lib/markets/request-country")
+  const requestIso = await requestCountryIso()
+  const result = await auth.logIn({ email, password, requestCountryIso: requestIso })
   if (!result.ok) return { ...emptyAuth, error: result.error }
   await setSessionUserId(result.userId)
   if (canImpersonate(getUser(result.userId)?.roleLevel ?? 5)) {

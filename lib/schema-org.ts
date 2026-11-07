@@ -1,21 +1,31 @@
-import { absoluteUrl, ORG_LEGAL_NAME, SITE_NAME, SITE_ORIGIN } from "@/lib/seo"
+import {
+  absoluteUrl,
+  legalEntityForIso,
+  ORG_LEGAL_NAME,
+  ORG_LEGAL_NAME_IN,
+  SITE_NAME,
+  SITE_ORIGIN,
+} from "@/lib/seo"
 import type { ListingCard, UnitRecord } from "@/lib/db"
 import type { PropertySegment } from "@/lib/listing-schemas"
 import { unitMonthlyRentCents } from "@/lib/format"
 
 type JsonLd = Record<string, unknown>
 
-export function organizationJsonLd(): JsonLd {
+export function organizationJsonLd(iso = "CA"): JsonLd {
+  const legalName = legalEntityForIso(iso)
   return {
     "@context": "https://schema.org",
     "@type": "Organization",
     name: SITE_NAME,
-    legalName: ORG_LEGAL_NAME,
+    legalName,
     url: SITE_ORIGIN,
     logo: absoluteUrl("/logo.png"),
     email: "hello@easyrental.space",
     description:
-      "Easy Rental is an industrial and multi-segment leasing marketplace operated by DeSkulpt Inc. Browse available warehouses, commercial, retail, and residential units.",
+      iso.toUpperCase() === "IN"
+        ? `Easy Rental India marketplace operated by ${ORG_LEGAL_NAME_IN} (subsidiary of ${ORG_LEGAL_NAME}). Synthetic demo until production gates close.`
+        : `Easy Rental is an industrial and multi-segment leasing marketplace operated by ${ORG_LEGAL_NAME} (federal Canada). Browse available warehouses, commercial, retail, and residential units.`,
   }
 }
 

@@ -15,6 +15,33 @@ export async function setDemoIdentity(page: Page, userId: string) {
   ])
 }
 
+/** Consent to a country path segment — required so legacy URLs 301 to /in|/ca. */
+export async function setCountryConsent(page: Page, iso: "IN" | "CA" = "IN") {
+  await page.context().addCookies([
+    {
+      name: "easyrental_market",
+      value: iso,
+      domain: "127.0.0.1",
+      path: "/",
+      sameSite: "Lax",
+    },
+    {
+      name: "easyrental_country_consent",
+      value: iso,
+      domain: "127.0.0.1",
+      path: "/",
+      sameSite: "Lax",
+    },
+  ])
+}
+
+/** Prefer country-prefixed paths in e2e (`/in/...`). */
+export function countryPath(path = "/", iso: "IN" | "CA" = "IN"): string {
+  const segment = iso.toLowerCase()
+  if (!path || path === "/") return `/${segment}`
+  return path.startsWith("/") ? `/${segment}${path}` : `/${segment}/${path}`
+}
+
 export async function gotoMaybe(
   page: Page,
   path: string,

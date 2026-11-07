@@ -96,7 +96,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         data-admin-bar={showAdminBar ? "1" : undefined}
       >
         <MarketProvider initialMarket={initialMarket} liveIsos={liveIsos.length ? liveIsos : ["IN"]}>
-          <JsonLd data={[organizationJsonLd(), websiteSearchActionJsonLd()]} />
+          <JsonLd
+            data={[organizationJsonLd(initialMarket), websiteSearchActionJsonLd()]}
+          />
           {demoOn && !showAdminBar ? (
             <div
               className="border-b border-amber-900/20 bg-amber-50 px-4 py-2 text-center font-mono text-[11px] uppercase tracking-[0.12em] text-amber-950"

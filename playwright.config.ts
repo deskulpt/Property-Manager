@@ -25,6 +25,8 @@ export default defineConfig({
   use: {
     ...devices["Desktop Chrome"],
     baseURL: `http://127.0.0.1:${e2ePort}`,
+    // Default India country consent so legacy paths 301 → /in/… (Aloke country split).
+    storageState: "e2e/storage-in.json",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
