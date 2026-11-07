@@ -1,6 +1,6 @@
 "use client"
 
-import { useActionState, useState } from "react"
+import { useActionState, useMemo, useState } from "react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -9,21 +9,45 @@ import { createListingProperty, type CreateListingState } from "@/lib/actions"
 import {
   PROPERTY_SEGMENTS,
   PROPERTY_SUBTYPES,
-  leaseProfile,
+  leaseProfileForMarket,
   segmentLabel,
   type PropertySegment,
 } from "@/lib/listing-schemas"
+import { ONTARIO_ALLOWED_SEGMENTS } from "@/lib/markets/ontario-rta"
 
 const initial: CreateListingState = { error: null, fieldErrors: {} }
 
-export function CreatePropertyForm() {
-  const [segment, setSegment] = useState<PropertySegment>("warehouse")
+type Props = {
+  countryIso?: string | null
+}
+
+export function CreatePropertyForm({ countryIso = "IN" }: Props) {
+  const ontario = String(countryIso).toUpperCase() === "CA"
+  const segments = useMemo(
+    () =>
+      ontario
+        ? PROPERTY_SEGMENTS.filter((s) =>
+            (ONTARIO_ALLOWED_SEGMENTS as readonly string[]).includes(s),
+          )
+        : [...PROPERTY_SEGMENTS],
+    [ontario],
+  )
+  const [segment, setSegment] = useState<PropertySegment>(
+    ontario ? "residential" : "warehouse",
+  )
   const [state, action] = useActionState(createListingProperty, initial)
   const subtypes = PROPERTY_SUBTYPES[segment]
-  const profile = leaseProfile(segment)
+  const profile = leaseProfileForMarket(segment, countryIso)
 
   return (
     <form action={action} className="grid max-w-2xl gap-5 bg-card p-5 ring-1 ring-foreground/10">
+      {ontario ? (
+        <p className="text-sm text-ink-soft" data-testid="ontario-residential-only">
+          Ontario RTA residential only — commercial, warehouse, and sales flows are blocked
+          (TRESA s5(1)(j)). Last month&apos;s rent deposit ≤ 1 month; no damage deposits.
+        </p>
+      ) : null}
+      <input type="hidden" name="listingPurpose" value="rent" />
       <div className="grid gap-2">
         <Label htmlFor="segment">Segment</Label>
         <select
@@ -33,7 +57,7 @@ export function CreatePropertyForm() {
           value={segment}
           onChange={(event) => setSegment(event.target.value as PropertySegment)}
         >
-          {PROPERTY_SEGMENTS.map((value) => (
+          {segments.map((value) => (
             <option key={value} value={value}>
               {segmentLabel(value)}
             </option>
@@ -138,12 +162,15 @@ export function CreatePropertyForm() {
                   </select>
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="depositMonths">Deposit (months)</Label>
+                  <Label htmlFor="depositMonths">
+                    {ontario ? "Last month's rent (months, max 1)" : "Deposit (months)"}
+                  </Label>
                   <Input
                     id="depositMonths"
                     name="depositMonths"
                     inputMode="decimal"
-                    defaultValue={String(profile.defaultDepositMonths ?? 3)}
+                    max={ontario ? 1 : undefined}
+                    defaultValue={String(profile.defaultDepositMonths ?? (ontario ? 1 : 3))}
                   />
                 </div>
                 <div className="grid gap-2">

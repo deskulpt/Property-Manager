@@ -75,7 +75,7 @@ export const JURISDICTION_PRESETS: Record<JurisdictionCountry, CountryJurisdicti
         code: "ON",
         name: "Ontario",
         lawBlurb:
-          "Residential: Residential Tenancies Act (RTA) + LTB themes. Commercial: largely freedom of contract; consider Commercial Tenancies Act touchpoints and HST on rent where applicable.",
+          "Ontario EasyRental demo: Residential Tenancies Act (RTA) residential only + LTB N-forms with human review. No commercial leases, no sales (TRESA s5(1)(j)), no damage deposits, LMR ≤ 1 month with interest, PAD optional, no automated eviction. Not legal advice.",
       },
       {
         code: "BC",

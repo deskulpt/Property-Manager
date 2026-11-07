@@ -41,8 +41,16 @@ export function isPayPlaneFlagId(key: string): key is PayPlaneFlagId {
   return (PAY_PLANE_FLAG_IDS as readonly string[]).includes(key)
 }
 
+/** Hard product locks (not LEGAL_FEATURE_FLAGS toggles). */
+export type ComplianceHardLockKey =
+  | "caTenantCardFee"
+  | "ontarioDamageDeposit"
+  | "ontarioMlsImport"
+  | "ontarioCommercialSales"
+  | "ontarioAutomatedEviction"
+
 export type ComplianceCatalogEntry = {
-  key: LegalFeatureFlagKey | PayPlaneFlagId | "caTenantCardFee"
+  key: LegalFeatureFlagKey | PayPlaneFlagId | ComplianceHardLockKey
   label: string
   blurb: string
   countries: ReadonlyArray<"IN" | "CA">
@@ -216,16 +224,52 @@ export const COMPLIANCE_CATALOG: ReadonlyArray<ComplianceCatalogEntry> = [
   {
     key: "caTenantCardFee",
     label: "CA tenant card fee",
-    blurb: "Disabled by product policy; Ontario residential legal risk",
+    blurb: "Disabled by product policy; Ontario residential legal risk. Hard-locked OFF — counsel + code release to change (not a toggle).",
     countries: ["CA"],
     money: true,
     hardLocked: true,
     signOffs: [
       {
         role: "LEGAL",
-        needed: "Counsel review + code release required to change (not a toggle)",
+        needed: "Permanent OFF (RTA s134 / product policy) — counsel + code release",
       },
     ],
+  },
+  {
+    key: "ontarioDamageDeposit",
+    label: "Ontario damage / security deposit",
+    blurb: "Hard-locked OFF — RTA residential: last month's rent only (≤ 1 month) + refundable key deposits at cost.",
+    countries: ["CA"],
+    money: true,
+    hardLocked: true,
+    signOffs: [{ role: "LEGAL", needed: "Permanent OFF — RTA deposit rules" }],
+  },
+  {
+    key: "ontarioMlsImport",
+    label: "MLS / PropTx / REALTOR.ca import",
+    blurb: "Hard-locked OFF — Ontario listings are landlord-direct only.",
+    countries: ["CA"],
+    money: false,
+    hardLocked: true,
+    signOffs: [{ role: "LEGAL", needed: "Permanent OFF until listing-rights counsel" }],
+  },
+  {
+    key: "ontarioCommercialSales",
+    label: "Commercial leases / sales flows",
+    blurb: "Hard-locked OFF — RTA residential only (TRESA s5(1)(j) exemption).",
+    countries: ["CA"],
+    money: false,
+    hardLocked: true,
+    signOffs: [{ role: "LEGAL", needed: "Permanent OFF for Ontario demo/staging scope" }],
+  },
+  {
+    key: "ontarioAutomatedEviction",
+    label: "Automated eviction",
+    blurb: "Hard-locked OFF — official LTB N-forms + human review only.",
+    countries: ["CA"],
+    money: false,
+    hardLocked: true,
+    signOffs: [{ role: "LEGAL", needed: "Permanent OFF — no automated eviction" }],
   },
   {
     key: "eStore",
@@ -319,3 +363,19 @@ export const COMPLIANCE_PROPOSAL_TTL_MS = 24 * 60 * 60 * 1000
 
 export const TENANT_CARD_FEE_POLICY_LABEL =
   "Disabled by product policy; Ontario residential legal risk"
+
+/** Unchecked go-live blockers for Ontario demo/staging console (never mark done here). */
+export const ONTARIO_GO_LIVE_BLOCKERS = [
+  { id: "on_lawyer_review", label: "Ontario lawyer written review", done: false as const },
+  {
+    id: "stripe_money_flow_rpaa",
+    label: "Stripe money-flow doc plus RPAA/FINTRAC determination",
+    done: false as const,
+  },
+  { id: "listing_rights", label: "Listing rights", done: false as const },
+  {
+    id: "rta_privacy_demo",
+    label: "RTA and privacy controls demonstrated",
+    done: false as const,
+  },
+] as const

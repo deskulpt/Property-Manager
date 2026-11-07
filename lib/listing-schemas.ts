@@ -56,6 +56,23 @@ export function leaseProfile(segment: PropertySegment): LeaseProfile {
   }
 }
 
+/** Country-aware lease profile — Ontario residential uses LMR ≤ 1 month (not India-style deposits). */
+export function leaseProfileForMarket(
+  segment: PropertySegment,
+  countryIso: string | null | undefined,
+): LeaseProfile {
+  const base = leaseProfile(segment)
+  if (String(countryIso ?? "").toUpperCase() !== "CA") return base
+  if (segment !== "residential") return base
+  return {
+    ...base,
+    defaultDepositMonths: 1,
+    agreementHint: "11_month",
+    rateCaption: "C$ / month",
+    unitNoun: "home",
+  }
+}
+
 export function isPropertySegment(value: string): value is PropertySegment {
   return (PROPERTY_SEGMENTS as readonly string[]).includes(value)
 }

@@ -133,7 +133,7 @@ export const CANADA_PACK: CountryPack = {
   dataResidency: {
     region: "CA",
     notes:
-      "Prefer Canadian/North-America processing for Deskulpt Inc personal data when live; synthetic demo until privacy/security gates close. AI: Cloudflare AI Gateway + Workers AI + neuron limits; real PII blocked.",
+      "Demo declare only — target location CA; actual location unverified (no compliant/verified badge). Prefer Canadian/North-America processing when live; synthetic demo until privacy/security gates close. AI: real PII blocked until realPiiAiConnectorsMedia ON.",
     enforcedByStorage: false,
   },
   leaseTemplates: [

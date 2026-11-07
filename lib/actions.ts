@@ -99,10 +99,23 @@ import { t } from "@/lib/i18n"
 import {
   isPropertySegment,
   leaseProfile,
+  leaseProfileForMarket,
   PROPERTY_SUBTYPES,
   type PropertySegment,
   warehouseAttributesFromColumns,
 } from "@/lib/listing-schemas"
+import {
+  assertOntarioDepositAllowed,
+  assertOntarioPadOptional,
+  assertOntarioResidentialOnly,
+  assertOntarioTenantCardFeeOff,
+} from "@/lib/markets/enforce"
+import {
+  recordCaslMarketingConsent,
+  setOntarioPrivacyLead,
+  setOntarioRetentionRule,
+} from "@/lib/markets/ontario-privacy"
+import { requestCountryIso } from "@/lib/markets/request-country"
 import { toE164, type DisplayCurrency, type PaymentMethodKind } from "@/lib/market"
 import { MARKET_CHECKLIST_KEYS, type MarketChecklistKey } from "@/lib/market-checklist"
 import { notify, notifyMany } from "@/lib/notifications"
@@ -578,6 +591,48 @@ export async function consoleDisableComplianceFlag(formData: FormData) {
   refresh(["/console/compliance", "/console"])
 }
 
+/** Ontario PIPEDA privacy lead + retention (demo/staging; synthetic orgs). */
+export async function consoleSaveOntarioPrivacy(formData: FormData) {
+  const session = await requireConsoleAdmin()
+  if (!session) return
+  const tenantId = String(formData.get("tenantId") ?? "t_platform_ca").trim() || "t_platform_ca"
+  const name = String(formData.get("privacyLeadName") ?? "").trim()
+  const email = String(formData.get("privacyLeadEmail") ?? "").trim()
+  const retentionMonths = Number(formData.get("retentionMonths") ?? 24)
+  const deletionPolicy = String(formData.get("deletionPolicy") ?? "").trim()
+  setOntarioPrivacyLead({
+    tenantId,
+    name,
+    email,
+    updatedBy: session.id,
+    countryIso: "CA",
+  })
+  if (deletionPolicy) {
+    setOntarioRetentionRule({
+      tenantId,
+      retentionMonths: Number.isFinite(retentionMonths) ? retentionMonths : 24,
+      deletionPolicy,
+      updatedBy: session.id,
+    })
+  }
+  refresh(["/console/compliance", "/console"])
+}
+
+/** CASL marketing consent record (demo). */
+export async function consoleRecordCaslConsent(formData: FormData) {
+  const session = await requireConsoleAdmin()
+  if (!session) return
+  const email = String(formData.get("email") ?? "").trim()
+  const granted = String(formData.get("granted") ?? "1") !== "0"
+  if (!email) return
+  recordCaslMarketingConsent({
+    email,
+    userId: session.id,
+    granted,
+  })
+  refresh(["/console/compliance", "/console"])
+}
+
 export async function consolePromoteCountryPack(formData: FormData) {
   if (!(await requireConsoleAdmin())) return
   const iso = String(formData.get("iso") ?? "")
@@ -710,11 +765,21 @@ export async function createListingProperty(
   if (!user?.tenantId || user.role !== "landlord_admin") {
     return { error: "Switch to a landlord admin to create listings.", fieldErrors: {} }
   }
+  const requestIso = await requestCountryIso()
+  const countryIso = user.countryIso || user.tenantCountryIso || requestIso
   const segmentRaw = String(formData.get("segment") ?? "")
   if (!isPropertySegment(segmentRaw)) {
     return { error: "Pick a valid segment.", fieldErrors: { segment: "Invalid segment" } }
   }
   const segment = segmentRaw as PropertySegment
+  const ontarioScope = assertOntarioResidentialOnly({
+    iso: countryIso,
+    segment,
+    listingPurpose: String(formData.get("listingPurpose") ?? "rent"),
+  })
+  if (!ontarioScope.ok) {
+    return { error: ontarioScope.error, fieldErrors: { segment: ontarioScope.code } }
+  }
   const subtype = String(formData.get("subtype") ?? "")
   if (!(PROPERTY_SUBTYPES[segment] as readonly string[]).includes(subtype)) {
     return { error: "Pick a subtype for that segment.", fieldErrors: { subtype: "Invalid subtype" } }
@@ -729,7 +794,7 @@ export async function createListingProperty(
   if (!name || !address || !area || !cityLine || !unitCode || !description || !Number.isFinite(sqft) || sqft <= 0) {
     return { error: "Fill property name, address, area, city line, unit code, area SF, and description." }
   }
-  const profile = leaseProfile(segment)
+  const profile = leaseProfileForMarket(segment, countryIso)
   let rateBasis: "per_sqft_month" | "flat_month" = profile.rateBasisDefault
   let ratePsf = 0
   let rentAmountMinor: number | null = null
@@ -771,6 +836,14 @@ export async function createListingProperty(
       bhk = Number(formData.get("bhk")) || 1
       const furnishing = String(formData.get("furnishing") ?? "semi")
       securityDepositMonths = Number(formData.get("depositMonths")) || profile.defaultDepositMonths
+      const ontarioDeposit = assertOntarioDepositAllowed({
+        iso: countryIso,
+        kind: "last_months_rent",
+        months: securityDepositMonths,
+      })
+      if (!ontarioDeposit.ok) {
+        return { error: ontarioDeposit.error, fieldErrors: { depositMonths: ontarioDeposit.code } }
+      }
       const maintenance = Number(formData.get("maintenance") ?? 0)
       maintenanceMinor = Number.isFinite(maintenance) && maintenance > 0 ? Math.round(maintenance * 100) : null
       attributes = {
@@ -1837,23 +1910,36 @@ export async function submitMethod(_prev: ApplyState, formData: FormData): Promi
     })
   if (!parsed.success) return { error: "Check the payment method.", fieldErrors: issues(parsed.error) }
   const kind = parsed.data.kind as PaymentMethodKind
+  const methodIso = user.countryIso || (await requestCountryIso())
+  const padGate = assertOntarioPadOptional({
+    iso: methodIso,
+    padRequired: false,
+  })
+  if (!padGate.ok) return { error: padGate.error, fieldErrors: {} }
+  const cardFeeGate = assertOntarioTenantCardFeeOff({
+    iso: methodIso,
+    chargingTenantCardFee: false,
+  })
+  if (!cardFeeGate.ok) return { error: cardFeeGate.error, fieldErrors: {} }
+  // Ontario: PAD/autopay stays optional — never force on.
+  const wantAutopay = parsed.data.autopay === "on"
   const attached = demoPayments.attachMethod({
     userId: user.id,
     tenantId: parsed.data.tenantId,
     kind,
     last4: parsed.data.last4,
-    autopay: parsed.data.autopay === "on",
+    autopay: wantAutopay,
   })
   const saved = upsertMethod({
     userId: user.id,
     tenantId: parsed.data.tenantId,
     brand: attached.brand,
     last4: attached.last4,
-    autopay: parsed.data.autopay === "on",
+    autopay: wantAutopay,
     providerRef: attached.providerRef,
   })
   if (!saved.ok) return { error: saved.error, fieldErrors: {} }
-  demoPayments.setAutopay({ providerRef: attached.providerRef, enabled: parsed.data.autopay === "on" })
+  demoPayments.setAutopay({ providerRef: attached.providerRef, enabled: wantAutopay })
   notify({
     userId: user.id,
     title: "Demo payment method saved",

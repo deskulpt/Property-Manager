@@ -33,6 +33,11 @@ export const NEVER_AUTO_TOOLS: ReadonlySet<string> = new Set([
   "propose_razorpay_settings",
   // Lease / e-sign send
   "propose_esign_send",
+  // Ontario — no automated eviction (RTA / LTB human review only)
+  "propose_eviction",
+  "propose_automated_eviction",
+  "automate_eviction",
+  "file_ltb_application_auto",
   // Notify / assign-notify
   "propose_job_assignment",
   "propose_send_reminder",

@@ -1,7 +1,8 @@
 import { ImportListingForm } from "@/components/listings/import-listing-form"
 import { EmptyState, PageHeader } from "@/components/product"
 import { resolveAgentTenantId } from "@/lib/agent-context"
-import { LISTING_SITES } from "@/lib/import/listing-schema"
+import { listingSitesForMarket } from "@/lib/import/listing-schema"
+import { requestCountryIso } from "@/lib/markets/request-country"
 import { getSessionUser } from "@/lib/session"
 
 export const metadata = { title: "Import listing" }
@@ -19,15 +20,21 @@ export default async function AgentImportPage() {
       />
     )
   }
+  const iso = user.countryIso || user.tenantCountryIso || (await requestCountryIso())
+  const sites = listingSitesForMarket(iso)
   return (
     <div>
       <PageHeader
         kicker="Listings"
         title="Import listing"
-        lede="Same URL import tools as the landlord desk, scoped to the active managed organisation."
+        lede={
+          iso === "CA"
+            ? "Ontario landlord-direct only — MLS / PropTx / REALTOR.ca imports disabled for the managed organisation."
+            : "Same URL import tools as the landlord desk, scoped to the active managed organisation."
+        }
       />
       <ImportListingForm
-        sites={LISTING_SITES}
+        sites={sites}
         tenantId={tenantId}
         propertiesHref="/agent"
       />
