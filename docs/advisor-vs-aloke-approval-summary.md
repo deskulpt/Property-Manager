@@ -3,7 +3,7 @@
 **Purpose:** Flag every D0x where Aloke marked **Approve** but any required advisor is **Approve with changes** or **Reject**.  
 **Sources:** [`prd-unified-approval-checklist.md`](./prd-unified-approval-checklist.md) · [`prd-decisions-d01-d15.md`](./prd-decisions-d01-d15.md)  
 **Rule:** Fully approved only when Aloke + all required advisors signed. Aloke marks preserved; they do **not** alone equal full approval.  
-**Eng baseline:** GH `main` @ `5ca1b25` (checklist absent) — Eng verdicts conditional on checklist commit on `cursor/cfo-review-pricing-tax-0ae5`.
+**Eng baseline:** GH `main` @ `5ca1b25` (checklist absent) — Eng verdicts conditional on checklist commit `16a549b9f53f0d3f749f8b3094e5a140ddc26665` on `cursor/cfo-review-pricing-tax-0ae5`.
 
 | ID | Aloke | Blocking advisor signal(s) | Fully approved? |
 | --- | --- | --- | --- |

@@ -7,7 +7,7 @@
 - [`prd-decisions-d01-d15.md`](./prd-decisions-d01-d15.md)  
 - [`advisor-vs-aloke-approval-summary.md`](./advisor-vs-aloke-approval-summary.md)  
 
-**Eng review baseline:** GH `main` @ `5ca1b25` (checklist absent). Eng verdicts conditional — **link checklist commit SHA** on CFO branch after push (header of checklist).
+**Eng checklist commit: `16a549b9f53f0d3f749f8b3094e5a140ddc26665` · Eng review baseline:** GH `main` @ `5ca1b25` (checklist absent). Eng verdicts conditional — **link checklist commit SHA** on CFO branch after push (header of checklist).
 
 ## What landed in code (DEMO/STUB labelled)
 
