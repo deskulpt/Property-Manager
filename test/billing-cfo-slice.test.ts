@@ -30,6 +30,11 @@ import {
   quotePlatformBilling,
 } from "@/lib/billing/pricing"
 import { resolvePrimaryProviderName } from "@/lib/billing/routing"
+import {
+  D13_LEGAL_WORDING,
+  LEGAL_CFO_RENT_RAIL_CONFLICT,
+  LEGAL_FEATURE_FLAGS,
+} from "@/lib/billing/legal-flags"
 import { quoteLandlordSurcharge } from "@/lib/billing/surcharge"
 import { quoteSubscriptionTax } from "@/lib/billing/tax"
 import { PLAN_LIMITS } from "@/lib/plans"
@@ -248,5 +253,15 @@ describe("D11 BM — Stripe subscriptions; no Route; surcharge separate", () => 
     expect(AFFILIATE_PROGRAM_ACTIVE).toBe(false)
     expect(affiliateAccrualAllowed()).toBe(false)
     expect(PLAN_LIMITS.pro.matterportIncluded).toBe(false)
+  })
+
+  it("Legal flags OFF; D13 wording; OPEN Legal↔CFO rent-rail conflict", () => {
+    expect(LEGAL_FEATURE_FLAGS.routeRentSplits).toBe(false)
+    expect(LEGAL_FEATURE_FLAGS.depositHoldsOnDeskulpt).toBe(false)
+    expect(LEGAL_FEATURE_FLAGS.affiliateLive).toBe(false)
+    expect(LEGAL_FEATURE_FLAGS.realPiiAiConnectorsMedia).toBe(false)
+    expect(D13_LEGAL_WORDING).toContain("Telangana and Ontario selected")
+    expect(LEGAL_CFO_RENT_RAIL_CONFLICT.status).toBe("OPEN")
+    expect(LEGAL_CFO_RENT_RAIL_CONFLICT.codeFollows).toBe("cfo_bm")
   })
 })

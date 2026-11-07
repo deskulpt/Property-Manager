@@ -37,6 +37,14 @@ Fully approved: **0**. D11/D12/D13/D15 not Aloke-approved.
 
 ---
 
+## Legal update (same day)
+
+- **D13 Legal → Approve with changes** (was Reject). Wording: “Telangana and Ontario selected; synthetic demos allowed; production gated by feature.”
+- Feature flags OFF until Razorpay acceptance + specialist review (Route, pooling, deposits, mandatory tenant surcharges, e-store, concierge, affiliate).
+- Ontario RTA / Telangana stamp-registration / CA tax matrix / real-PII AI-media blocks recorded.
+- **OPEN Legal↔CFO:** Stripe UPI (verify) vs landlord-owned Razorpay/UPI — code follows CFO/BM until closed.
+- D11/D12/D13/D15 still **not** Aloke-approved.
+
 ### LEGAL
 
 1. Re-review D13 Reject wording vs Aloke BM (Telangana + Ontario launch) — Legal update pending.  
