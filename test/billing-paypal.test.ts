@@ -171,6 +171,7 @@ describe("PayPal sandbox webhook signature", () => {
       standardSubtotalPaise: 299_00,
       chargedSubtotalPaise: 149_00,
       gstPaise: Math.round(149_00 * 0.18),
+      taxQuote: null,
       totalInclusivePaise: 149_00 + Math.round(149_00 * 0.18),
       savingsPaise: 0,
       pricingPath: "sale" as const,
@@ -180,6 +181,8 @@ describe("PayPal sandbox webhook signature", () => {
       strikeStandard: true,
       standardFromLabel: "Standard price (from 1 Apr 2027)",
       lockedUntilIso: null,
+      deferredRevenue: null,
+      discountsStacked: false as const,
     }
     const session = await paypalBillingProvider.createCheckoutSession({
       tenantId: "t1",

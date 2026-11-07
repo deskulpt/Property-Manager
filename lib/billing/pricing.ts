@@ -1,7 +1,16 @@
 /**
- * Platform billing quote math (Aloke launch pricing).
- * Amounts in INR paise (₹1 = 100). Pure functions — no I/O.
+ * Platform billing quote math (CFO D01 — graduated volume, no-stack discounts).
+ * Amounts in INR paise (₹1 = 100) for catalogue. Pure functions — no I/O.
+ *
+ * Tax: prefer `lib/billing/tax.ts` with customer location. Legacy `GST_BPS` is an
+ * India catalogue display helper only — not blanket live GST.
  */
+
+import {
+  quoteSubscriptionTax,
+  type TaxCustomer,
+  type TaxQuote,
+} from "@/lib/billing/tax"
 
 export type BillableSegment = "homes" | "retail_office" | "industrial"
 
@@ -22,24 +31,31 @@ export const SEGMENT_LABEL: Record<BillableSegment, string> = {
   industrial: "Industrial",
 }
 
-/** Standard monthly per-unit prices (exclusive of GST), paise. */
+/** Standard monthly per-unit prices (exclusive of tax), paise. */
 export const STANDARD_MONTHLY_PAISE: Record<BillableSegment, number> = {
   homes: 299_00,
   retail_office: 699_00,
   industrial: 1_999_00,
 }
 
-/** Launch-sale monthly per-unit prices (exclusive of GST), paise. */
+/** Launch-sale monthly per-unit prices (exclusive of tax), paise. */
 export const SALE_MONTHLY_PAISE: Record<BillableSegment, number> = {
   homes: 149_00,
   retail_office: 349_00,
   industrial: 999_00,
 }
 
-export const GST_BPS = 1800 // 18%
-export const ANNUAL_MULTIPLIER = 10 // annual = 10 × monthly
+/** @deprecated India catalogue display helper only — use lib/billing/tax.ts for invoices. */
+export const GST_BPS = 1800
+export const ANNUAL_MULTIPLIER = 10 // annual prepay = 10 × monthly (deferred revenue)
 export const FREE_PLAN_MAX_UNITS = 1
 export const SALE_PAYING_ACCOUNT_CAP = 500
+
+/**
+ * Minimum net price floor vs standard (bps). Sale ≈ 50% → floor 5000.
+ * Enforced when exclusive discount paths would otherwise go lower.
+ */
+export const MIN_NET_PRICE_BPS = 5000
 
 /** Sale window: 1 Dec 2026 00:00 IST → 31 Mar 2027 23:59:59.999 IST */
 export const SALE_START_UTC = Date.parse("2026-11-30T18:30:00.000Z")
@@ -58,41 +74,64 @@ export type QuoteLine = {
   lineChargedPaise: number
 }
 
+export type PricingPath = "sale" | "volume" | "standard" | "free" | "enterprise_quote" | "affiliate"
+
 export type PricingQuote = {
   cadence: BillingCadence
   units: number
   lines: QuoteLine[]
-  /** Exclusive of GST */
+  /** Exclusive of tax */
   standardSubtotalPaise: number
   chargedSubtotalPaise: number
+  /** @deprecated Prefer taxQuote.taxMinor — kept for checkout UI compat */
   gstPaise: number
-  /** Inclusive of GST — show at checkout */
+  taxQuote: TaxQuote | null
+  /** Inclusive of tax when tax applied */
   totalInclusivePaise: number
   savingsPaise: number
-  pricingPath: "sale" | "volume" | "standard" | "free" | "enterprise_quote"
+  pricingPath: PricingPath
+  /** Top graduated band reached (display); not all-units %. */
   volumeDiscountPct: 0 | 15 | 25
   saleEligible: boolean
   saleActive: boolean
   strikeStandard: boolean
   standardFromLabel: string
   lockedUntilIso: string | null
+  /** Annual prepay → deferred revenue stub */
+  deferredRevenue: {
+    prepaidPaise: number
+    monthlyRecognitionPaise: number
+    months: number
+  } | null
+  discountsStacked: false
 }
 
 /** Self-serve volume caps at 50 units; above that is sales-led (D01). */
 export const ENTERPRISE_QUOTE_MIN_UNITS = 51
+
+/** Graduated volume bands — discount applies only to units inside the band. */
+export const GRADUATED_VOLUME_TIERS: ReadonlyArray<{
+  fromUnit: number
+  toUnit: number
+  discountPct: 0 | 15 | 25
+}> = [
+  { fromUnit: 1, toUnit: 5, discountPct: 0 },
+  { fromUnit: 6, toUnit: 20, discountPct: 15 },
+  { fromUnit: 21, toUnit: 50, discountPct: 25 },
+]
 
 export function requiresEnterpriseQuote(totalUnits: number): boolean {
   return totalUnits >= ENTERPRISE_QUOTE_MIN_UNITS
 }
 
 /**
- * Self-serve volume discount only. Returns 0 for 1–5 units and for >50
- * (enterprise quote — not a silent 0% catalogue price).
+ * Top graduated band for display. Not an all-units repricing percent.
+ * Returns 0 for 1–5 and for >50 (enterprise quote).
  */
 export function volumeDiscountPct(totalUnits: number): 0 | 15 | 25 {
   if (requiresEnterpriseQuote(totalUnits)) return 0
-  if (totalUnits >= 21 && totalUnits <= 50) return 25
-  if (totalUnits >= 6 && totalUnits <= 20) return 15
+  if (totalUnits >= 21) return 25
+  if (totalUnits >= 6) return 15
   return 0
 }
 
@@ -137,20 +176,110 @@ function subtotalAtRates(
   return sum
 }
 
+/**
+ * Graduated volume subtotal: walk units in segment order, apply band % to each unit index.
+ * CFO: not all-units repricing.
+ */
+export function graduatedVolumeSubtotalPaise(
+  mix: UnitMix[],
+  cadence: BillingCadence,
+): { subtotalPaise: number; lines: QuoteLine[] } {
+  const factor = cadenceFactor(cadence)
+  const normalized = normalizeMix(mix)
+  let unitIndex = 0
+  let subtotalPaise = 0
+  const lineAcc = new Map<
+    BillableSegment,
+    { count: number; lineStandard: number; lineCharged: number }
+  >()
+
+  for (const row of normalized) {
+    const unitStandard = STANDARD_MONTHLY_PAISE[row.segment] * factor
+    for (let i = 0; i < row.count; i++) {
+      unitIndex += 1
+      const tier =
+        GRADUATED_VOLUME_TIERS.find((t) => unitIndex >= t.fromUnit && unitIndex <= t.toUnit) ??
+        null
+      const pct = tier?.discountPct ?? 0
+      const charged = Math.round(unitStandard * (1 - pct / 100))
+      subtotalPaise += charged
+      const prev = lineAcc.get(row.segment) ?? { count: 0, lineStandard: 0, lineCharged: 0 }
+      prev.count += 1
+      prev.lineStandard += unitStandard
+      prev.lineCharged += charged
+      lineAcc.set(row.segment, prev)
+    }
+  }
+
+  const lines: QuoteLine[] = normalized.map((row) => {
+    const acc = lineAcc.get(row.segment)!
+    return {
+      segment: row.segment,
+      label: SEGMENT_LABEL[row.segment],
+      count: acc.count,
+      unitStandardPaise: STANDARD_MONTHLY_PAISE[row.segment] * factor,
+      unitChargedPaise: acc.count > 0 ? Math.round(acc.lineCharged / acc.count) : 0,
+      lineStandardPaise: acc.lineStandard,
+      lineChargedPaise: acc.lineCharged,
+    }
+  })
+
+  return { subtotalPaise, lines }
+}
+
+/**
+ * Min-net floor for non-catalogue paths (e.g. affiliate).
+ * Sale / graduated volume / standard are exclusive catalogue paths and are not bumped.
+ */
+function enforceMinNet(
+  standardPaise: number,
+  chargedPaise: number,
+  path: PricingPath,
+): number {
+  if (path === "sale" || path === "volume" || path === "standard" || path === "free" || path === "enterprise_quote") {
+    return chargedPaise
+  }
+  const floor = applyBps(standardPaise, MIN_NET_PRICE_BPS)
+  return Math.max(chargedPaise, floor)
+}
+
+function deferredForCadence(
+  cadence: BillingCadence,
+  prepaidPaise: number,
+): PricingQuote["deferredRevenue"] {
+  if (cadence !== "annual" || prepaidPaise <= 0) return null
+  return {
+    prepaidPaise,
+    monthlyRecognitionPaise: Math.round(prepaidPaise / 12),
+    months: 12,
+  }
+}
+
 export type QuoteInput = {
   mix: UnitMix[]
   cadence: BillingCadence
   nowMs?: number
   payingAccountCount?: number
-  /** When set, use these locked monthly rates (paise) instead of live catalogue. */
   lockedMonthlyPaise?: Partial<Record<BillableSegment, number>> | null
-  /** ISO date of lock end; informational on quote. */
   priceLockUntilIso?: string | null
+  /**
+   * Optional affiliate % off standard (bps). Never stacks with sale/volume —
+   * exclusive best path wins (D01 CFO). Affiliate program itself is inactive (D12).
+   */
+  affiliateDiscountBps?: number
+  /** When set, tax lines come from tax adapter (preferred). */
+  taxCustomer?: TaxCustomer | null
+}
+
+function emptyTax(exclusive: number, customer: TaxCustomer | null | undefined): TaxQuote | null {
+  if (!customer) return null
+  return quoteSubscriptionTax({ exclusiveMinor: exclusive, customer })
 }
 
 /**
- * Build a checkout quote. Sale and volume do not stack — whichever saves more wins.
- * GST 18% added; totalInclusivePaise is what checkout shows.
+ * Build a checkout quote.
+ * Sale / graduated volume / affiliate cannot stack — exclusive best path.
+ * Min net floor enforced. Annual = deferred revenue recognition stub.
  */
 export function quotePlatformBilling(input: QuoteInput): PricingQuote {
   const mix = normalizeMix(input.mix)
@@ -159,31 +288,36 @@ export function quotePlatformBilling(input: QuoteInput): PricingQuote {
   const nowMs = input.nowMs ?? Date.now()
   const paying = input.payingAccountCount ?? 0
   const saleActive = isSaleActive(nowMs, paying)
-  const volPct = volumeDiscountPct(units)
+  const topVolPct = volumeDiscountPct(units)
   const factor = cadenceFactor(cadence)
 
-  if (units === 0) {
-    return {
-      cadence,
-      units: 0,
-      lines: [],
-      standardSubtotalPaise: 0,
-      chargedSubtotalPaise: 0,
-      gstPaise: 0,
-      totalInclusivePaise: 0,
-      savingsPaise: 0,
-      pricingPath: "free",
-      volumeDiscountPct: 0,
-      saleEligible: saleActive,
-      saleActive,
-      strikeStandard: false,
-      standardFromLabel: STANDARD_FROM_LABEL,
-      lockedUntilIso: input.priceLockUntilIso ?? null,
-    }
-  }
+  const baseEmpty = (path: PricingPath): PricingQuote => ({
+    cadence,
+    units,
+    lines: [],
+    standardSubtotalPaise: 0,
+    chargedSubtotalPaise: 0,
+    gstPaise: 0,
+    taxQuote: emptyTax(0, input.taxCustomer),
+    totalInclusivePaise: 0,
+    savingsPaise: 0,
+    pricingPath: path,
+    volumeDiscountPct: 0,
+    saleEligible: saleActive,
+    saleActive,
+    strikeStandard: false,
+    standardFromLabel: STANDARD_FROM_LABEL,
+    lockedUntilIso: input.priceLockUntilIso ?? null,
+    deferredRevenue: null,
+    discountsStacked: false,
+  })
 
-  // D01: >50 units are enterprise quote — no self-serve volume % (not 0% catalogue).
-  if (requiresEnterpriseQuote(units) && !(input.lockedMonthlyPaise && Object.keys(input.lockedMonthlyPaise).length > 0)) {
+  if (units === 0) return baseEmpty("free")
+
+  if (
+    requiresEnterpriseQuote(units) &&
+    !(input.lockedMonthlyPaise && Object.keys(input.lockedMonthlyPaise).length > 0)
+  ) {
     const standardSubtotalPaise = subtotalAtRates(mix, STANDARD_MONTHLY_PAISE, cadence)
     const lines: QuoteLine[] = mix.map((row) => {
       const unitStandardPaise = STANDARD_MONTHLY_PAISE[row.segment] * factor
@@ -204,6 +338,7 @@ export function quotePlatformBilling(input: QuoteInput): PricingQuote {
       standardSubtotalPaise,
       chargedSubtotalPaise: 0,
       gstPaise: 0,
+      taxQuote: emptyTax(0, input.taxCustomer),
       totalInclusivePaise: 0,
       savingsPaise: 0,
       pricingPath: "enterprise_quote",
@@ -213,6 +348,8 @@ export function quotePlatformBilling(input: QuoteInput): PricingQuote {
       strikeStandard: false,
       standardFromLabel: STANDARD_FROM_LABEL,
       lockedUntilIso: input.priceLockUntilIso ?? null,
+      deferredRevenue: null,
+      discountsStacked: false,
     }
   }
 
@@ -224,7 +361,8 @@ export function quotePlatformBilling(input: QuoteInput): PricingQuote {
     }
     const standardSubtotalPaise = subtotalAtRates(mix, STANDARD_MONTHLY_PAISE, cadence)
     const chargedSubtotalPaise = subtotalAtRates(mix, rates, cadence)
-    const gstPaise = applyBps(chargedSubtotalPaise, GST_BPS)
+    const taxQuote = emptyTax(chargedSubtotalPaise, input.taxCustomer)
+    const gstPaise = taxQuote ? taxQuote.taxMinor : applyBps(chargedSubtotalPaise, GST_BPS)
     const lines: QuoteLine[] = mix.map((row) => {
       const unitStandardPaise = STANDARD_MONTHLY_PAISE[row.segment] * factor
       const unitChargedPaise = rates[row.segment] * factor
@@ -245,6 +383,7 @@ export function quotePlatformBilling(input: QuoteInput): PricingQuote {
       standardSubtotalPaise,
       chargedSubtotalPaise,
       gstPaise,
+      taxQuote,
       totalInclusivePaise: chargedSubtotalPaise + gstPaise,
       savingsPaise: Math.max(0, standardSubtotalPaise - chargedSubtotalPaise),
       pricingPath: "standard",
@@ -254,66 +393,123 @@ export function quotePlatformBilling(input: QuoteInput): PricingQuote {
       strikeStandard: chargedSubtotalPaise < standardSubtotalPaise,
       standardFromLabel: STANDARD_FROM_LABEL,
       lockedUntilIso: input.priceLockUntilIso ?? null,
+      deferredRevenue: deferredForCadence(cadence, chargedSubtotalPaise),
+      discountsStacked: false,
     }
   }
 
   const standardSubtotalPaise = subtotalAtRates(mix, STANDARD_MONTHLY_PAISE, cadence)
-  const volumeSubtotalPaise = Math.round(standardSubtotalPaise * (1 - volPct / 100))
+  const graduated = graduatedVolumeSubtotalPaise(mix, cadence)
   const saleSubtotalPaise = saleActive
     ? subtotalAtRates(mix, SALE_MONTHLY_PAISE, cadence)
     : standardSubtotalPaise
+  const affiliateBps = Math.max(0, Math.min(10_000, input.affiliateDiscountBps ?? 0))
+  const affiliateSubtotalPaise =
+    affiliateBps > 0
+      ? enforceMinNet(
+          standardSubtotalPaise,
+          applyBps(standardSubtotalPaise, 10_000 - affiliateBps),
+          "affiliate",
+        )
+      : standardSubtotalPaise
 
-  let pricingPath: PricingQuote["pricingPath"] = "standard"
-  let chargedSubtotalPaise = standardSubtotalPaise
-  let unitRates = { ...STANDARD_MONTHLY_PAISE }
+  type Candidate = { path: PricingPath; subtotal: number; lines: QuoteLine[] }
+  const candidates: Candidate[] = [
+    {
+      path: "standard",
+      subtotal: standardSubtotalPaise,
+      lines: mix.map((row) => {
+        const unitStandardPaise = STANDARD_MONTHLY_PAISE[row.segment] * factor
+        return {
+          segment: row.segment,
+          label: SEGMENT_LABEL[row.segment],
+          count: row.count,
+          unitStandardPaise,
+          unitChargedPaise: unitStandardPaise,
+          lineStandardPaise: unitStandardPaise * row.count,
+          lineChargedPaise: unitStandardPaise * row.count,
+        }
+      }),
+    },
+  ]
 
-  if (saleActive && saleSubtotalPaise <= volumeSubtotalPaise && saleSubtotalPaise < standardSubtotalPaise) {
-    pricingPath = "sale"
-    chargedSubtotalPaise = saleSubtotalPaise
-    unitRates = { ...SALE_MONTHLY_PAISE }
-  } else if (volPct > 0 && volumeSubtotalPaise < standardSubtotalPaise) {
-    pricingPath = "volume"
-    chargedSubtotalPaise = volumeSubtotalPaise
-    // volume is % off standard — keep standard unit rates for display, line total discounted proportionally
-    unitRates = { ...STANDARD_MONTHLY_PAISE }
+  if (saleActive && saleSubtotalPaise < standardSubtotalPaise) {
+    candidates.push({
+      path: "sale",
+      subtotal: saleSubtotalPaise,
+      lines: mix.map((row) => {
+        const unitStandardPaise = STANDARD_MONTHLY_PAISE[row.segment] * factor
+        const unitChargedPaise = SALE_MONTHLY_PAISE[row.segment] * factor
+        return {
+          segment: row.segment,
+          label: SEGMENT_LABEL[row.segment],
+          count: row.count,
+          unitStandardPaise,
+          unitChargedPaise,
+          lineStandardPaise: unitStandardPaise * row.count,
+          lineChargedPaise: unitChargedPaise * row.count,
+        }
+      }),
+    })
   }
 
-  const gstPaise = applyBps(chargedSubtotalPaise, GST_BPS)
-  const lines: QuoteLine[] = mix.map((row) => {
-    const unitStandardPaise = STANDARD_MONTHLY_PAISE[row.segment] * factor
-    let unitChargedPaise = unitRates[row.segment] * factor
-    let lineChargedPaise = unitChargedPaise * row.count
-    if (pricingPath === "volume") {
-      lineChargedPaise = Math.round(unitStandardPaise * row.count * (1 - volPct / 100))
-      unitChargedPaise = row.count > 0 ? Math.round(lineChargedPaise / row.count) : unitChargedPaise
-    }
-    return {
-      segment: row.segment,
-      label: SEGMENT_LABEL[row.segment],
-      count: row.count,
-      unitStandardPaise,
-      unitChargedPaise,
-      lineStandardPaise: unitStandardPaise * row.count,
-      lineChargedPaise,
-    }
-  })
+  if (graduated.subtotalPaise < standardSubtotalPaise) {
+    candidates.push({
+      path: "volume",
+      subtotal: graduated.subtotalPaise,
+      lines: graduated.lines,
+    })
+  }
+
+  if (affiliateBps > 0 && affiliateSubtotalPaise < standardSubtotalPaise) {
+    candidates.push({
+      path: "affiliate",
+      subtotal: affiliateSubtotalPaise,
+      lines: mix.map((row) => {
+        const unitStandardPaise = STANDARD_MONTHLY_PAISE[row.segment] * factor
+        const lineStandard = unitStandardPaise * row.count
+        const lineCharged = Math.round(
+          (affiliateSubtotalPaise * lineStandard) / standardSubtotalPaise,
+        )
+        return {
+          segment: row.segment,
+          label: SEGMENT_LABEL[row.segment],
+          count: row.count,
+          unitStandardPaise,
+          unitChargedPaise: row.count > 0 ? Math.round(lineCharged / row.count) : 0,
+          lineStandardPaise: lineStandard,
+          lineChargedPaise: lineCharged,
+        }
+      }),
+    })
+  }
+
+  // Exclusive best path (lowest subtotal) — no stacking
+  candidates.sort((a, b) => a.subtotal - b.subtotal)
+  const best = candidates[0]!
+  const chargedSubtotalPaise = enforceMinNet(standardSubtotalPaise, best.subtotal, best.path)
+  const taxQuote = emptyTax(chargedSubtotalPaise, input.taxCustomer)
+  const gstPaise = taxQuote ? taxQuote.taxMinor : applyBps(chargedSubtotalPaise, GST_BPS)
 
   return {
     cadence,
     units,
-    lines,
+    lines: best.lines,
     standardSubtotalPaise,
     chargedSubtotalPaise,
     gstPaise,
+    taxQuote,
     totalInclusivePaise: chargedSubtotalPaise + gstPaise,
     savingsPaise: Math.max(0, standardSubtotalPaise - chargedSubtotalPaise),
-    pricingPath,
-    volumeDiscountPct: pricingPath === "volume" ? volPct : 0,
+    pricingPath: best.path,
+    volumeDiscountPct: best.path === "volume" ? topVolPct : 0,
     saleEligible: saleActive,
     saleActive,
     strikeStandard: chargedSubtotalPaise < standardSubtotalPaise,
     standardFromLabel: STANDARD_FROM_LABEL,
     lockedUntilIso: null,
+    deferredRevenue: deferredForCadence(cadence, chargedSubtotalPaise),
+    discountsStacked: false,
   }
 }
 
@@ -326,12 +522,6 @@ export function lockRatesFromQuote(quote: PricingQuote): Record<BillableSegment,
   }
   if (quote.pricingPath === "sale") {
     return { ...SALE_MONTHLY_PAISE }
-  }
-  if (quote.pricingPath === "volume") {
-    const pct = quote.volumeDiscountPct
-    for (const s of Object.keys(STANDARD_MONTHLY_PAISE) as BillableSegment[]) {
-      out[s] = Math.round(STANDARD_MONTHLY_PAISE[s] * (1 - pct / 100))
-    }
   }
   return out
 }
