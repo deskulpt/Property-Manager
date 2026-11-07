@@ -30,11 +30,16 @@ describe("SEO / schema.org (SEO-0)", () => {
     expect(String(target.urlTemplate)).toContain("/listings?q={search_term_string}")
   })
 
-  it("emits Organization with Easy Rental / DeSkulpt", () => {
-    const org = organizationJsonLd()
+  it("emits Organization with Easy Rental / Deskulpt Inc (CA)", () => {
+    const org = organizationJsonLd("CA")
     expect(org.name).toBe("Easy Rental")
-    expect(org.legalName).toBe("DeSkulpt Inc")
+    expect(org.legalName).toBe("Deskulpt Inc")
     expect(org.logo).toContain("/logo.png")
+  })
+
+  it("emits Organization legalName for Deskulpt Commerce India Pvt Ltd on IN", () => {
+    const org = organizationJsonLd("IN")
+    expect(org.legalName).toBe("Deskulpt Commerce India Pvt Ltd")
   })
 
   it("builds ItemList from available listings", async () => {

@@ -42,8 +42,8 @@ export type InviteResult =
 
 export interface AuthProvider {
   readonly kind: "demo" | "credentials"
-  signUp(input: AuthCredentials & { name: string }): Promise<AuthResult>
-  logIn(input: AuthCredentials): Promise<AuthResult>
+  signUp(input: AuthCredentials & { name: string; countryIso?: string }): Promise<AuthResult>
+  logIn(input: AuthCredentials & { requestCountryIso?: string }): Promise<AuthResult>
   createOrg(userId: string, input: OrgCreateInput): Promise<AuthResult>
   inviteSeat(input: InviteInput): Promise<InviteResult>
   acceptInvite(token: string, userId: string): Promise<AuthResult>

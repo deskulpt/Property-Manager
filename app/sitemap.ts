@@ -1,42 +1,25 @@
 import type { MetadataRoute } from "next"
-import { listPortfolio, searchListings } from "@/lib/db"
-import { absoluteUrl } from "@/lib/seo"
+import { BUILTIN_PACKS } from "@/lib/markets/packs"
+import { absoluteUrl, countrySitemapPath } from "@/lib/seo"
 
+/** Root sitemap index — points at per-country sitemaps. */
 export default function sitemap(): MetadataRoute.Sitemap {
-  const staticPaths = [
-    "/",
-    "/listings",
-    "/properties",
-    "/pricing",
-    "/refer",
-    "/partners",
-    "/about",
-    "/ask",
-    "/tools/rent-estimate",
-    "/legal/terms",
-    "/legal/privacy",
-    "/llms.txt",
+  const now = new Date()
+  const entries: MetadataRoute.Sitemap = [
+    {
+      url: absoluteUrl("/"),
+      changeFrequency: "weekly",
+      priority: 1,
+      lastModified: now,
+    },
   ]
 
-  const entries: MetadataRoute.Sitemap = staticPaths.map((path) => ({
-    url: absoluteUrl(path),
-    changeFrequency: path === "/listings" ? "daily" : "weekly",
-    priority: path === "/" || path === "/listings" ? 1 : 0.7,
-  }))
-
-  for (const property of listPortfolio()) {
+  for (const pack of Object.values(BUILTIN_PACKS)) {
     entries.push({
-      url: absoluteUrl(`/properties/${property.slug}`),
-      changeFrequency: "weekly",
-      priority: 0.8,
-    })
-  }
-
-  for (const card of searchListings({ statuses: ["available"] })) {
-    entries.push({
-      url: absoluteUrl(`/properties/${card.propertySlug}/units/${card.code}`),
+      url: absoluteUrl(countrySitemapPath(pack.iso)),
       changeFrequency: "daily",
       priority: 0.9,
+      lastModified: now,
     })
   }
 

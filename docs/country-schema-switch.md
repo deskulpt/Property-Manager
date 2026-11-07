@@ -1,8 +1,9 @@
 # Country / market schema switch
 
-**Product:** Easy Rental · DeSkulpt Inc.  
-**Goal:** One UI; selecting a country swaps the **business schema** (currency, tax, payments, lease/eSign, SMS, address/ID) — not a `/ca/*` shard.  
-**Tip audit:** `87d4c57` (2026-10-31) — L0 command center + `CountryPack` promote landed.  
+**Product:** Easy Rental · **Deskulpt Inc** (CA federal) · **Deskulpt Commerce India Pvt Ltd** (IN)  
+**Goal:** One UI; CountryPack swaps business schema (currency, tax, payments, lease/eSign, SMS, address/ID).  
+**URL (Aloke Nov7):** public hosts are `/in/` and `/ca/` (`pathSegment` on pack). Adding `/us`/`/br` is **config-only**. Root `/` = country picker (geo suggest OK; **never auto-redirect without consent**).  
+**Tip audit:** country-path PR + prior `87d4c57` L0 packs.  
 **Companion:** [business-model-money.md](./business-model-money.md)
 
 ---
@@ -45,7 +46,9 @@ Legend: **Real** · **Partial** · **Missing** · **Do not ship**
 | Complete draft → `publicFormCountries()` | **Partial** | Still adds ISO for forms; **runtime schema** requires promote |
 | Parked ISO guard on draft create | **Real** | `createMarketDraft` rejects `PARKED_MARKET_ISOS` unless `allowParked` |
 | Typed checklist editors (not free-text only) | **Partial / Missing** | Notes + done toggles remain; structured field editors not shipped |
-| Fake `/ca/*` shard | **Do not ship** | Header copy + console lede forbid it |
+| `/in` + `/ca` path segments | **Real (proxy)** | `proxy.ts` rewrite + consent cookie; home at `/home` |
+| Legal entities on pack | **Real** | CA `Deskulpt Inc` · IN `Deskulpt Commerce India Pvt Ltd` |
+| `LEGAL_FEATURE_FLAGS` fail-closed | **Real** | Connect/PAD, Razorpay, tax adapters, real-PII AI OFF |
 
 ### 2.3 Payments schema
 
@@ -127,7 +130,7 @@ Much of L0.0–L0.3 landed in `87d4c57`. Remaining for Admin / money follow-ups:
 - [ ] HST/PST calc or explicit “labels only” product lock  
 - [ ] CAD SaaS price book **or** document permanent INR MoR + display FX  
 - [ ] Legal copy gate before CA promote in production  
-- [ ] No seeker fees · no `/ca/*` · no live Interac without go-live keys  
+- [ ] No seeker fees · no live Interac without go-live keys · flags stay OFF (Aloke AwC ≠ live) 
 
 ### Do not
 

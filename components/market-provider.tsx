@@ -9,7 +9,16 @@ import {
   useState,
   useTransition,
 } from "react"
+import { usePathname, useRouter } from "next/navigation"
 import { MARKET_COOKIE, MARKET_COOKIE_MAX_AGE, normalizeMarketIso } from "@/lib/markets/cookie"
+import {
+  COUNTRY_CONSENT_COOKIE,
+  COUNTRY_CONSENT_MAX_AGE,
+  countryPrefixedPath,
+  isoForPathSegment,
+  pathSegmentForIso,
+  stripCountryPrefix,
+} from "@/lib/markets/path-segments"
 
 type MarketContextValue = {
   market: string
@@ -26,11 +35,15 @@ function readCookieMarket(): string {
   return normalizeMarketIso(match?.[1] ? decodeURIComponent(match[1]) : "IN")
 }
 
-function persistMarket(iso: string) {
+function persistMarket(iso: string, consent = true) {
   const value = normalizeMarketIso(iso)
   document.cookie = `${MARKET_COOKIE}=${encodeURIComponent(value)};path=/;max-age=${MARKET_COOKIE_MAX_AGE};samesite=lax`
+  if (consent) {
+    document.cookie = `${COUNTRY_CONSENT_COOKIE}=${encodeURIComponent(value)};path=/;max-age=${COUNTRY_CONSENT_MAX_AGE};samesite=lax`
+  }
   try {
     localStorage.setItem(MARKET_COOKIE, value)
+    if (consent) localStorage.setItem(COUNTRY_CONSENT_COOKIE, value)
   } catch {
     /* private mode */
   }
@@ -49,8 +62,17 @@ export function MarketProvider({
   const [market, setMarketState] = useState(() => normalizeMarketIso(initialMarket))
   const [pending, startTransition] = useTransition()
   const allowed = useMemo(() => new Set(liveIsos.map((i) => i.toUpperCase())), [liveIsos])
+  const pathname = usePathname() || "/"
+  const router = useRouter()
 
   useEffect(() => {
+    const fromPath = stripCountryPrefix(pathname)
+    if (fromPath) {
+      const iso = normalizeMarketIso(fromPath.iso)
+      setMarketState(iso)
+      persistMarket(iso, true)
+      return
+    }
     const fromCookie = readCookieMarket()
     let fromStorage = "IN"
     try {
@@ -64,8 +86,9 @@ export function MarketProvider({
         ? fromStorage
         : normalizeMarketIso(initialMarket)
     setMarketState(preferred)
-    persistMarket(preferred)
-  }, [allowed, initialMarket])
+    // Do not invent consent on root picker — only persist market preference.
+    persistMarket(preferred, pathname !== "/")
+  }, [allowed, initialMarket, pathname])
 
   const setMarket = useCallback(
     (iso: string) => {
@@ -73,11 +96,19 @@ export function MarketProvider({
       if (!allowed.has(next) && next !== "IN") return
       startTransition(() => {
         setMarketState(next)
-        persistMarket(next)
+        persistMarket(next, true)
         document.documentElement.dataset.market = next
+        const stripped = stripCountryPrefix(pathname)
+        const internal = stripped?.path ?? (pathname === "/" ? "/" : pathname)
+        const first = pathname.split("/")[1] ?? ""
+        // Root picker stays; elsewhere navigate to the country-prefixed path.
+        if (pathname === "/" || (first && isoForPathSegment(first) == null && first.length === 2)) {
+          return
+        }
+        router.push(countryPrefixedPath(next, internal === "/" ? "/" : internal))
       })
     },
-    [allowed],
+    [allowed, pathname, router],
   )
 
   useEffect(() => {
@@ -105,13 +136,13 @@ export function useMarket() {
   return ctx
 }
 
-/** Header switch — live packs selectable; CA shown parked until CountryPack promote. */
+/** Header switch — navigates `/in` ↔ `/ca` when pack is live. */
 const SWITCHER_HINTS: { iso: string; label: string; hint: string }[] = [
-  { iso: "IN", label: "🇮🇳 IN", hint: "Live market — INR, GST 18%, +91" },
+  { iso: "IN", label: "🇮🇳 IN", hint: `Live — /${pathSegmentForIso("IN")} · INR · GST 18%` },
   {
     iso: "CA",
     label: "🇨🇦 CA",
-    hint: "Parked until CountryPack promote — checklist alone does not switch schema",
+    hint: `Parked until promote — then /${pathSegmentForIso("CA")} · CAD · HST gated`,
   },
 ]
 
