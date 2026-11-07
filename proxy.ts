@@ -12,9 +12,13 @@ import {
   stripCountryPrefix,
 } from "@/lib/markets/path-segments"
 
-function withCountryHeaders(request: NextRequest, iso: string, requestHeaders?: Headers) {
-  const headers = requestHeaders ?? new Headers(request.headers)
+/** Set on rewrite so a second proxy pass does not 301 the internal path back onto itself. */
+const REWRITE_FLAG = "x-easyrental-country-rewritten"
+
+function withCountryHeaders(request: NextRequest, iso: string) {
+  const headers = new Headers(request.headers)
   headers.set(COUNTRY_HEADER, iso)
+  headers.set(REWRITE_FLAG, "1")
   return headers
 }
 
@@ -47,8 +51,25 @@ function rewriteToInternal(request: NextRequest, iso: string, internalPath: stri
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
+  // Second pass after country rewrite — serve the internal route as-is.
+  if (request.headers.get(REWRITE_FLAG) === "1") {
+    return NextResponse.next()
+  }
+
   if (isCountryExemptPath(pathname)) {
     return NextResponse.next()
+  }
+
+  // Internal marketing home is only reached via `/in`|/`ca` rewrite — never 301-prefix it.
+  if (pathname === "/home" || pathname.startsWith("/home/")) {
+    const iso = normalizeMarketIso(
+      request.headers.get(COUNTRY_HEADER) ||
+        request.cookies.get(COUNTRY_CONSENT_COOKIE)?.value ||
+        request.cookies.get(MARKET_COOKIE)?.value ||
+        "IN",
+    )
+    const headers = withCountryHeaders(request, iso)
+    return NextResponse.next({ request: { headers } })
   }
 
   const stripped = stripCountryPrefix(pathname)
@@ -62,16 +83,14 @@ export function proxy(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // First path segment looks like a future country code not yet in packs → 404 soft via next.
+  // First path segment looks like a future country code not yet in packs → let app 404.
   const first = pathname.split("/")[1] ?? ""
   if (/^[a-z]{2}$/i.test(first) && !isKnownPathSegment(first)) {
-    // Unknown `/xx` — do not invent a country; let app 404.
     return NextResponse.next()
   }
 
   const consentRaw = request.cookies.get(COUNTRY_CONSENT_COOKIE)?.value
   const consentIso = consentRaw ? normalizeMarketIso(consentRaw) : null
-  const marketIso = normalizeMarketIso(request.cookies.get(MARKET_COOKIE)?.value ?? consentIso ?? "")
 
   if (consentIso && isoForPathSegment(pathSegmentForIso(consentIso))) {
     // 301 legacy URLs → /{segment}/...
@@ -86,19 +105,16 @@ export function proxy(request: NextRequest) {
   const picker = request.nextUrl.clone()
   picker.pathname = "/"
   picker.searchParams.set("next", pathname + (request.nextUrl.search || ""))
-  if (marketIso && marketIso !== "IN") {
-    // Soft suggest only via query — picker must still obtain consent.
-    picker.searchParams.set("suggest", marketIso)
+  const marketHint = request.cookies.get(MARKET_COOKIE)?.value
+  if (marketHint) {
+    const marketIso = normalizeMarketIso(marketHint)
+    if (marketIso !== "IN") picker.searchParams.set("suggest", marketIso)
   }
   return NextResponse.redirect(picker, 302)
 }
 
 export const config = {
   matcher: [
-    /*
-     * Match all pathnames except static/image internals already filtered in isCountryExemptPath.
-     * Keep matcher broad; exempt helper decides.
-     */
     "/((?!_next/static|_next/image|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico|txt|xml|webmanifest|js|css|map|wasm)$).*)",
   ],
 }
