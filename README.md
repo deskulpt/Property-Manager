@@ -199,7 +199,7 @@ Manifest name is Easy Rental. Display is `standalone`. Icons are `public/icons/i
 
 ### Developer docs
 
-See [`docs/setup.md`](docs/setup.md), [`docs/architecture.md`](docs/architecture.md), and env checklist in `.env.example`. Health: `GET /api/health`. Hosting target: Railway (volume + `DESKULPT_SECRET_KEY`; not deployed from this PR).
+See [`docs/setup.md`](docs/setup.md), [`docs/architecture.md`](docs/architecture.md), [`docs/hosting-cloudflare-oci.md`](docs/hosting-cloudflare-oci.md), and env checklist in `.env.example`. Health: `GET /api/health`. Preferred public host: **Cloudflare Free** (dedicated EasyRental account) + **OCI Always Free India** (SQLite on `/data`); Railway remains an optional alternate.
 
 ## Stack and licensing
 

@@ -1,0 +1,100 @@
+{
+  "$schema_comment": "Desired DNS for easyrental.space in dedicated EasyRental Cloudflare account. Zone currently has ZERO records until OCI IP is set.",
+  "cloudflare": {
+    "accountId": "b2c682e130b734a072424bbf92367668",
+    "zone": "easyrental.space",
+    "plan": "free",
+    "nameservers": [
+      "bella.ns.cloudflare.com",
+      "keenan.ns.cloudflare.com"
+    ],
+    "note": "Do NOT use the old DeSkulpt Cloudflare account."
+  },
+  "complianceFlags": {
+    "inPayPlane": false,
+    "caPayPlane": false,
+    "sourceOfTruth": "Admin compliance toggles console (ER-47); camelCase ids shared with ER-48"
+  },
+  "records": {
+    "createAfterOci": [
+      {
+        "name": "@",
+        "type": "A",
+        "content": "${OCI_PUBLIC_IPV4}",
+        "proxied": true,
+        "ttl": 1,
+        "comment": "Apex → Oracle Always Free India VM public IPv4"
+      },
+      {
+        "name": "@",
+        "type": "AAAA",
+        "content": "${OCI_PUBLIC_IPV6}",
+        "proxied": true,
+        "ttl": 1,
+        "optional": true,
+        "comment": "Optional IPv6 if VNIC has it"
+      },
+      {
+        "name": "www",
+        "type": "CNAME",
+        "content": "easyrental.space",
+        "proxied": true,
+        "ttl": 1,
+        "comment": "www → apex"
+      }
+    ],
+    "reservedDoNotCreate": [
+      {
+        "name": "in-pay",
+        "type": "CNAME",
+        "content": "RESERVED_INDIA_PAYMENT_ORIGIN",
+        "proxied": true,
+        "flag": "inPayPlane",
+        "comment": "India payment plane — India-resident data + 180-day IN security logs. Separate service. Do not create while inPayPlane=OFF."
+      },
+      {
+        "name": "ca-pay",
+        "type": "CNAME",
+        "content": "RESERVED_CA_PAY_WORKER",
+        "proxied": true,
+        "flag": "caPayPlane",
+        "comment": "CF Worker Stripe Connect + EU D1 ledger. Separate service. Do not create while caPayPlane=OFF."
+      }
+    ],
+    "mailWhenSendingEnabled": [
+      {
+        "name": "@",
+        "type": "MX",
+        "content": "REPLACE_WITH_PROVIDER_MX",
+        "priority": 10,
+        "proxied": false,
+        "enabled": false,
+        "comment": "Only if app sends mail (e.g. Resend). Leave disabled until EMAIL_FROM domain is live."
+      },
+      {
+        "name": "@",
+        "type": "TXT",
+        "content": "v=spf1 include:REPLACE_SPF ~all",
+        "proxied": false,
+        "enabled": false,
+        "comment": "SPF — provider include (Resend/SES)"
+      },
+      {
+        "name": "resend._domainkey",
+        "type": "TXT",
+        "content": "REPLACE_DKIM_VALUE",
+        "proxied": false,
+        "enabled": false,
+        "comment": "DKIM name/value from email provider UI"
+      },
+      {
+        "name": "_dmarc",
+        "type": "TXT",
+        "content": "v=DMARC1; p=none; rua=mailto:postmaster@easyrental.space",
+        "proxied": false,
+        "enabled": false,
+        "comment": "Start with p=none; tighten after mail volume is real"
+      }
+    ]
+  }
+}

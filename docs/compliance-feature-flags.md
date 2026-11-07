@@ -3,7 +3,8 @@
 Admin L0 console: `/console/compliance` (**Canada focus**; **India money parked**)  
 Contract: `lib/markets/compliance-contract.ts` + `lib/markets/legal-overrides.ts`  
 Catalog / sign-offs: `lib/markets/compliance-catalog.ts` (`INDIA_COMPLIANCE_PARKED`)  
-Enforcement (do not bypass): `lib/markets/enforce.ts` (#47)
+Enforcement (do not bypass): `lib/markets/enforce.ts` (#47)  
+**Hosting consumer:** Cloudflare + OCI launch pack — DNS / workers must not enable `in-pay` / `ca-pay` while flags stay OFF.
 
 ## CountryPack LEGAL keys (meta override `legal.flag.{ISO}.{key}`)
 
@@ -52,6 +53,8 @@ Go-live blockers (always unchecked in `/console/compliance`): Ontario lawyer wri
 | `ca-pay` | `EASYRENTAL_FLAG_CA_PAY` | `ca-pay.easyrental.space` | OFF (Canada focus) |
 
 Meta: `compliance.pay_plane.in-pay` / `compliance.pay_plane.ca-pay`. Console SoT; env is hosting mirror. DNS must not exist while OFF.
+
+If ER-47/48 renames an id, update this file + `deploy/cloudflare/dns-records.json` + hosting docs in the same wave.
 
 ## dataResidency
 

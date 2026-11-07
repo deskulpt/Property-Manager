@@ -28,16 +28,19 @@ See `.env.example` and `lib/env.ts` `ENV_CHECKLIST`.
 | `NODE_ENV` | `production` |
 | `PORT` | Railway sets this; `npm start` defaults to 43123 locally |
 
-## Deploy (Railway — ready, not deployed)
+## Deploy (preferred: Cloudflare Free + OCI Always Free India)
 
-See [`docs/railway.md`](./railway.md), `railway.json`, and optional `Dockerfile`.
+See [`docs/hosting-cloudflare-oci.md`](./hosting-cloudflare-oci.md) and `deploy/`.
 
-1. Create a Railway project from this GitHub repo (Nixpacks or Dockerfile).
-2. Attach a **volume** at `/data`; set `DESKULPT_DB_PATH=/data/deskulpt.sqlite`.
-3. Set `DESKULPT_SECRET_KEY` (random ≥16 chars). Leave `DESKULPT_DEMO_SWITCHER` unset.
-4. Health check: `/api/health` (wired in `railway.json`).
-5. Billing / OTP / KYC: set `BILLING_PROVIDER`, `OTP_SMS_PROVIDER`, `KYC_PROVIDER` as needed; keep `*_LIVE=0` for test mode.
-6. Custom domain → `easyrental.space` when ready.
+1. Zone `easyrental.space` is already on the **dedicated EasyRental** Cloudflare Free account (`b2c682e130b734a072424bbf92367668`; NS bella/keenan). DNS starts empty.
+2. Aloke creates Oracle Always Free **India** VM later; set `OCI_PUBLIC_IPV4` and apply apex + `www` only via `scripts/hosting/cloudflare-dns-apply.sh`.
+3. Persist SQLite on the VM at `/data` (`DESKULPT_DB_PATH=/data/deskulpt.sqlite`); set `DESKULPT_SECRET_KEY`, `HOSTED=1`, leave payment-plane flags OFF.
+4. Do **not** create `in-pay` / `ca-pay` DNS until Admin flags `inPayPlane` / `caPayPlane` are ON.
+5. Health check: `/api/health`.
+
+### Optional: Railway
+
+[`docs/railway.md`](./railway.md), `railway.json`, and `Dockerfile` remain valid for a volume-backed alternate host. Preferred public path is CF + OCI India.
 
 Postgres migration is still planned; SQLite on a volume is the near-term path.
 

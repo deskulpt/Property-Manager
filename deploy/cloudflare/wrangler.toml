@@ -1,0 +1,21 @@
+# Cloudflare config for dedicated EasyRental account (NOT old DeSkulpt CF).
+# Account ID is public; API tokens stay in CI/secrets — never commit.
+#
+# Zone easyrental.space is active on Free; DNS starts empty until OCI exists.
+# Payment-plane Workers stay unpublished while compliance flags are OFF.
+
+name = "easyrental-front-door-meta"
+account_id = "b2c682e130b734a072424bbf92367668"
+compatibility_date = "2026-11-07"
+
+# Reserved CA payment plane — DO NOT deploy until Admin flag caPayPlane=ON.
+# [env.ca-pay]
+# name = "easyrental-ca-pay"
+# main = "workers/ca-pay/src/index.ts"
+# workers_dev = false
+# routes = [{ pattern = "ca-pay.easyrental.space/*", zone_name = "easyrental.space" }]
+# d1_databases = [{ binding = "LEDGER", database_name = "easyrental-ca-pay-eu", database_id = "REPLACE_WHEN_CREATED" }]
+
+[vars]
+EASYRENTAL_FLAG_IN_PAY_PLANE = "0"
+EASYRENTAL_FLAG_CA_PAY_PLANE = "0"
