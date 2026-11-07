@@ -12,6 +12,11 @@ export const LEGAL_FEATURE_FLAGS = {
   /** Deposit holds on Deskulpt/IN entity books — OFF until same three gates */
   depositHoldsOnDeskulpt: false,
   mandatoryTenantSurcharges: false,
+  /**
+   * Ontario Stripe Connect DIRECT + PAD rent collection.
+   * Finance D11 AwC documented; Legal ON tenant-fee / provider-reg **pending** → OFF.
+   */
+  ontarioConnectDirectPad: false,
   eStoreLive: false,
   conciergeLive: false,
   affiliateLive: false,

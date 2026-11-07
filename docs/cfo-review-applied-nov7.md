@@ -52,6 +52,13 @@ Fully approved: **0**. D11/D12/D13/D15 not Aloke-approved.
 - Route splits + deposit holds: flags **OFF** until (1) entity exists (2) Razorpay written acceptance (3) Legal sign-off.
 - Code: `evaluateRouteDepositGates()` / `ALOKE_INDIAN_ENTITY_DECISION` in `lib/billing/legal-flags.ts`.
 
+## Finance D11 Ontario — Approve with changes (flag OFF)
+
+Stripe Connect **DIRECT** + PAD; application fee only incl. 13% HST; no tenant fees; reverse fee on PAD dispute; monthly statement w/ GST/HST #; separate invoice without Connect; pricing config-only. Legal ON tenant-fee/provider-reg pending → `ontarioConnectDirectPad` OFF. **Not Aloke-approved.**
+## Aloke `/in` + `/ca` CountryPack
+
+Owner direction (not Approve on D11–D15). Implementation owned by sibling **Country path routing** PR — billing/#45 cross-link only.
+
 ### LEGAL
 
 1. Re-review D13 Reject wording vs Aloke BM (Telangana + Ontario launch) — Legal update pending.  

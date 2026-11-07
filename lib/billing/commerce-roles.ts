@@ -61,12 +61,30 @@ export const D11_DOCUMENTED = {
     "OFF until indian_entity_exists + razorpay_written_acceptance + legal_signoff" as const,
   depositsHeldByDeskulpt: false,
   depositHoldGate: "OFF until same three gates" as const,
+  /** Ontario Finance AwC — flag OFF until Legal tenant-fee/provider-reg */
+  ontario: {
+    financeStatus: "approve_with_changes" as const,
+    connectChargeType: "direct" as const,
+    rentMethod: "pad" as const,
+    deskulptRevenue: "application_fee_only_incl_hst" as const,
+    feesToTenants: false,
+    reverseFeeOnPadDispute: true,
+    monthlyStatementWithGstHstNumber: true,
+    featureFlag: "ontarioConnectDirectPad" as const,
+    featureFlagEnabled: false,
+    legalTenantFeeProviderReg: "pending" as const,
+  },
   rentRailsDefault: ["landlord_upi", "landlord_razorpay"] as const,
+  /** Separate invoice path for markets without Connect (and ON while flag OFF) */
   surchargeSeparateStripeInvoice: true,
   commissionsEnabled: false,
   rentCollectionEnabled: false,
   financeApproveWithChanges: true,
-  financeConditions: ["no_razorpay_route_until_gates", "deposits_not_held_until_gates"] as const,
+  financeConditions: [
+    "no_razorpay_route_until_gates",
+    "deposits_not_held_until_gates",
+    "ontario_connect_off_until_legal_tenant_fee_provider_reg",
+  ] as const,
   alokeApproved: false,
   labelledDemo: true as const,
 }
