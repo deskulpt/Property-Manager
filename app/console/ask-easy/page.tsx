@@ -10,7 +10,8 @@ export const metadata = { title: "Ask Easy · Command center" }
 
 export default async function ConsoleAskEasyPage() {
   await requirePlatformAdmin()
-  const stats = listAskEasyMemoryStats()
+  const { requestCountryIso } = await import("@/lib/markets/request-country")
+  const stats = listAskEasyMemoryStats(await requestCountryIso())
   const on = isOpsFlagOn("ask_easy")
 
   return (

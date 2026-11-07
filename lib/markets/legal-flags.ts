@@ -54,8 +54,26 @@ export function resolveLegalFlags(pack: CountryPack | null | undefined): LegalFe
   return merged
 }
 
-/** Fail-closed: true only when pack explicitly sets the flag. */
+/**
+ * Optional Admin override reader (ER-47 compliance console).
+ * Return true/false to force; null to fall through to CountryPack.
+ */
+export type LegalFlagOverrideReader = (
+  iso: string,
+  key: LegalFeatureFlagKey,
+) => boolean | null
+
+let overrideReader: LegalFlagOverrideReader | null = null
+
+export function registerLegalFlagOverrideReader(reader: LegalFlagOverrideReader | null) {
+  overrideReader = reader
+}
+
+/** Fail-closed: true only when override or pack explicitly sets the flag. */
 export function legalFlag(iso: string, key: LegalFeatureFlagKey, pack?: CountryPack | null): boolean {
+  const forced = overrideReader?.(iso.toUpperCase(), key)
+  if (forced === true) return true
+  if (forced === false) return false
   const resolved = pack ?? builtinPack(iso)
   return resolveLegalFlags(resolved)[key] === true
 }

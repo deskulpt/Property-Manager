@@ -1,6 +1,6 @@
 /**
- * Accounts are bound to one CountryPack ISO — fail-closed cross-country access
- * (platform L0/L1 may operate across countries).
+ * Accounts are bound to one CountryPack ISO — fail-closed cross-country access.
+ * CTO #47: L0/L1 do **not** bypass — use the active `/in` or `/ca` path.
  */
 
 import { normalizeMarketIso } from "@/lib/markets/cookie"
@@ -15,11 +15,10 @@ export function isValidAccountCountry(iso: string): boolean {
 export function assertAccountCountryMatch(input: {
   accountIso: string | null | undefined
   requestIso: string
+  /** Ignored — retained for call-site compat; no role bypass (CTO). */
   roleLevel?: number | null
 }): { ok: true } | { ok: false; error: string } {
-  // L0 SuperAdmin / L1 Admin — platform ops across countries.
-  if (input.roleLevel != null && input.roleLevel <= 1) return { ok: true }
-
+  void input.roleLevel
   const account = normalizeMarketIso(input.accountIso ?? "IN")
   const request = normalizeMarketIso(input.requestIso)
   if (account !== request) {

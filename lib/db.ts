@@ -5248,10 +5248,14 @@ export function checkoutCart(input: {
     }
   }
 
+  const tenantCountry = asRow(
+    getDb().prepare("SELECT country_iso FROM tenants WHERE id = ?").get(input.tenantId),
+  )
   const provider = resolveShopPaymentProvider({
     demoMode: settings.demoMode,
     hasSecret: settings.hasSecret,
     keyId: settings.keyId,
+    countryIso: tenantCountry ? str(tenantCountry, "country_iso") : "IN",
   })
 
   const amountCents = lines.reduce((sum, line) => sum + line.lineCents, 0)
@@ -5467,8 +5471,9 @@ export type PlatformTenantRow = {
   adminName: string | null
 }
 
-export function platformLandlordDirectory(): PlatformTenantRow[] {
+export function platformLandlordDirectory(countryIso?: string | null): PlatformTenantRow[] {
   const db = getDb()
+  const iso = countryIso?.trim().toUpperCase() || null
   return asRows(
     db
       .prepare(
@@ -5480,9 +5485,10 @@ export function platformLandlordDirectory(): PlatformTenantRow[] {
                 (SELECT u.name FROM users u WHERE u.tenant_id = t.id AND u.role = 'landlord_admin' ORDER BY u.name LIMIT 1) AS admin_name
          FROM tenants t
          WHERE t.kind = 'landlord'
+           AND (? IS NULL OR COALESCE(t.country_iso, 'IN') = ?)
          ORDER BY t.name`,
       )
-      .all(),
+      .all(iso, iso),
   ).map((row) => ({
     id: String(row.id),
     name: String(row.name),
@@ -5505,16 +5511,18 @@ export function setTenantStatus(tenantId: string, status: "active" | "suspended"
   return { ok: true as const }
 }
 
-export function platformShopCatalog() {
+export function platformShopCatalog(countryIso?: string | null) {
+  const iso = countryIso?.trim().toUpperCase() || null
   return asRows(
     getDb()
       .prepare(
         `SELECT s.id, s.tenant_id, s.name, s.kind, s.price_cents, s.enabled, t.name AS tenant_name
          FROM shop_skus s
          JOIN tenants t ON t.id = s.tenant_id
+         WHERE (? IS NULL OR COALESCE(t.country_iso, 'IN') = ?)
          ORDER BY t.name, s.name`,
       )
-      .all(),
+      .all(iso, iso),
   ).map((row) => ({
     id: String(row.id),
     tenantId: String(row.tenant_id),

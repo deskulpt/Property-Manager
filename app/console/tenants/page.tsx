@@ -19,13 +19,15 @@ function nextSelfServePlan(current: PlanId): PlanId {
 
 export default async function ConsoleTenantsPage() {
   await requirePlatformAdmin()
-  const orgs = platformLandlordDirectory()
+  const { requestCountryIso } = await import("@/lib/markets/request-country")
+  const countryIso = await requestCountryIso()
+  const orgs = platformLandlordDirectory(countryIso)
   return (
     <div>
       <PageHeader
         kicker="Directory"
         title="Landlord tenants"
-        lede="View organisations, cycle Basic / Growth / Pro entitlements, suspend, or switch into a landlord admin via the sticky bar."
+        lede={`Country-scoped to /${countryIso.toLowerCase()} (CTO: no L0/L1 cross-country data). Cycle entitlements, suspend, or impersonate via the sticky bar.`}
       />
       <div className="grid gap-4">
         {orgs.map((org) => {
