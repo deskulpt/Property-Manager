@@ -33,7 +33,15 @@ export type PlanLimits = {
   maxProperties: number
   maxUnitsPerProperty: number
   maxSeats: number
+  /**
+   * @deprecated D15 NOT Aloke-approved — Matterport/360 is paid add-on or BYO, not base.
+   * Kept for display migration; prefer `matterportIncluded: false` + add-on SKU.
+   */
   matterportTours: number | "unlimited"
+  /** D15 CFO: Matterport not in base plans until Aloke approves. */
+  matterportIncluded: false
+  /** Soft media storage cap (MB) — D15. */
+  mediaStorageCapMb: number
   customDomain: boolean
   /**
    * Legacy Ask Easy desk/draft gate — true when draft or propose entitled.
@@ -97,7 +105,9 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     maxProperties: 50,
     maxUnitsPerProperty: 1,
     maxSeats: 2,
-    matterportTours: 1,
+    matterportTours: 0,
+    matterportIncluded: false,
+    mediaStorageCapMb: 256,
     customDomain: false,
     askEasy: false,
     liveRazorpay: false,
@@ -109,7 +119,9 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     maxProperties: 10,
     maxUnitsPerProperty: 80,
     maxSeats: 5,
-    matterportTours: 3,
+    matterportTours: 0,
+    matterportIncluded: false,
+    mediaStorageCapMb: 2_048,
     customDomain: false,
     askEasy: false,
     liveRazorpay: true,
@@ -121,7 +133,9 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     maxProperties: 50,
     maxUnitsPerProperty: 200,
     maxSeats: 15,
-    matterportTours: "unlimited",
+    matterportTours: 0,
+    matterportIncluded: false,
+    mediaStorageCapMb: 10_240,
     customDomain: true,
     askEasy: true,
     liveRazorpay: true,
@@ -133,7 +147,9 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     maxProperties: 10_000,
     maxUnitsPerProperty: 10_000,
     maxSeats: 500,
-    matterportTours: "unlimited",
+    matterportTours: 0,
+    matterportIncluded: false,
+    mediaStorageCapMb: 102_400,
     customDomain: true,
     askEasy: true,
     liveRazorpay: true,
@@ -157,7 +173,8 @@ export const PUBLIC_PLANS: PublicPlanCard[] = [
       `${FREE_PLAN_MAX_UNITS} billable unit (Homes / Retail & Office / Industrial meter)`,
       "Public listings + OSM map",
       "Applications + visit booking",
-      "1 Matterport tour / property (optional)",
+      "Matterport/360 = paid add-on or BYO (not base — D15 pending)",
+      `Media storage cap ${PLAN_LIMITS.starter.mediaStorageCapMb} MB`,
       "Standard QR print posters",
       "Demo shop only · no Ask Easy",
     ],
@@ -175,7 +192,7 @@ export const PUBLIC_PLANS: PublicPlanCard[] = [
     highlights: [
       "Pay per billable unit (Homes / Retail & Office / Industrial)",
       "assistant.read entitlement",
-      "Up to 3 Matterport tours / property",
+      "Matterport/360 add-on or BYO (not included)",
       "QR + logo lockup",
       "Live Razorpay when keys set",
       "Partner request + landlord approve",
@@ -195,7 +212,7 @@ export const PUBLIC_PLANS: PublicPlanCard[] = [
     highlights: [
       "Same per-unit metre as Growth",
       "assistant.draft + assistant.propose",
-      "Unlimited fair-use Matterport",
+      "Matterport/360 add-on or BYO (not included)",
       "Custom domain (1 hostname)",
       "Multi-unit QR batch",
       "Priority email support",
@@ -251,10 +268,10 @@ export const FEATURE_MATRIX: FeatureMatrixRow[] = [
     pro: "Yes",
   },
   {
-    feature: "Matterport iframe tour",
-    starter: "1 / property (optional)",
-    growth: "Up to 3 / property",
-    pro: "Unlimited fair-use",
+    feature: "Matterport / 360",
+    starter: "Add-on or BYO (not base)",
+    growth: "Add-on or BYO (not base)",
+    pro: "Add-on or BYO (not base)",
   },
   {
     feature: "QR print posters",

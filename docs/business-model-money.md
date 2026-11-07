@@ -78,14 +78,16 @@ Sale window (code): **1 Dec 2026 → 31 Mar 2027 IST**, capped at **500** paying
 | Rule | Tip fact |
 | --- | --- |
 | Meter | **Units** in portfolio, mixed by segment |
-| Currency of record | **INR paise** for quote math + GST **18%** (`GST_BPS = 1800`) |
+| Currency of record | Catalogue still INR paise; **tax via `lib/billing/tax.ts`** (customer location + B2B/B2C). Legacy `GST_BPS=1800` = India display helper only — **no blanket 18% GST**. Deskulpt Inc = Canadian. |
+| Volume | **Graduated** bands (1–5 0%, 6–20 15%, 21–50 25% on those units); sale/volume/affiliate **do not stack** |
 | Checkout UI | `/landlord/billing` · `components/billing/billing-desk.tsx` |
-| Providers | IN → `BILLING_PROVIDER` (**dodo** default / stripe / demo); non-IN → `BILLING_INTL_PROVIDER` (**paypal** default) — `lib/billing/routing.ts` |
-| Intl settlement | PayPal converts GST-inclusive INR → **CAD/USD** via env FX (`lib/billing/fx.ts`) — NRI / CA payer path, **not** a full CA ledger |
+| Providers | **Dodo = MoR**; **PayPal = processor only** (not interchangeable). IN → dodo/stripe/demo; non-IN → paypal processor. Live money fail-closed until `go-live-gate.ts`. |
+| Intl settlement | PayPal converts INR → **CAD/USD** via env FX (`lib/billing/fx.ts`) — processor path, **not** MoR |
 | Price lock | 12 months from join (`lockRatesFromQuote`) |
+| Annual | Prepay = **deferred revenue**, recognize monthly (stub on quote) |
 | Cancel | One-click → Free (1 unit) |
 
-**Do not invent seeker SKUs.** Platform MoR is landlord subscription only.
+**Do not invent seeker SKUs.** Rent never through Deskulpt books. Affiliate documented inactive (D12). Matterport = add-on/BYO (D15 pending Aloke).
 
 ### 4.2 Package ladder (entitlements) — D01/D02 reconciled
 

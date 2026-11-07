@@ -22,10 +22,13 @@ export function isIndiaBillingCountry(country: string | null | undefined): boole
 }
 
 /**
- * Route checkout:
+ * Route checkout (D11 — NOT Aloke-approved; roles are not interchangeable):
+ * - Dodo = Merchant of Record (MoR). PayPal = payment processor only — never MoR.
  * - India (IN) → BILLING_PROVIDER (dodo / stripe / demo) — PayPal does not process domestic IN.
- * - Outside India → BILLING_INTL_PROVIDER (default paypal).
+ * - Outside India → BILLING_INTL_PROVIDER (default paypal as processor).
+ * - Rent never settles on Deskulpt platform books (see commerce-roles.ts).
  * Override: BILLING_FORCE_PROVIDER=… for ops / tests.
+ * Live money blocked until go-live-gate.ts passes.
  */
 export function resolveProviderNameForPayer(
   billingCountry: string | null | undefined,

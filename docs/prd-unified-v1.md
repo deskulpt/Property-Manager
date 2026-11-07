@@ -5,7 +5,7 @@ Date: 6 November 2026
 Product: Easy Rental / DeSkulpt Inc.  
 Repository: https://github.com/deskulpt/Property-Manager  
 Document owner: Product owner; engineering, security, finance and legal jointly approve their sections.  
-Status: **PARTIAL APPROVAL** — D01–D09 + D14 product/eng Approved; **D11/D12/D13/D15 NOT approved** (CFO tax billing review). See [`prd-decisions-d01-d15.md`](./prd-decisions-d01-d15.md). Not an assertion that requirements are implemented.
+Status: **PARTIAL — not fully approved.** Finance + Eng/Security + Legal advisor columns recorded 7 Nov 2026. Aloke Approve on several rows is preserved but **no D0x is fully approved** (advisor AwC/Reject). **D11/D12/D13/D15 not Aloke-approved.** D07 Eng Reject · D09 Eng Reject · D13 Legal Reject. India wording: **demo only** until country/state/feature gates. See [`prd-decisions-d01-d15.md`](./prd-decisions-d01-d15.md) · [`advisor-vs-aloke-approval-summary.md`](./advisor-vs-aloke-approval-summary.md).
 
 ## 0. Document authority, evidence and corrections
 
@@ -594,7 +594,7 @@ Track product, automation, service, trust, business and AI metrics as specified 
 | D14 | UI framework direction and design consistency; not conflated with security readiness |
 | D15 | Media requirements, rights and publication override policy per profile |
 
-Follow the checklist Approved? column. D11/D12/D13/D15 are NOT approved pending CFO. Do not invent live money, weaken never-auto, or claim untested host MCP support.
+Follow the multi-approver checklist. No D0x is fully approved (Finance/Eng/Legal recorded; Rejects on D07/D09/D13). D11/D12/D13/D15 are NOT Aloke-approved. Do not invent live money, weaken never-auto, or claim untested host MCP support.
 
 ---
 

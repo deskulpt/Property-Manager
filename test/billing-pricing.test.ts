@@ -97,8 +97,13 @@ describe("platform billing pricing math", () => {
     expect(q.volumeDiscountPct).toBe(0)
   })
 
-  it("applies volume after the sale window (no stacking)", () => {
-    const volumeTotal = Math.round(25 * STANDARD_MONTHLY_PAISE.industrial * 0.75)
+  it("applies graduated volume after the sale window (no stacking, not all-units %)", () => {
+    // 1–5 full + 6–20 @15% + 21–25 @25%
+    const volumeTotal =
+      5 * STANDARD_MONTHLY_PAISE.industrial +
+      Math.round(15 * STANDARD_MONTHLY_PAISE.industrial * 0.85) +
+      Math.round(5 * STANDARD_MONTHLY_PAISE.industrial * 0.75)
+    const flatAllUnits = Math.round(25 * STANDARD_MONTHLY_PAISE.industrial * 0.75)
     const q = quotePlatformBilling({
       mix: [{ segment: "industrial", count: 25 }],
       cadence: "monthly",
@@ -108,6 +113,8 @@ describe("platform billing pricing math", () => {
     expect(q.pricingPath).toBe("volume")
     expect(q.volumeDiscountPct).toBe(25)
     expect(q.chargedSubtotalPaise).toBe(volumeTotal)
+    expect(q.chargedSubtotalPaise).not.toBe(flatAllUnits)
+    expect(q.discountsStacked).toBe(false)
   })
 
   it("never multiplies sale rates by volume percent", () => {
