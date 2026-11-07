@@ -11,6 +11,9 @@ import { getDb } from "@/lib/db"
 import {
   catalogEntryFor,
   COMPLIANCE_CATALOG,
+  INDIA_COMPLIANCE_PARKED,
+  INDIA_MONEY_FLAG_KEYS,
+  isIndiaMoneyParked,
   isPayPlaneFlagId,
   PAY_PLANE_COUNTRY,
   PAY_PLANE_ENV_KEYS,
@@ -260,6 +263,8 @@ export type ConsoleComplianceRow = {
   blurb: string
   money: boolean
   hardLocked: boolean
+  /** India money surface parked — Canada focus; enable blocked. */
+  indiaParked: boolean
   payPlane: boolean
   signOffs: NonNullable<ReturnType<typeof catalogEntryFor>>["signOffs"]
   pendingProposal: ComplianceProposal | null
@@ -268,17 +273,70 @@ export type ConsoleComplianceRow = {
   overrideRaw: string | null
 }
 
-/** Enriched rows for `/console/compliance` — LEGAL overrides + pay-planes + hard locks. */
-export function adminListConsoleCompliance(isos: string[] = ["IN", "CA"]) {
+/** Force IN money / in-pay OFF while India is parked (Canada focus). */
+export function forceIndiaMoneyOff(actorUserId = "system:india-parked") {
   ensureComplianceAuditSchema()
+  if (!INDIA_COMPLIANCE_PARKED) return
+  for (const key of INDIA_MONEY_FLAG_KEYS) {
+    if (isPayPlaneFlagId(key)) {
+      if (readPayPlaneFlag(key)) {
+        writePayPlaneFlag(key, false)
+        writeAudit({
+          iso: "IN",
+          flagKey: key,
+          action: "force_off_india_parked",
+          actorUserId,
+          summary: `Forced OFF ${key} — India money parked (Canada focus)`,
+        })
+      }
+      continue
+    }
+    if (legalFlagEffective("IN", key)) {
+      adminSetLegalFlag("IN", key as LegalFeatureFlagKey, false)
+      writeAudit({
+        iso: "IN",
+        flagKey: key,
+        action: "force_off_india_parked",
+        actorUserId,
+        summary: `Forced OFF ${key} — India money parked (Canada focus)`,
+      })
+    }
+    getDb()
+      .prepare(
+        `UPDATE compliance_flag_proposals
+         SET status = 'cancelled', resolved_at = ?, resolved_by = ?
+         WHERE iso = 'IN' AND flag_key = ? AND status = 'pending'`,
+      )
+      .run(new Date().toISOString(), actorUserId, key)
+  }
+}
+
+function legalFlagEffective(iso: string, key: string): boolean {
+  return (
+    adminListComplianceFlags([iso]).find((r) => r.key === key)?.effective === true
+  )
+}
+
+/** Enriched rows for `/console/compliance` — LEGAL overrides + pay-planes + hard locks. */
+export function adminListConsoleCompliance(isos: string[] = ["CA", "IN"]) {
+  ensureComplianceAuditSchema()
+  forceIndiaMoneyOff()
   const pending = listPendingComplianceProposals()
   const legalRows = adminListComplianceFlags(isos)
   const out: ConsoleComplianceRow[] = []
 
-  for (const iso of isos.map((i) => i.toUpperCase())) {
+  // Canada focus — emit CA rows first when both requested.
+  const ordered = [...isos.map((i) => i.toUpperCase())].sort((a, b) => {
+    if (a === "CA") return -1
+    if (b === "CA") return 1
+    return a.localeCompare(b)
+  })
+
+  for (const iso of ordered) {
     const residency = dataResidencyDeclarative(iso)
     for (const entry of COMPLIANCE_CATALOG) {
       if (!entry.countries.includes(iso as "IN" | "CA")) continue
+      const indiaParked = isIndiaMoneyParked(iso, entry.key)
 
       if (entry.hardLocked) {
         out.push({
@@ -292,6 +350,7 @@ export function adminListConsoleCompliance(isos: string[] = ["IN", "CA"]) {
           blurb: entry.blurb,
           money: entry.money,
           hardLocked: true,
+          indiaParked: false,
           payPlane: false,
           signOffs: entry.signOffs,
           pendingProposal: null,
@@ -303,7 +362,7 @@ export function adminListConsoleCompliance(isos: string[] = ["IN", "CA"]) {
       }
 
       if (entry.payPlane && isPayPlaneFlagId(entry.key)) {
-        const on = readPayPlaneFlag(entry.key)
+        const on = indiaParked ? false : readPayPlaneFlag(entry.key)
         out.push({
           iso,
           key: entry.key,
@@ -315,9 +374,12 @@ export function adminListConsoleCompliance(isos: string[] = ["IN", "CA"]) {
           blurb: entry.blurb,
           money: true,
           hardLocked: false,
+          indiaParked,
           payPlane: true,
           signOffs: entry.signOffs,
-          pendingProposal: pending.find((p) => p.iso === iso && p.flagKey === entry.key) ?? null,
+          pendingProposal: indiaParked
+            ? null
+            : pending.find((p) => p.iso === iso && p.flagKey === entry.key) ?? null,
           envMirror: PAY_PLANE_ENV_KEYS[entry.key],
           host: PAY_PLANE_HOSTS[entry.key],
           overrideRaw: getMetaValue(payPlaneMetaKey(entry.key)),
@@ -332,16 +394,19 @@ export function adminListConsoleCompliance(isos: string[] = ["IN", "CA"]) {
         iso: base.iso,
         key: base.key,
         packDefault: base.packDefault,
-        effective: base.effective,
+        effective: indiaParked ? false : base.effective,
         dataResidencyNotes: residency.notes ?? base.dataResidencyNotes,
         dataResidencyEnforcedByStorage: false,
         label: entry.label,
         blurb: entry.blurb,
         money: entry.money,
         hardLocked: false,
+        indiaParked,
         payPlane: false,
         signOffs: entry.signOffs,
-        pendingProposal: pending.find((p) => p.iso === iso && p.flagKey === legalKey) ?? null,
+        pendingProposal: indiaParked
+          ? null
+          : pending.find((p) => p.iso === iso && p.flagKey === legalKey) ?? null,
         envMirror: null,
         host: null,
         overrideRaw: getMetaValue(legalOverrideMetaKey(iso, legalKey)),
@@ -378,6 +443,13 @@ export function adminRequestEnableFlag(input: {
 
   if (!entry.countries.includes(iso as "IN" | "CA")) {
     return { ok: false, error: `Flag not available for ${iso}.`, code: "wrong_country" }
+  }
+  if (isIndiaMoneyParked(iso, entry.key)) {
+    return {
+      ok: false,
+      error: "India money toggles are parked (Canada focus). Flag stays OFF.",
+      code: "india_parked",
+    }
   }
 
   const currentlyOn = entry.payPlane && isPayPlaneFlagId(entry.key)
@@ -463,6 +535,13 @@ export function adminApproveEnableProposal(input: {
       error: "Self-approval blocked for money flags. A distinct L0/L1 peer must approve.",
       code: "self_approval",
       auditId: audit.id,
+    }
+  }
+  if (isIndiaMoneyParked(proposal.iso, proposal.flagKey)) {
+    return {
+      ok: false,
+      error: "India money toggles are parked (Canada focus). Cannot approve enable.",
+      code: "india_parked",
     }
   }
 
