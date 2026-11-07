@@ -34,6 +34,30 @@ export function anonymousSession(): McpSession {
   }
 }
 
+/**
+ * Demo / bare-id MCP tokens are local-only.
+ * Production and HOSTED fail closed unless ALLOW_DEMO_AUTH=1 **and**
+ * EASYRENTAL_MCP_ALLOW_DEMO=1 (explicit dual opt-in).
+ */
+export function mcpDemoTokensAllowed(): boolean {
+  const explicit = process.env.EASYRENTAL_MCP_ALLOW_DEMO?.trim()
+  if (explicit === "0") return false
+
+  const production = process.env.NODE_ENV === "production"
+  const hosted = process.env.HOSTED === "1" || process.env.HOSTED === "true"
+  const allowDemoAuth =
+    process.env.ALLOW_DEMO_AUTH === "1" || process.env.ALLOW_DEMO_AUTH === "true"
+
+  if (explicit === "1") {
+    if ((production || hosted) && !allowDemoAuth) return false
+    return true
+  }
+
+  // Default: never in production / hosted.
+  if (production || hosted) return false
+  return true
+}
+
 function scopesForUser(user: SessionUser): string[] {
   const scopes: string[] = [MCP_READ_SCOPE]
   const level = roleLevelFor(user.role)
@@ -66,11 +90,13 @@ export function sessionFromUser(user: SessionUser): McpSession {
 /**
  * Resolve a short-lived PAT / OAuth stub token to a session.
  *
- * Accepted demo forms (M0 stub — replace with OAuth 2.1 later):
- * - `demo:<userId>` e.g. `demo:u_nadia`
- * - bare seeded user id when `EASYRENTAL_MCP_ALLOW_BARE_IDS=1` (local only)
- * - JSON map in `EASYRENTAL_MCP_TOKENS` : `{ "my-pat": "u_nadia" }`
+ * Accepted forms:
+ * - JSON map in `EASYRENTAL_MCP_TOKENS` : `{ "my-pat": "u_nadia" }` (prod-safe PAT stub)
+ * - `demo:<userId>` only when {@link mcpDemoTokensAllowed}
+ * - bare seeded user id when `EASYRENTAL_MCP_ALLOW_BARE_IDS=1` **and** demo tokens allowed
  * - empty / missing → anonymous (public search_listings only)
+ *
+ * Unknown or disallowed tokens never elevate — anonymous (fail-closed).
  */
 export function resolveMcpToken(token: string | null | undefined): McpSession {
   const raw = token?.trim()
@@ -86,6 +112,8 @@ export function resolveMcpToken(token: string | null | undefined): McpSession {
 }
 
 function parseDemoToken(raw: string): string | null {
+  if (!mcpDemoTokensAllowed()) return null
+
   if (raw.startsWith("demo:")) {
     const id = raw.slice("demo:".length).trim()
     return id || null

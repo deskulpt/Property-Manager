@@ -87,38 +87,40 @@ describe("MCP M1 propose + approvals", () => {
 
   it("approvals.resolve reject = no side effect; approve mutates once", async () => {
     const { jobsForTenant, getDb } = await import("@/lib/db")
-    const session = demoSession("u_nadia")
+    const proposer = demoSession("u_nadia")
+    const approver = demoSession("u_kiran")
     const before = jobsForTenant("t_bbm").length
 
-    const proposed = invokeMcpTool(session, "propose_job_assignment", {
+    const proposed = invokeMcpTool(proposer, "propose_job_assignment", {
       prompt: "Assign electrician for panel labels at the hub",
       propertyId: "p_waterman",
     })
     expect(proposed.ok).toBe(true)
     const proposalId = (proposed.data as { proposal_id: string }).proposal_id
 
-    const rejected = invokeMcpTool(session, "approvals.resolve", {
+    const rejected = invokeMcpTool(proposer, "approvals.resolve", {
       proposal_id: proposalId,
       decision: "reject",
     })
     expect(rejected.ok).toBe(true)
     expect(jobsForTenant("t_bbm")).toHaveLength(before)
 
-    const again = invokeMcpTool(session, "propose_job_assignment", {
+    const again = invokeMcpTool(proposer, "propose_job_assignment", {
       prompt: "Assign electrician for dock leveler",
       propertyId: "p_waterman",
     })
     expect(again.ok).toBe(true)
     const id2 = (again.data as { proposal_id: string }).proposal_id
 
-    const approved = invokeMcpTool(session, "approvals.resolve", {
+    // D09: distinct approver required for never-auto
+    const approved = invokeMcpTool(approver, "approvals.resolve", {
       proposal_id: id2,
       decision: "approve",
     })
     expect(approved.ok).toBe(true)
     expect(jobsForTenant("t_bbm").length).toBe(before + 1)
 
-    const twice = invokeMcpTool(session, "approvals.resolve", {
+    const twice = invokeMcpTool(approver, "approvals.resolve", {
       proposal_id: id2,
       decision: "approve",
     })

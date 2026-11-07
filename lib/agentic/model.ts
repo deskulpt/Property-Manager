@@ -173,14 +173,70 @@ export function planStubTurn(input: PlanTurnInput): ModelPlan {
   }
 }
 
-export function liveModelConfigured(): boolean {
-  const key =
+/**
+ * Live HTTP / Gemini planners are opt-in.
+ * A key alone must not enable outbound model calls (fail-closed).
+ * Set ASK_EASY_LIVE_MODEL=1 to allow live planning when a key is present.
+ */
+export function liveModelEnabled(): boolean {
+  const flag = process.env.ASK_EASY_LIVE_MODEL?.trim()
+  return flag === "1" || flag === "true"
+}
+
+function liveModelApiKey(): string {
+  return (
     process.env.ASK_EASY_MODEL_API_KEY?.trim() ||
     process.env.GEMINI_API_KEY?.trim() ||
     process.env.GOOGLE_GENAI_API_KEY?.trim() ||
     process.env.GOOGLE_API_KEY?.trim() ||
     ""
+  )
+}
+
+export function liveModelConfigured(): boolean {
+  if (!liveModelEnabled()) return false
+  const key = liveModelApiKey()
   return Boolean(key && key !== "undefined" && key.length >= 8)
+}
+
+/**
+ * Minimize PII before any outbound model call (DPDP / D06).
+ * Deterministic redaction — not a guarantee against all leakage via tool results.
+ */
+export function redactPiiForModel(text: string): string {
+  let out = text
+  out = out.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, "[REDACTED_EMAIL]")
+  // PAN-shaped (ABCDE1234F) before digit sweeps
+  out = out.replace(/\b[A-Z]{5}\d{4}[A-Z]\b/g, "[REDACTED_PAN]")
+  // Aadhaar-shaped 12 digits (before generic phone/card sweeps)
+  out = out.replace(/(?<!\d)(\d{4}[\s-]?\d{4}[\s-]?\d{4})(?!\d)/g, "[REDACTED_AADHAAR]")
+  // Long digit runs that look like cards / account numbers (13–19)
+  out = out.replace(/(?<!\d)((?:\d[\s-]?){12,18}\d)(?!\d)/g, (g1: string) => {
+    const digits = g1.replace(/\D/g, "")
+    if (digits.length >= 13 && digits.length <= 19) return "[REDACTED_CARD]"
+    return g1
+  })
+  // Phones — prefer E.164 / grouped forms; avoid swallowing already-redacted tokens
+  out = out.replace(/(?<!\w)(?:\+?\d[\d\s().-]{7,}\d)(?!\w)/g, "[REDACTED_PHONE]")
+  return out
+}
+
+/** Strip high-risk identifiers from planner args before they leave the process. */
+export function minimizePlanTurnForModel(input: PlanTurnInput): {
+  prompt: string
+  propertyId: string | null
+  unitId: string | null
+  onboard: boolean
+  /** Opaque — never the raw tenant primary key to the provider. */
+  tenantRef: "session"
+} {
+  return {
+    prompt: redactPiiForModel(input.prompt),
+    propertyId: input.propertyId ?? null,
+    unitId: input.unitId ?? null,
+    onboard: Boolean(input.onboard),
+    tenantRef: "session",
+  }
 }
 
 function liveModelUrl(): string {
@@ -210,25 +266,23 @@ function parseLiveToolName(content: string): AgentToolName | null {
 }
 
 export async function planLiveTurn(input: PlanTurnInput): Promise<ModelPlan> {
+  if (!liveModelEnabled()) throw new Error("Live model disabled (ASK_EASY_LIVE_MODEL≠1)")
   const { assertLiveModelAllowed } = await import("@/lib/markets/enforce")
   const aiGate = assertLiveModelAllowed(input.countryIso ?? "IN")
   if (!aiGate.ok) throw new Error(aiGate.error)
-
-  const apiKey =
-    process.env.ASK_EASY_MODEL_API_KEY?.trim() ||
-    process.env.GEMINI_API_KEY?.trim() ||
-    process.env.GOOGLE_GENAI_API_KEY?.trim() ||
-    process.env.GOOGLE_API_KEY?.trim()
+  const apiKey = liveModelApiKey()
   if (!apiKey) throw new Error("No live model API key")
+
+  const minimized = minimizePlanTurnForModel(input)
 
   // Prefer sibling Gemini planner when using Google keys without ASK_EASY_MODEL_URL
   if (!process.env.ASK_EASY_MODEL_API_KEY?.trim() && !process.env.ASK_EASY_MODEL_URL?.trim()) {
     try {
       const { planGeminiToolCalls } = await import("@/lib/adk/gemini")
       const planned = await planGeminiToolCalls({
-        message: input.prompt,
+        message: minimized.prompt,
         scope: "landlord",
-        propertyId: input.propertyId,
+        propertyId: minimized.propertyId,
       })
       if ("toolCalls" in planned && planned.toolCalls.length > 0) {
         // Map ADK tool names → Ask Easy registry when possible
@@ -236,7 +290,7 @@ export async function planLiveTurn(input: PlanTurnInput): Promise<ModelPlan> {
         return {
           providerId: "live",
           toolCalls: [{ toolName: mapped }],
-          note: "Live Gemini planner.",
+          note: "Live Gemini planner (PII-minimized).",
         }
       }
     } catch {
@@ -258,19 +312,14 @@ export async function planLiveTurn(input: PlanTurnInput): Promise<ModelPlan> {
           "Never invent side effects. Mutating tools only propose; landlord must approve.",
           "Lease onboard order: list/unlist → occupant ledger → parties → draft_rental_agreement → propose_esign_send.",
           "Memory (L.1): memory_list / memory_remember / memory_purge. Never store Aadhaar images or raw Aadhaar numbers.",
+          "Inbound user content is PII-minimized; do not request raw Aadhaar, PAN, card, or phone numbers.",
           "Tools:",
           ...catalog.map((t) => `- ${t.name}: ${t.description}`),
         ].join("\n"),
       },
       {
         role: "user",
-        content: JSON.stringify({
-          prompt: input.prompt,
-          propertyId: input.propertyId ?? null,
-          unitId: input.unitId ?? null,
-          tenantId: input.tenantId,
-          onboard: Boolean(input.onboard),
-        }),
+        content: JSON.stringify(minimized),
       },
     ],
   }

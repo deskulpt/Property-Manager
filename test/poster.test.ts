@@ -95,7 +95,8 @@ describe("QR poster gate and payloads", () => {
   it("missing contact email blocks Download/Print readiness", async () => {
     const { getDb } = await db()
     const { buildUnitPoster } = await poster()
-    getDb().prepare("UPDATE users SET email = '' WHERE tenant_id = 't_bbm' AND role = 'landlord_admin'").run()
+    // orgContactEmail picks ORDER BY name LIMIT 1 (u_kiran). Clear that seat only.
+    getDb().prepare("UPDATE users SET email = '' WHERE id = 'u_kiran'").run()
     const payload = buildUnitPoster("t_bbm", "u_waterman_b1")
     expect(payload!.gate.ok).toBe(false)
     expect(payload!.gate.missing).toContain("email")

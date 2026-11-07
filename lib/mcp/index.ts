@@ -13,11 +13,17 @@ export {
   resolveMcpToken,
   sessionFromRequestHeaders,
   bearerFromAuthorization,
+  mcpDemoTokensAllowed,
   MCP_READ_SCOPE,
   MCP_PROPOSE_SCOPE,
   MCP_EXECUTE_PREAUTH_SCOPE,
   type McpSession,
 } from "@/lib/mcp/session"
+export {
+  assertDistinctApprover,
+  proposalBindingHash,
+  proposalContentDigest,
+} from "@/lib/mcp/dual-control"
 export {
   isNeverAuto,
   isSoftDraft,

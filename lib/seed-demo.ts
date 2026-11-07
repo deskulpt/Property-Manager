@@ -95,6 +95,22 @@ export function seedDemoDatabase(db: Sql) {
   user.run("u_devon", "Devon Hale", "devon@northline.example", "applicant", 4, null, "Northline Distribution India", null, null, 0, "+919811223344", null, 1)
   user.run("u_ravi", "Ravi Menon", "ravi@menon.example", "applicant", 4, null, null, null, null, 0, "+919900778899", null, 1)
   user.run("u_nadia", "Nadia Okonkwo", "nadia@demo.easyrent.example", "landlord_admin", 2, "t_bbm", null, null, null, 0, "+914040012345", null, 1)
+  // Second landlord seat for D09 dual-control demos (never-auto cannot self-approve).
+  user.run(
+    "u_kiran",
+    "Kiran Desai",
+    "kiran@demo.easyrent.example",
+    "landlord_admin",
+    2,
+    "t_bbm",
+    null,
+    null,
+    null,
+    0,
+    "+914040012346",
+    null,
+    1,
+  )
   // Managing agent — listing URL import desk; not platform staff Property Manager.
   user.run(
     "u_riya",

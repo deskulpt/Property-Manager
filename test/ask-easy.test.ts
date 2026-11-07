@@ -122,7 +122,7 @@ describe("Ask Easy — ADK tools + approval hard gate", () => {
     const approved = approveProposal({
       tenantId: "t_bbm",
       proposalId: again.proposal.id,
-      actorUserId: "u_nadia",
+      actorUserId: "u_kiran",
     })
     expect(approved.ok).toBe(true)
     if (!approved.ok) return
@@ -133,7 +133,7 @@ describe("Ask Easy — ADK tools + approval hard gate", () => {
     const againApprove = approveProposal({
       tenantId: "t_bbm",
       proposalId: again.proposal.id,
-      actorUserId: "u_nadia",
+      actorUserId: "u_kiran",
     })
     expect(againApprove.ok).toBe(false)
     const againExec = executeApprovedProposal({
@@ -156,6 +156,7 @@ describe("Ask Easy — ADK tools + approval hard gate", () => {
   it("live model missing/unreachable falls back to stub without throwing", async () => {
     const { runAskEasy, liveModelConfigured } = await agentic()
 
+    process.env.ASK_EASY_LIVE_MODEL = "1"
     process.env.ASK_EASY_MODEL_API_KEY = "test-key-not-real"
     process.env.ASK_EASY_MODEL_URL = "http://127.0.0.1:9/v1/chat/completions"
     expect(liveModelConfigured()).toBe(true)

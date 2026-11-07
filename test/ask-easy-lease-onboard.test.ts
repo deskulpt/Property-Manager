@@ -92,7 +92,7 @@ describe("Ask Easy — lease onboard (list/parties/agreement/eSign)", () => {
     const approved = approveProposal({
       tenantId: "t_bbm",
       proposalId: again.proposal.id,
-      actorUserId: "u_nadia",
+      actorUserId: "u_kiran",
     })
     expect(approved.ok).toBe(true)
     expect(
@@ -106,7 +106,7 @@ describe("Ask Easy — lease onboard (list/parties/agreement/eSign)", () => {
     const twice = approveProposal({
       tenantId: "t_bbm",
       proposalId: again.proposal.id,
-      actorUserId: "u_nadia",
+      actorUserId: "u_kiran",
     })
     expect(twice.ok).toBe(false)
   })
@@ -135,7 +135,7 @@ describe("Ask Easy — lease onboard (list/parties/agreement/eSign)", () => {
     const approved = approveProposal({
       tenantId: "t_bbm",
       proposalId: turn.proposal.id,
-      actorUserId: "u_nadia",
+      actorUserId: "u_kiran",
     })
     expect(approved.ok).toBe(true)
 
@@ -176,7 +176,7 @@ describe("Ask Easy — lease onboard (list/parties/agreement/eSign)", () => {
       approveProposal({
         tenantId: "t_bbm",
         proposalId: primary.proposal.id,
-        actorUserId: "u_nadia",
+        actorUserId: "u_kiran",
       }).ok,
     ).toBe(true)
 
@@ -224,7 +224,7 @@ describe("Ask Easy — lease onboard (list/parties/agreement/eSign)", () => {
     approveProposal({
       tenantId: "t_bbm",
       proposalId: primary.proposal.id,
-      actorUserId: "u_nadia",
+      actorUserId: "u_kiran",
     })
 
     const draft = runStubAskEasy({
@@ -286,7 +286,7 @@ describe("Ask Easy — lease onboard (list/parties/agreement/eSign)", () => {
     const approved = approveProposal({
       tenantId: "t_bbm",
       proposalId: again.proposal.id,
-      actorUserId: "u_nadia",
+      actorUserId: "u_kiran",
     })
     expect(approved.ok).toBe(true)
     if (!approved.ok) return
@@ -297,7 +297,7 @@ describe("Ask Easy — lease onboard (list/parties/agreement/eSign)", () => {
     const onceMore = approveProposal({
       tenantId: "t_bbm",
       proposalId: again.proposal.id,
-      actorUserId: "u_nadia",
+      actorUserId: "u_kiran",
     })
     expect(onceMore.ok).toBe(false)
     expect(
@@ -346,7 +346,7 @@ describe("Ask Easy — lease onboard (list/parties/agreement/eSign)", () => {
         approveProposal({
           tenantId: "t_bbm",
           proposalId: primary.proposal.id,
-          actorUserId: "u_nadia",
+          actorUserId: "u_kiran",
         }).ok,
       ).toBe(true)
 
@@ -383,7 +383,7 @@ describe("Ask Easy — lease onboard (list/parties/agreement/eSign)", () => {
       const approved = approveProposal({
         tenantId: "t_bbm",
         proposalId: propose.proposal.id,
-        actorUserId: "u_nadia",
+        actorUserId: "u_kiran",
       })
       expect(approved.ok).toBe(true)
       if (!approved.ok) return

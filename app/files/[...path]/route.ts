@@ -1,6 +1,8 @@
 import fs from "node:fs/promises"
 import path from "node:path"
+import { authorizeFileParts } from "@/lib/files/access"
 import { isSafeObjectKey } from "@/lib/object-store"
+import { getSessionUser } from "@/lib/session"
 
 const TYPES: Record<string, string> = {
   png: "image/png",
@@ -22,9 +24,18 @@ export async function GET(_request: Request, context: { params: Promise<{ path: 
     return new Response("Not found", { status: 404 })
   }
 
+  const user = await getSessionUser()
+  const access = authorizeFileParts(user, parts)
+  if (!access.ok) {
+    if (access.status === 401) {
+      return new Response("Unauthorized", { status: 401 })
+    }
+    return new Response("Not found", { status: 404 })
+  }
+
   // demoESign stamps: /files/esign/<id>.txt
   if (parts.length === 2 && parts[0] === "esign") {
-    const name = parts[1]
+    const name = parts[1]!
     if (!/^[a-zA-Z0-9._-]+$/.test(name)) {
       return new Response("Not found", { status: 404 })
     }
@@ -39,7 +50,7 @@ export async function GET(_request: Request, context: { params: Promise<{ path: 
   const key = parts.join("/")
   // Legacy flat uploads: single segment `name.ext`
   // ObjectStore keys: `tenant/kind/name.ext`
-  const legacyOk = parts.length === 1 && /^[a-zA-Z0-9._-]+$/.test(parts[0])
+  const legacyOk = parts.length === 1 && /^[a-zA-Z0-9._-]+$/.test(parts[0]!)
   if (!legacyOk && !isSafeObjectKey(key)) {
     return new Response("Not found", { status: 404 })
   }
