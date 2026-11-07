@@ -11,9 +11,9 @@
     "note": "Do NOT use the old DeSkulpt Cloudflare account."
   },
   "complianceFlags": {
-    "inPayPlane": false,
-    "caPayPlane": false,
-    "sourceOfTruth": "Admin compliance toggles console (ER-47); camelCase ids shared with ER-48"
+    "in-pay": false,
+    "ca-pay": false,
+    "sourceOfTruth": "Admin compliance toggles (ER-47); reserved host-rail ids in-pay/ca-pay per merge-order + preferences"
   },
   "records": {
     "createAfterOci": [
@@ -49,16 +49,16 @@
         "type": "CNAME",
         "content": "RESERVED_INDIA_PAYMENT_ORIGIN",
         "proxied": true,
-        "flag": "inPayPlane",
-        "comment": "India payment plane — India-resident data + 180-day IN security logs. Separate service. Do not create while inPayPlane=OFF."
+        "flag": "in-pay",
+        "comment": "India payment plane — India-resident data + 180-day IN security logs. Separate service. Do not create while in-pay=OFF."
       },
       {
         "name": "ca-pay",
         "type": "CNAME",
         "content": "RESERVED_CA_PAY_WORKER",
         "proxied": true,
-        "flag": "caPayPlane",
-        "comment": "CF Worker Stripe Connect + EU D1 ledger. Separate service. Do not create while caPayPlane=OFF."
+        "flag": "ca-pay",
+        "comment": "CF Worker Stripe Connect + EU D1 ledger. Separate service. Do not create while ca-pay=OFF."
       }
     ],
     "mailWhenSendingEnabled": [

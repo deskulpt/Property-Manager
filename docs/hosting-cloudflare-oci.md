@@ -11,8 +11,8 @@ Cloudflare Free front door (dedicated **EasyRental** CF account) → Oracle Alwa
 | Plane | Host | Status |
 | --- | --- | --- |
 | App | `easyrental.space` · `www` | CF zone active; DNS empty until OCI IP exists |
-| India payments | `in-pay.easyrental.space` | Reserved — **do not create DNS**; flag `inPayPlane` OFF |
-| CA/EU payments | `ca-pay.easyrental.space` | Reserved — **do not create DNS**; flag `caPayPlane` OFF |
+| India payments | `in-pay.easyrental.space` | Reserved — **do not create DNS**; flag `in-pay` OFF |
+| CA/EU payments | `ca-pay.easyrental.space` | Reserved — **do not create DNS**; flag `ca-pay` OFF |
 
 Payment planes are **separate services**, not the apex Node process.
 
@@ -41,8 +41,8 @@ Apply (dry-run default): `./scripts/hosting/cloudflare-dns-apply.sh`.
 
 ### Do not create yet
 
-- `in-pay` — gated by Admin flag `inPayPlane` (default OFF)
-- `ca-pay` — gated by Admin flag `caPayPlane` (default OFF)
+- `in-pay` — gated by Admin flag `in-pay` (default OFF)
+- `ca-pay` — gated by Admin flag `ca-pay` (default OFF)
 
 ### Mail (only if app sends mail)
 
@@ -52,8 +52,8 @@ OTP/email can use Resend (`RESEND_API_KEY`). **Add MX/SPF/DKIM/DMARC only when e
 
 | Flag | Default | Effect |
 | --- | --- | --- |
-| `inPayPlane` | OFF | No `in-pay` DNS / IN payment service |
-| `caPayPlane` | OFF | No `ca-pay` DNS / Worker + EU D1 |
+| `in-pay` | OFF | No `in-pay` DNS / IN payment service |
+| `ca-pay` | OFF | No `ca-pay` DNS / Worker + EU D1 |
 | `ontarioConnectDirectPad` | OFF | Ontario Connect DIRECT+PAD dark |
 | `razorpayIndianEntity` | OFF | Indian-entity Razorpay dark |
 | `caStripeTaxHst` / `inTaxMatrix` | OFF | Live tax dark |
@@ -62,8 +62,8 @@ OTP/email can use Resend (`RESEND_API_KEY`). **Add MX/SPF/DKIM/DMARC only when e
 Env on OCI (keep off):
 
 ```bash
-EASYRENTAL_FLAG_IN_PAY_PLANE=0
-EASYRENTAL_FLAG_CA_PAY_PLANE=0
+EASYRENTAL_FLAG_IN_PAY=0
+EASYRENTAL_FLAG_CA_PAY=0
 ```
 
 ## OCI Always Free (Aloke later)
@@ -82,14 +82,14 @@ Terraform stub: `deploy/oci/main.tf` (no apply until credentials exist).
 
 - Host: `in-pay.easyrental.space`
 - India-resident payment data + **180-day** IN security logs
-- Separate service; flag `inPayPlane`
+- Separate service; flag `in-pay`
 
 ## CA payment plane (reserved, OFF)
 
 - Host: `ca-pay.easyrental.space`
 - CF Worker + Stripe Connect + **EU D1** ledger
 - Stub: `deploy/cloudflare/workers/ca-pay/` (unpublished)
-- Flag `caPayPlane`
+- Flag `ca-pay`
 
 ## Related docs
 

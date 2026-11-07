@@ -14,8 +14,8 @@ Environment=HOSTED=1
 Environment=PORT=43123
 Environment=DESKULPT_DB_PATH=/data/deskulpt.sqlite
 Environment=DESKULPT_DEMO_SWITCHER=0
-Environment=EASYRENTAL_FLAG_IN_PAY_PLANE=0
-Environment=EASYRENTAL_FLAG_CA_PAY_PLANE=0
+Environment=EASYRENTAL_FLAG_IN_PAY=0
+Environment=EASYRENTAL_FLAG_CA_PAY=0
 ExecStart=/usr/bin/npm run start
 Restart=on-failure
 RestartSec=5

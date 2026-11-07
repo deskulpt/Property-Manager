@@ -12,4 +12,4 @@ Scripts: [`scripts/hosting/`](../scripts/hosting/)
 
 - CF account id `b2c682e130b734a072424bbf92367668` only — never old DeSkulpt CF.
 - Create DNS for apex + `www` only after `OCI_PUBLIC_IPV4` exists.
-- Never create `in-pay` / `ca-pay` while `inPayPlane` / `caPayPlane` are OFF.
+- Never create `in-pay` / `ca-pay` while `in-pay` / `ca-pay` are OFF.

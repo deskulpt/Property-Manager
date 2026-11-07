@@ -22,8 +22,8 @@ Usage: $0 [--apply] [--with-mail] [--allow-reserved-pay-dns]
 Env:
   OCI_PUBLIC_IPV4   required for A record
   OCI_PUBLIC_IPV6   optional for AAAA
-  EASYRENTAL_FLAG_IN_PAY_PLANE  must be 0/empty to refuse in-pay
-  EASYRENTAL_FLAG_CA_PAY_PLANE  must be 0/empty to refuse ca-pay
+  EASYRENTAL_FLAG_IN_PAY  must be 0/empty to refuse in-pay
+  EASYRENTAL_FLAG_CA_PAY  must be 0/empty to refuse ca-pay
 EOF
 }
 
@@ -53,8 +53,8 @@ if [[ -z "${OCI_PUBLIC_IPV4:-}" ]]; then
   fi
 fi
 
-IN_PAY_FLAG="${EASYRENTAL_FLAG_IN_PAY_PLANE:-0}"
-CA_PAY_FLAG="${EASYRENTAL_FLAG_CA_PAY_PLANE:-0}"
+IN_PAY_FLAG="${EASYRENTAL_FLAG_IN_PAY:-0}"
+CA_PAY_FLAG="${EASYRENTAL_FLAG_CA_PAY:-0}"
 
 plan_record() {
   local name="$1" type="$2" content="$3" proxied="$4"
@@ -71,8 +71,8 @@ refuse_reserved() {
   echo "SKIP reserved ${name} (${flag_name}=${flag_val}; create only when Admin toggle ON + dedicated service ready)"
 }
 
-refuse_reserved "in-pay" "$IN_PAY_FLAG" "inPayPlane/EASYRENTAL_FLAG_IN_PAY_PLANE"
-refuse_reserved "ca-pay" "$CA_PAY_FLAG" "caPayPlane/EASYRENTAL_FLAG_CA_PAY_PLANE"
+refuse_reserved "in-pay" "$IN_PAY_FLAG" "in-pay/EASYRENTAL_FLAG_IN_PAY"
+refuse_reserved "ca-pay" "$CA_PAY_FLAG" "ca-pay/EASYRENTAL_FLAG_CA_PAY"
 
 if [[ -n "${OCI_PUBLIC_IPV4:-}" ]]; then
   plan_record "@" "A" "$OCI_PUBLIC_IPV4" "true"

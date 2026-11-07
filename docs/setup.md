@@ -35,7 +35,7 @@ See [`docs/hosting-cloudflare-oci.md`](./hosting-cloudflare-oci.md) and `deploy/
 1. Zone `easyrental.space` is already on the **dedicated EasyRental** Cloudflare Free account (`b2c682e130b734a072424bbf92367668`; NS bella/keenan). DNS starts empty.
 2. Aloke creates Oracle Always Free **India** VM later; set `OCI_PUBLIC_IPV4` and apply apex + `www` only via `scripts/hosting/cloudflare-dns-apply.sh`.
 3. Persist SQLite on the VM at `/data` (`DESKULPT_DB_PATH=/data/deskulpt.sqlite`); set `DESKULPT_SECRET_KEY`, `HOSTED=1`, leave payment-plane flags OFF.
-4. Do **not** create `in-pay` / `ca-pay` DNS until Admin flags `inPayPlane` / `caPayPlane` are ON.
+4. Do **not** create `in-pay` / `ca-pay` DNS until Admin flags `in-pay` / `ca-pay` are ON.
 5. Health check: `/api/health`.
 
 ### Optional: Railway

@@ -4,7 +4,8 @@ Admin L0 console: `/console/compliance` (**Canada focus**; **India money parked*
 Contract: `lib/markets/compliance-contract.ts` + `lib/markets/legal-overrides.ts`  
 Catalog / sign-offs: `lib/markets/compliance-catalog.ts` (`INDIA_COMPLIANCE_PARKED`)  
 Enforcement (do not bypass): `lib/markets/enforce.ts` (#47)  
-**Hosting consumer:** Cloudflare + OCI launch pack — DNS / workers must not enable `in-pay` / `ca-pay` while flags stay OFF.
+**Hosting consumer:** Cloudflare + OCI launch pack (ER-48) — DNS / workers must not enable `in-pay` / `ca-pay` while flags stay OFF.  
+**Convention:** CountryPack / money keys use camelCase (`ontarioConnectDirectPad`, …). Reserved **host rails** use hostname labels `in-pay` / `ca-pay` (not CountryPack toggles).
 
 ## CountryPack LEGAL keys (meta override `legal.flag.{ISO}.{key}`)
 

@@ -9,4 +9,4 @@ Terraform + cloud-init + systemd stubs for the apex Easy Rental Node/SQLite app.
 5. Deploy app → `scripts/hosting/deploy-app.sh`
 6. Export `OCI_PUBLIC_IPV4` and apply Cloudflare DNS (apex + www only).
 
-Do **not** deploy `in-pay` / `ca-pay` from this stack — those are separate services behind `inPayPlane` / `caPayPlane`.
+Do **not** deploy `in-pay` / `ca-pay` from this stack — those are separate services behind `in-pay` / `ca-pay`.
