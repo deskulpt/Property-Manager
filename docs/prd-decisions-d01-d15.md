@@ -1,9 +1,10 @@
-# D01–D15 decisions register (DECIDED)
+# D01–D15 decisions register
 
-**Status:** Owner-authorized (Aloke Approved on checklist) · **Date:** 6 Nov 2026  
+**Status:** **PARTIAL** (7 Nov 2026) — D01–D09 + D14 product/eng Approved. **D11 / D12 / D13 / D15 are NOT approved**; D10 Pending CFO. CFO tax/billing apply owned by [CFO tax billing review](bc-3f8cac08-2361-5d34-aa26-13b6bcee0ae5).  
 **Authority:** Unified PRD [`prd-unified-proposed-v1.md`](./prd-unified-proposed-v1.md) §19 · R0 matrix [`capability-matrix-r0.md`](./capability-matrix-r0.md) · Checklist [`prd-unified-approval-checklist.md`](./prd-unified-approval-checklist.md)  
 **Tip evidence pin:** Origin `7808188` · GitHub mirror `5ca1b25` (Ask Easy floating island)  
-**Companion implementation:** Phase B vertical slice = D01+D02 pricing meter + entitlement reconcile (this sprint).
+**PR #44:** leave open @ `bac3779` on `cursor/d01-d02-pricing-entitlements-6564` — **do not merge** until CFO stacks/supersedes.  
+**Companion implementation:** Phase B vertical slice = D01+D02 pricing meter + entitlement reconcile (landed on #44; money/tax not final).
 
 Evidence labels: **OBSERVED** (tip code) · **DOCUMENTED** (store/repo docs) · **NORM** (India SaaS / market practice) · **SPEC** (official MCP docs cited).
 
@@ -135,7 +136,7 @@ Soft-open demo gate **OK if labelled** (demo / evaluator path). Production / `AS
 
 ## D11 — Fees / MoR
 
-**DECIDED:** **No rent skim**. Services = flat / disclosed commission **later**. MoR = **Dodo / PayPal** path already stubbed.
+**NOT APPROVED — CFO owns.** Working hypothesis only (may be overwritten by CFO tax billing review): no rent skim; services flat/disclosed later; MoR adapters already stubbed (Dodo/PayPal). **Do not ship as commercial terms.**
 
 | Evidence | Detail |
 | --- | --- |
@@ -146,7 +147,7 @@ Soft-open demo gate **OK if labelled** (demo / evaluator path). Production / `AS
 
 ## D12 — Affiliate
 
-**DECIDED:** Affiliate **20%** proposal stays **DOCUMENTED not activated**.
+**NOT APPROVED — CFO / legal owns.** 20% schedule remains research/DOCUMENTED only until CFO pack + counsel close. **Not activated.**
 
 | Evidence | Detail |
 | --- | --- |
@@ -156,7 +157,7 @@ Soft-open demo gate **OK if labelled** (demo / evaluator path). Production / `AS
 
 ## D13 — Countries
 
-**DECIDED:** **India live**; **Canada parked**; process = **L0 CountryPack checklist** before promote-to-live claims.
+**NOT APPROVED — CFO / tax owns.** Tip still has India pack live / Canada parked shapes; enablement + tax/compliance process await CFO CountryPack checklist outcomes.
 
 | Evidence | Detail |
 | --- | --- |
@@ -176,7 +177,7 @@ Soft-open demo gate **OK if labelled** (demo / evaluator path). Production / `AS
 
 ## D15 — Media / Matterport
 
-**DECIDED:** Matterport / 360 **optional per profile**. Residential **stills-only publish OK**.
+**NOT APPROVED — legal/CFO follow-through.** Prior note (Matterport/360 optional; residential stills-only OK) is a proposal only until closed. Do not treat as signed publication policy.
 
 | Evidence | Detail |
 | --- | --- |
@@ -187,9 +188,11 @@ Soft-open demo gate **OK if labelled** (demo / evaluator path). Production / `AS
 
 ## Phase B build scope (this authorization)
 
-**In scope:** D01+D02 code reconcile — single pricing meter on public/plan cards; entitlement flags; tests; honest soft-open label; docs APPROVED bump + money/prd pointer reconcile.
+**In scope (landed on #44, merge blocked):** D01+D02 code reconcile — single pricing meter on public/plan cards; entitlement flags; tests; honest soft-open label; docs pointer reconcile for product-approved rows.
 
-**Out of scope this sprint (explicit):** R1A autonomy, live MoR charges, Postgres cutover, host MCP certification beyond Cursor/Claude claim discipline, affiliate activation, Canada live, A3 execute ON, inventing live money.
+**Blocked / handed to CFO:** D11–D13 (+ D15; D10 pending) tax/pricing/MoR/affiliate/country apply — [CFO tax billing review](bc-3f8cac08-2361-5d34-aa26-13b6bcee0ae5). Stack or supersede #44 from tip `bac3779`.
+
+**Out of scope:** R1A autonomy, live MoR charges, Postgres cutover, MCP host cert, affiliate activation, inventing live money, never-auto weakening.
 
 ---
 
