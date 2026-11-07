@@ -69,11 +69,16 @@ Owner direction (not Approve on D11–D15). Implementation owned by sibling **Co
 
 Aloke status recorded on D11, D12, D13, D15 as **Approve with advisors' changes**. **Not fully approved** — advisor gates/flags stay **OFF**.
 
-Also recorded: ON hybrid pricing; D09 refund dual-control; Cloudflare AI Gateway + Workers AI + daily neuron limits (real PII blocked); **Deskulpt Inc** (federal CA, GST/HST TBD); **Deskulpt Commerce India Pvt Ltd**; Indian CA/lawyers **not yet engaged**.
+Also recorded: ON hybrid pricing; D09 refund dual-control; Cloudflare AI Gateway + Workers AI + daily neuron limits (real PII blocked); **Deskulpt Inc** (federal CA, **GST/HST resolved** on checklist + CountryPack CA); **Deskulpt Commerce India Pvt Ltd**; Indian CA/lawyers **not yet engaged**.
 
 ### Still open (short)
 
-- Eng Rejects D07 / D09 · Connect live before-live Legal list · Razorpay in-principle · IN counsel/CA engage · Deskulpt Inc GST/HST # · AI data-handling review · affiliate activation · Matterport commercial SKU
+- Eng Rejects D07 / D09 · Connect live before-live Legal list · Razorpay in-principle · IN counsel/CA engage · AI data-handling review · affiliate activation · Matterport commercial SKU  
+- ~~Deskulpt Inc GST/HST #~~ **resolved** (pack `taxRegistrationId`; `caStripeTaxHst` OFF)
+
+## GST/HST # checklist — **resolved**
+
+Aloke added Deskulpt Inc GST/HST # to PRD checklist. Billing helpers on #45 read `CANADA_PACK.taxRegistrationId` (same source as #47) via `lib/billing/tax-identity.ts` for Ontario application-fee HST lines and monthly landlord statement tax footer. **Do not echo the number in chat/PR summaries.** Live Connect flags remain OFF.
 
 ### LEGAL
 

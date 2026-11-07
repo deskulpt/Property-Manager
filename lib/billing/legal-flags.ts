@@ -1,8 +1,13 @@
 /**
  * Legal / Aloke feature-flag defaults (DEMO).
  * Conditional Legal advisory only — not licensed go-live auth.
- * D11/D12/D13/D15 are NOT Aloke-approved.
+ * D11/D12/D13/D15 Aloke Approve with advisors' changes — not fully approved; gates OFF.
  */
+
+import {
+  DESKULPT_CANADA_GST_HST_NUMBER,
+  DESKULPT_CANADA_LEGAL_NAME,
+} from "@/lib/billing/tax-identity"
 
 export const LEGAL_FEATURE_FLAGS = {
   /** IN Route rent splits — OFF until entity + Razorpay written approval + Legal */
@@ -45,10 +50,11 @@ export const D13_LEGAL_WORDING =
   "Telangana and Ontario selected; synthetic demos allowed; production gated by feature."
 
 export const ALOKE_ENTITY_NAMES = {
-  canada: "Deskulpt Inc" as const,
+  canada: DESKULPT_CANADA_LEGAL_NAME,
   canadaJurisdiction: "federal_canada" as const,
-  /** GST/HST number TBD accountant */
-  canadaGstHstNumber: null as string | null,
+  /** From Aloke PRD checklist — GST/HST # item resolved */
+  canadaGstHstNumber: DESKULPT_CANADA_GST_HST_NUMBER,
+  canadaGstHstNumberResolved: true,
   india: "Deskulpt Commerce India Pvt Ltd" as const,
   indianCaLawyersEngaged: false,
 } as const

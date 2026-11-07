@@ -15,9 +15,16 @@ Aloke recorded **Approve with advisors' changes** on **D11, D12, D13, D15**. Tha
 
 ### Entities / AI / pricing (Aloke)
 
-- Deskulpt Inc (federal CA) — GST/HST TBD accountant  
+- Deskulpt Inc (federal CA) — **GST/HST resolved** (CountryPack CA; tax flags OFF)  
 - Deskulpt Commerce India Pvt Ltd — IN CA/lawyers not engaged  
 - Cloudflare AI Gateway + Workers AI + daily neuron limits; real PII blocked  
 - ON hybrid: CA$3–5/unit + 0.5–1% rent cap CA$15/unit + CA$10/mo min  
 
+### Country paths
+
+`/in` + `/ca` CountryPack implementation: **Country path routing** PR (`cursor/country-path-in-ca-1de0`). Pack `legalEntity` names match entities above. D11–D15 AwC; flags OFF.
+
 Fully approved: **0**.
+
+
+**GST/HST #:** resolved from Aloke PRD into billing tax identity / ON statement stubs. Flags OFF.

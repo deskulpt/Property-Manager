@@ -1,14 +1,20 @@
 /**
  * Platform subscription tax adapter (CFO D01 — DEMO/STUB).
  *
- * Deskulpt Inc is Canadian. Subscriptions via Stripe (processor).
+ * Deskulpt Inc is Canadian (GST/HST # in tax-identity / PRD). Subscriptions via Stripe (processor).
  * Tax path: **Stripe Tax** calculates; Deskulpt files/remits (not MoR-as-seller).
  * - CA (Ontario launch): Stripe Tax HST
  * - India B2B with GSTIN: reverse charge (platform does not collect IN GST)
  * - India without GSTIN: blocked / entity+GST gate (Telangana gated)
  *
  * NOT live tax advice. Stripe Tax live rates required at D10 go-live.
+ * Application-fee HST on Ontario Connect path: see ontario-connect + tax-identity (we compute).
  */
+
+import { DESKULPT_CANADA_TAX } from "@/lib/billing/tax-identity"
+
+/** Re-export Canada tax identity for subscription/tax callers. */
+export const CANADA_SELLER_TAX = DESKULPT_CANADA_TAX
 
 export type CustomerKind = "business" | "consumer"
 

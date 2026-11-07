@@ -23,7 +23,7 @@ His approval is on the register. Live/feature flags stay **OFF** until Finance/L
 
 | Legal name | Role |
 | --- | --- |
-| **Deskulpt Inc** | Federal Canada; GST/HST registration **TBD accountant** |
+| **Deskulpt Inc** | Federal Canada; **GST/HST resolved** (checklist + CountryPack CA `taxRegistrationId`; tax adapter flags **OFF**) |
 | **Deskulpt Commerce India Pvt Ltd** | Indian subsidiary (planned) |
 | Indian CA / lawyers | **Not yet engaged** |
 
@@ -39,9 +39,20 @@ CA$3–5 / unit / mo + **0.5–1% of rent** capped **CA$15 / unit / mo** + **CA$
 
 **Cloudflare AI Gateway** + free **Workers AI** + **daily neuron limits**; **real PII blocked** until data-handling reviewed.
 
-### Country paths
+### Country paths (`/in` + `/ca`) — Aloke product decision (D13-related)
 
-`/in` + `/ca` CountryPack — sibling **Country path routing** owns implementation PR.
+| Rule | Spec |
+| --- | --- |
+| Hosts | `easyrental.space/in/` · `easyrental.space/ca/` |
+| New countries | **Config-only** via `CountryPack.pathSegment` (`/us`, `/br`, …) |
+| Root `/` | Picker or geo **suggest** — **never auto-redirect without consent** |
+| CA pack entity | **Deskulpt Inc** (federal Canada) · CAD · Stripe Tax/HST gated · Connect DIRECT+PAD **OFF** · ON lease templates |
+| IN pack entity | **Deskulpt Commerce India Pvt Ltd** · INR · tax matrix gated · Razorpay **OFF** · TG disclaimers |
+| AI (sitewide) | Cloudflare **AI Gateway** + **Workers AI** + daily **neuron limits**; **real PII blocked** (`realPiiAiConnectorsMedia` OFF) |
+| SEO | hreflang · per-country sitemaps/canonicals · 301 legacy → `/in`\|`/ca` |
+| Accounts | One country ISO each; fail-closed |
+| Owner PR | Country path routing (`cursor/country-path-in-ca-1de0`) |
+| Approvals | D11–D15 = Aloke **AwC**; live **flags OFF** — not fully approved |
 
 ---
 
@@ -77,9 +88,13 @@ Matterport/360 = paid add-on or BYO; media storage caps; real-PII media blocked 
 
 ---
 
+## GST/HST number — **resolved**
+
+Deskulpt Inc GST/HST from Aloke PRD checklist is wired into `lib/billing/tax-identity.ts`, Ontario application-fee HST lines, and monthly statement tax footer. Live Connect flags remain **OFF**.
+
 ## Still-open items (summary)
 
-See end-of-run LEGAL / FINANCE / TECH in [`cfo-review-applied-nov7.md`](./cfo-review-applied-nov7.md). Highlights: GST/HST # for Deskulpt Inc; engage IN counsel/CA; Razorpay in-principle; ON counsel+CPA before Connect live; Eng D07/D09 Rejects; Cloudflare AI data-handling review; dual-control production implementation.
+See end-of-run LEGAL / FINANCE / TECH in [`cfo-review-applied-nov7.md`](./cfo-review-applied-nov7.md). Highlights: **Deskulpt Inc GST/HST resolved** (pack config); engage IN counsel/CA; Razorpay in-principle; ON counsel+CPA before Connect live; Eng D07/D09 Rejects; Cloudflare AI data-handling review; dual-control production implementation.
 
 **Fully approved: 0.**
 

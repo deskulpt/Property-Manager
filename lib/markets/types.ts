@@ -14,6 +14,7 @@ export const CountryPackSchema = z.object({
   /**
    * Tax registration id for statements/invoices (e.g. CA GST/HST).
    * Optional — omit until registered. Live tax still gated by LEGAL_FEATURE_FLAGS.
+   * Source of truth for billing statement helpers — live tax still gated OFF.
    */
   taxRegistrationId: z.string().min(2).optional(),
   locale: z.string().min(2),
