@@ -4,6 +4,7 @@ import type { CountryPack } from "@/lib/markets/types"
 export const INDIA_PACK: CountryPack = {
   iso: "IN",
   name: "India",
+  legalEntity: "Deskulpt Commerce India Pvt Ltd",
   locale: "en-IN",
   currency: "INR",
   minorExponent: 2,
@@ -52,6 +53,9 @@ export const INDIA_PACK: CountryPack = {
 export const CANADA_PACK: CountryPack = {
   iso: "CA",
   name: "Canada",
+  legalEntity: "Deskulpt Inc",
+  // Same source as #47 CountryPack — PRD checklist Entities row (Aloke).
+  taxRegistrationId: "739660629RT0001",
   locale: "en-CA",
   currency: "CAD",
   minorExponent: 2,

@@ -43,9 +43,15 @@ import {
 import {
   ONTARIO_CONNECT_FEATURE,
   ONTARIO_PRICING_CONFIG,
+  ontarioMonthlyStatementTaxFooter,
   quoteOntarioApplicationFee,
   useSeparateInvoicePath,
 } from "@/lib/billing/ontario-connect"
+import {
+  DESKULPT_CANADA_TAX,
+  landlordStatementTaxBlock,
+} from "@/lib/billing/tax-identity"
+import { CANADA_PACK } from "@/lib/markets/packs"
 import { quoteLandlordSurcharge } from "@/lib/billing/surcharge"
 import { quoteSubscriptionTax } from "@/lib/billing/tax"
 import { PLAN_LIMITS } from "@/lib/plans"
@@ -321,5 +327,23 @@ describe("D11 BM — Stripe subscriptions; no Route; surcharge separate", () => 
     expect(D11_DOCUMENTED.ontario.financeStatus).toBe("approve_with_changes")
     expect(ALOKE_INDIAN_ENTITY_DECISION.plannedForm).toBe("in_pvt_ltd_subsidiary")
     expect(ALOKE_INDIAN_ENTITY_DECISION.incorporatingDoesNotEqualRouteEligibility).toBe(true)
+    expect(DESKULPT_CANADA_TAX.gstHstNumberResolved).toBe(true)
+    expect(DESKULPT_CANADA_TAX.source).toBe("canada_pack.taxRegistrationId")
+    expect(ALOKE_ENTITY_NAMES.canadaGstHstNumberResolved).toBe(true)
+    expect(ONTARIO_CONNECT_FEATURE.gstHstNumberSource).toBe(
+      "canada_pack.taxRegistrationId",
+    )
+    expect(ONTARIO_CONNECT_FEATURE.enabled).toBe(false)
+    expect(CANADA_PACK.taxRegistrationId).toBeTruthy()
+    expect(fee.gstHstNumber).toBe(CANADA_PACK.taxRegistrationId)
+    expect(DESKULPT_CANADA_TAX.gstHstNumber).toBe(CANADA_PACK.taxRegistrationId)
+    expect(fee.sellerLegalName).toBe(CANADA_PACK.legalEntity)
+    const footer = ontarioMonthlyStatementTaxFooter({
+      applicationFeeExclusiveCadCents: fee.applicationFeeExclusiveCadCents,
+    })
+    expect(footer.gstHstNumber).toBe(CANADA_PACK.taxRegistrationId)
+    expect(
+      landlordStatementTaxBlock({ applicationFeeExclusiveCadCents: 100_00 }).hstCadCents,
+    ).toBe(13_00)
   })
 })

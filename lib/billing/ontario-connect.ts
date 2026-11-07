@@ -1,13 +1,13 @@
 /**
  * Finance D11 (Ontario) AwC + Legal AwC — **design/test only, not live**.
- * NOT Aloke-approved. Feature flag OFF.
+ * Aloke Approve with advisors' changes — not fully approved. Feature flag OFF.
  *
  * Finance model:
  * - Stripe Connect DIRECT on landlord connected account (not destination/separate)
  * - Rent by PAD (optional never mandatory — Legal)
  * - Deskulpt revenue = application fee only
  * - Legal: Connect app fee does NOT calculate HST — **compute/remit ourselves** (13%)
- * - Monthly landlord statement with Deskulpt GST/HST number
+ * - Monthly landlord statement with Deskulpt GST/HST number (from tax-identity / PRD)
  * - No fees to tenants; tenant card convenience fee **permanently OFF** (RTA s134)
  * - Reverse application fee if PAD disputed
  * - Separate invoice path for markets without Connect
@@ -16,6 +16,12 @@
  * Before live (Legal): funds-flow diagram+contracts; Stripe use-case acceptance; ON counsel + CPA.
  * Stripe customer ≠ BoC payment-provider reg / FINTRAC MSB exemption — Deskulpt-specific assessment.
  */
+
+import {
+  DESKULPT_CANADA_GST_HST_NUMBER,
+  DESKULPT_CANADA_LEGAL_NAME,
+  landlordStatementTaxBlock,
+} from "@/lib/billing/tax-identity"
 
 export const ONTARIO_CONNECT_FEATURE = {
   enabled: false,
@@ -36,6 +42,11 @@ export const ONTARIO_CONNECT_FEATURE = {
   reverseFeeOnPadDispute: true,
   monthlyLandlordStatement: true,
   statementIncludesGstHstNumber: true,
+  /** From CANADA_PACK.taxRegistrationId via tax-identity — checklist resolved (#47 source) */
+  statementSellerLegalName: DESKULPT_CANADA_LEGAL_NAME,
+  statementGstHstNumber: DESKULPT_CANADA_GST_HST_NUMBER,
+  gstHstNumberResolved: true,
+  gstHstNumberSource: "canada_pack.taxRegistrationId" as const,
   quebecCardSurchargeProhibited: true,
   requiresExpressLandlordServiceDeductionAgreement: true,
   creditTenantFullRentPaid: true,
@@ -77,6 +88,9 @@ export type OntarioAppFeeQuote = {
   feesToTenant: false
   chargeType: "direct"
   hstComputedBy: "deskulpt"
+  sellerLegalName: typeof DESKULPT_CANADA_LEGAL_NAME
+  /** From CANADA_PACK.taxRegistrationId */
+  gstHstNumber: string
   labelledDemo: true
 }
 
@@ -97,16 +111,33 @@ export function quoteOntarioApplicationFee(input: {
   let feeEx = Math.round((rent * bps) / 10_000)
   const cap = ONTARIO_PRICING_CONFIG.paymentsFeeCapCadCentsPerUnitMo * units
   feeEx = Math.min(feeEx, cap)
-  const hst = Math.round((feeEx * ONTARIO_CONNECT_FEATURE.hstBps) / 10_000)
+  const tax = landlordStatementTaxBlock({
+    applicationFeeExclusiveCadCents: feeEx,
+    hstBps: ONTARIO_CONNECT_FEATURE.hstBps,
+  })
   return {
     rentCadCents: rent,
-    applicationFeeExclusiveCadCents: feeEx,
-    hstCadCents: hst,
-    applicationFeeInclusiveCadCents: feeEx + hst,
+    applicationFeeExclusiveCadCents: tax.applicationFeeExclusiveCadCents,
+    hstCadCents: tax.hstCadCents,
+    applicationFeeInclusiveCadCents: tax.applicationFeeInclusiveCadCents,
     feesToTenant: false,
     chargeType: "direct",
     hstComputedBy: "deskulpt",
+    sellerLegalName: tax.sellerLegalName,
+    gstHstNumber: tax.gstHstNumber,
     labelledDemo: true,
+  }
+}
+
+/** Monthly landlord statement tax footer (GST/HST # from CANADA_PACK). */
+export function ontarioMonthlyStatementTaxFooter(input: {
+  applicationFeeExclusiveCadCents: number
+}) {
+  return {
+    ...landlordStatementTaxBlock(input),
+    currency: "CAD" as const,
+    note: "Application fee HST computed/remitted by Deskulpt (Connect does not calc HST)",
+    labelledDemo: true as const,
   }
 }
 

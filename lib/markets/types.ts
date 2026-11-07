@@ -4,6 +4,13 @@ import { z } from "zod"
 export const CountryPackSchema = z.object({
   iso: z.string().length(2),
   name: z.string().min(2),
+  /** Operating legal entity for this pack (Aloke Nov7). */
+  legalEntity: z.string().min(2).optional(),
+  /**
+   * Tax registration id for statements/invoices (e.g. CA GST/HST).
+   * Source of truth for billing statement helpers — live tax still gated OFF.
+   */
+  taxRegistrationId: z.string().min(2).optional(),
   locale: z.string().min(2),
   currency: z.string().min(3).max(3),
   minorExponent: z.number().int().min(0).max(4),

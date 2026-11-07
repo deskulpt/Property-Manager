@@ -24,11 +24,14 @@ Aloke’s approval is **recorded**. These are **not** fully approved until advis
 
 ### Entities (Aloke)
 
-| Entity | Note |
-| --- | --- |
-| **Deskulpt Inc** | Federal Canada; **GST/HST number TBD accountant** |
-| **Deskulpt Commerce India Pvt Ltd** | Indian subsidiary (planned) |
-| Indian CA / lawyers | **Not yet engaged** |
+**GST/HST # checklist item: resolved** (sourced from this PRD; used in Ontario landlord statements + application-fee HST lines + `lib/billing/tax-identity.ts`). Flags stay OFF.
+
+
+| Entity                              | Note                                               |
+| ----------------------------------- | -------------------------------------------------- |
+| **Deskulpt Inc**                    | Federal Canada; 739660629RT0001 **GST/HST number** — **resolved**; wired into CountryPack CA `taxRegistrationId` (#47); `caStripeTaxHst` **OFF** |
+| **Deskulpt Commerce India Pvt Ltd** | Indian subsidiary (planned)                        |
+| Indian CA / lawyers                 | **Not yet engaged**                                |
 
 ### Ontario pricing (CFO hybrid — config, not final)
 
@@ -42,9 +45,16 @@ CA$3–5/unit/mo + 0.5–1% rent fee capped CA$15/unit/mo + CA$10/mo min on paym
 
 Cloudflare **AI Gateway** + free **Workers AI** + **daily neuron limits**; **real PII blocked** until data-handling reviewed. Flag `realPiiAiConnectorsMedia` OFF.
 
+### Country paths (Aloke · D13-related · flags OFF)
+
+`/in` + `/ca` via CountryPack; root picker never auto-redirects; config-only for `/us`/`/br`.  
+Pack entities: **Deskulpt Inc** (CA federal) · **Deskulpt Commerce India Pvt Ltd** (IN).  
+AI: Cloudflare AI Gateway + Workers AI + neuron limits; real PII blocked.  
+Implementation: **Country path routing** PR (`cursor/country-path-in-ca-1de0`).
+
 ### Still OFF (advisor conditions)
 
-`ontarioConnectDirectPad` · Route/deposits · tenant card convenience fee (permanent) · Quebec card surcharge · affiliate · real-PII AI/media · e-store/concierge until gates.
+`ontarioConnectDirectPad` · Route/deposits · tenant card convenience fee (permanent) · Quebec card surcharge · affiliate · real-PII AI/media · e-store/concierge · `inTaxMatrix` · `caStripeTaxHst` · `razorpayIndianEntity` until gates.
 
 ---
 
