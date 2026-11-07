@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Apply apex + www DNS for easyrental.space in the dedicated EasyRental CF account.
-# Dry-run by default. Never creates in-pay / ca-pay unless explicitly forced (still refused if flags OFF).
+# Canada-first origin. Dry-run by default.
+# Never creates ca-pay / in-pay while flags OFF. in-pay is PARKED (no build).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -20,10 +21,10 @@ Usage: $0 [--apply] [--with-mail] [--allow-reserved-pay-dns]
   Auth: CLOUDFLARE_API_TOKEN with Zone.DNS Edit on account ${ACCOUNT_ID}
 
 Env:
-  OCI_PUBLIC_IPV4   required for A record
-  OCI_PUBLIC_IPV6   optional for AAAA
-  EASYRENTAL_FLAG_IN_PAY  must be 0/empty to refuse in-pay
-  EASYRENTAL_FLAG_CA_PAY  must be 0/empty to refuse ca-pay
+  ORIGIN_PUBLIC_IPV4   required for A record (Canada origin; alias: OCI_PUBLIC_IPV4)
+  ORIGIN_PUBLIC_IPV6   optional for AAAA (alias: OCI_PUBLIC_IPV6)
+  EASYRENTAL_FLAG_CA_PAY  must be 0/empty to refuse ca-pay (stub focus, OFF)
+  EASYRENTAL_FLAG_IN_PAY  must be 0/empty to refuse in-pay (PARKED — no build)
 EOF
 }
 
@@ -41,13 +42,18 @@ need() { command -v "$1" >/dev/null || { echo "missing: $1" >&2; exit 1; }; }
 need jq
 need curl
 
-echo "== EasyRental CF DNS =="
+# Prefer Canada-first env names; accept legacy OCI_* aliases.
+ORIGIN_V4="${ORIGIN_PUBLIC_IPV4:-${OCI_PUBLIC_IPV4:-}}"
+ORIGIN_V6="${ORIGIN_PUBLIC_IPV6:-${OCI_PUBLIC_IPV6:-}}"
+
+echo "== EasyRental CF DNS (Canada-first) =="
 echo "account=${ACCOUNT_ID} zone=${ZONE_NAME}"
 echo "source=${DNS_JSON}"
 echo "dry_run=${DRY_RUN}"
+echo "india=PARKED (in-pay reserved, no build)"
 
-if [[ -z "${OCI_PUBLIC_IPV4:-}" ]]; then
-  echo "OCI_PUBLIC_IPV4 unset — cannot plan apex A record. Set it after Aloke provisions OCI." >&2
+if [[ -z "$ORIGIN_V4" ]]; then
+  echo "ORIGIN_PUBLIC_IPV4 unset — cannot plan apex A record. Set it after Aloke provisions Canada origin." >&2
   if [[ "$DRY_RUN" -eq 0 ]]; then
     exit 1
   fi
@@ -61,24 +67,24 @@ plan_record() {
   echo "PLAN ${type} ${name} -> ${content} proxied=${proxied}"
 }
 
-# Reserved names: always refuse unless both allow-flag AND compliance ON
 refuse_reserved() {
-  local name="$1" flag_val="$2" flag_name="$3"
+  local name="$1" flag_val="$2" flag_name="$3" note="$4"
   if [[ "$ALLOW_RESERVED_PAY_DNS" -eq 1 && "$flag_val" == "1" ]]; then
-    echo "WARN: reserved ${name} allowed by override + ${flag_name}=1 — still not auto-created by this script (separate service)." >&2
+    echo "WARN: reserved ${name} allowed by override + ${flag_name}=1 — still not auto-created by this script (${note})." >&2
     return 0
   fi
-  echo "SKIP reserved ${name} (${flag_name}=${flag_val}; create only when Admin toggle ON + dedicated service ready)"
+  echo "SKIP reserved ${name} (${flag_name}=${flag_val}; ${note})"
 }
 
-refuse_reserved "in-pay" "$IN_PAY_FLAG" "in-pay/EASYRENTAL_FLAG_IN_PAY"
-refuse_reserved "ca-pay" "$CA_PAY_FLAG" "ca-pay/EASYRENTAL_FLAG_CA_PAY"
+# ca-pay first (active stub focus); in-pay parked
+refuse_reserved "ca-pay" "$CA_PAY_FLAG" "ca-pay/EASYRENTAL_FLAG_CA_PAY" "Stripe Connect stub OFF — no DNS"
+refuse_reserved "in-pay" "$IN_PAY_FLAG" "in-pay/EASYRENTAL_FLAG_IN_PAY" "PARKED India — reserved only, no build"
 
-if [[ -n "${OCI_PUBLIC_IPV4:-}" ]]; then
-  plan_record "@" "A" "$OCI_PUBLIC_IPV4" "true"
+if [[ -n "$ORIGIN_V4" ]]; then
+  plan_record "@" "A" "$ORIGIN_V4" "true"
 fi
-if [[ -n "${OCI_PUBLIC_IPV6:-}" ]]; then
-  plan_record "@" "AAAA" "$OCI_PUBLIC_IPV6" "true"
+if [[ -n "$ORIGIN_V6" ]]; then
+  plan_record "@" "AAAA" "$ORIGIN_V6" "true"
 fi
 plan_record "www" "CNAME" "easyrental.space" "true"
 
@@ -90,7 +96,7 @@ else
 fi
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
-  echo "Dry-run only. Re-run with --apply CLOUDFLARE_API_TOKEN=… OCI_PUBLIC_IPV4=… after OCI exists."
+  echo "Dry-run only. Re-run with --apply CLOUDFLARE_API_TOKEN=… ORIGIN_PUBLIC_IPV4=… after Canada origin exists."
   exit 0
 fi
 
@@ -139,11 +145,11 @@ upsert() {
   fi
 }
 
-upsert "@" "A" "$OCI_PUBLIC_IPV4" true
-if [[ -n "${OCI_PUBLIC_IPV6:-}" ]]; then
-  upsert "@" "AAAA" "$OCI_PUBLIC_IPV6" true
+upsert "@" "A" "$ORIGIN_V4" true
+if [[ -n "$ORIGIN_V6" ]]; then
+  upsert "@" "AAAA" "$ORIGIN_V6" true
 fi
 upsert "www" "CNAME" "easyrental.space" true
 
 echo "Done. Verify: ./scripts/hosting/verify-health.sh https://easyrental.space"
-echo "Reserved in-pay/ca-pay were NOT created."
+echo "Reserved ca-pay/in-pay were NOT created. India remains PARKED."

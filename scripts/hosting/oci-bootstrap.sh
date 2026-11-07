@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Bootstrap Oracle Always Free India VM for Easy Rental Node/SQLite origin.
+# Bootstrap Oracle Always Free Canada VM for Easy Rental Node/SQLite origin.
+# Canada-first (ca-toronto-1). PARK India — do not use for ap-mumbai-1 launch.
 # Run on the VM after Aloke provisions it (SSH as ubuntu/opc with sudo).
 set -euo pipefail
 
@@ -37,8 +38,8 @@ PORT=43123
 DESKULPT_SECRET_KEY=REPLACE_ME_MIN_16_CHARS
 DESKULPT_DB_PATH=/data/deskulpt.sqlite
 DESKULPT_DEMO_SWITCHER=0
-EASYRENTAL_FLAG_IN_PAY=0
 EASYRENTAL_FLAG_CA_PAY=0
+EASYRENTAL_FLAG_IN_PAY=0
 BILLING_PROVIDER=demo
 EOF
   fi

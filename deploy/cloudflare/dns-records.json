@@ -1,5 +1,5 @@
 {
-  "$schema_comment": "Desired DNS for easyrental.space in dedicated EasyRental Cloudflare account. Zone currently has ZERO records until OCI IP is set.",
+  "$schema_comment": "Desired DNS for easyrental.space in dedicated EasyRental Cloudflare account. Zone ZERO until Canada origin IP is set. PARK India: in-pay reserved no-build.",
   "cloudflare": {
     "accountId": "b2c682e130b734a072424bbf92367668",
     "zone": "easyrental.space",
@@ -8,27 +8,34 @@
       "bella.ns.cloudflare.com",
       "keenan.ns.cloudflare.com"
     ],
-    "note": "Do NOT use the old DeSkulpt Cloudflare account."
+    "note": "Do NOT use the old DeSkulpt Cloudflare account. Canada-first origin."
+  },
+  "hostingDirection": {
+    "primary": "canada",
+    "india": "parked",
+    "caPayStub": "off",
+    "inPayBuild": false
   },
   "complianceFlags": {
-    "in-pay": false,
     "ca-pay": false,
-    "sourceOfTruth": "Admin compliance toggles (ER-47); reserved host-rail ids in-pay/ca-pay per merge-order + preferences"
+    "in-pay": false,
+    "ontarioConnectDirectPad": false,
+    "sourceOfTruth": "Admin compliance toggles (ER-47); ca-pay stub focus OFF; in-pay PARKED reserved only"
   },
   "records": {
-    "createAfterOci": [
+    "createAfterCanadaOrigin": [
       {
         "name": "@",
         "type": "A",
-        "content": "${OCI_PUBLIC_IPV4}",
+        "content": "${ORIGIN_PUBLIC_IPV4}",
         "proxied": true,
         "ttl": 1,
-        "comment": "Apex → Oracle Always Free India VM public IPv4"
+        "comment": "Apex → Canada origin public IPv4 (OCI Always Free ca-toronto-1 preferred)"
       },
       {
         "name": "@",
         "type": "AAAA",
-        "content": "${OCI_PUBLIC_IPV6}",
+        "content": "${ORIGIN_PUBLIC_IPV6}",
         "proxied": true,
         "ttl": 1,
         "optional": true,
@@ -45,20 +52,22 @@
     ],
     "reservedDoNotCreate": [
       {
-        "name": "in-pay",
-        "type": "CNAME",
-        "content": "RESERVED_INDIA_PAYMENT_ORIGIN",
-        "proxied": true,
-        "flag": "in-pay",
-        "comment": "India payment plane — India-resident data + 180-day IN security logs. Separate service. Do not create while in-pay=OFF."
-      },
-      {
         "name": "ca-pay",
         "type": "CNAME",
         "content": "RESERVED_CA_PAY_WORKER",
         "proxied": true,
         "flag": "ca-pay",
-        "comment": "CF Worker Stripe Connect + EU D1 ledger. Separate service. Do not create while ca-pay=OFF."
+        "build": "stub-off",
+        "comment": "CF Worker Stripe Connect + EU D1 ledger stub. Focus plane; do not create DNS while ca-pay=OFF."
+      },
+      {
+        "name": "in-pay",
+        "type": "CNAME",
+        "content": "RESERVED_INDIA_PAYMENT_ORIGIN",
+        "proxied": true,
+        "flag": "in-pay",
+        "build": "parked-no-build",
+        "comment": "PARK India — hostname reserved only. No DNS, no Worker/OCI India build while parked."
       }
     ],
     "mailWhenSendingEnabled": [

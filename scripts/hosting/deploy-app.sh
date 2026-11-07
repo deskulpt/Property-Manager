@@ -37,4 +37,4 @@ EOF
 
 echo "Deployed. Health: ./scripts/hosting/verify-health.sh http://${OCI_SSH#*@}:43123"
 echo "After DNS: ./scripts/hosting/verify-health.sh https://easyrental.space"
-echo "Flags in-pay/ca-pay remain OFF; no payment-plane DNS created."
+echo "ca-pay stub OFF; in-pay PARKED — no payment-plane DNS created."

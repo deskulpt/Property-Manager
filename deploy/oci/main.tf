@@ -1,7 +1,8 @@
-# Oracle Always Free — India VM stub for Easy Rental origin.
+# Oracle Always Free — Canada VM stub for Easy Rental origin (Canada-first).
 # Aloke creates/applies OCI later. Do not terraform apply without tenancy credentials.
 #
-# Suggested region: ap-mumbai-1 (BOM) for India data locality.
+# PARK India: do not use ap-mumbai-1 for this launch.
+# Suggested region: ca-toronto-1 (Canada Southeast).
 # Shape: VM.Standard.A1.Flex within Always Free quota, or available AMD micro.
 
 terraform {
@@ -20,7 +21,7 @@ variable "fingerprint" { type = string }
 variable "private_key_path" { type = string }
 variable "region" {
   type    = string
-  default = "ap-mumbai-1"
+  default = "ca-toronto-1"
 }
 variable "compartment_ocid" { type = string }
 variable "ssh_public_key" { type = string }
@@ -28,7 +29,7 @@ variable "availability_domain" { type = string }
 variable "subnet_ocid" { type = string }
 variable "ubuntu_image_ocid" {
   type        = string
-  description = "Canonical Ubuntu minimal image OCID for ap-mumbai-1"
+  description = "Canonical Ubuntu minimal image OCID for ca-toronto-1"
 }
 variable "assign_public_ip" {
   type    = bool
@@ -46,7 +47,7 @@ provider "oci" {
 resource "oci_core_instance" "easyrental" {
   availability_domain = var.availability_domain
   compartment_id      = var.compartment_ocid
-  display_name        = "easyrental-in-origin"
+  display_name        = "easyrental-ca-origin"
   shape               = "VM.Standard.A1.Flex"
 
   shape_config {
@@ -74,12 +75,12 @@ resource "oci_core_instance" "easyrental" {
   freeform_tags = {
     app     = "easyrental"
     plane   = "apex-origin"
-    market  = "IN"
+    market  = "CA"
     managed = "aloke-later"
   }
 }
 
 output "public_ip_hint" {
-  value       = "After apply, set OCI_PUBLIC_IPV4 to the instance public IP and run scripts/hosting/cloudflare-dns-apply.sh"
-  description = "DNS A record target for easyrental.space (proxied)"
+  value       = "After apply, set ORIGIN_PUBLIC_IPV4 (or OCI_PUBLIC_IPV4) to the instance public IP and run scripts/hosting/cloudflare-dns-apply.sh"
+  description = "DNS A record target for easyrental.space (proxied) — Canada origin"
 }

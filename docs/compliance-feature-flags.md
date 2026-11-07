@@ -4,8 +4,9 @@ Admin L0 console: `/console/compliance` (**Canada focus**; **India money parked*
 Contract: `lib/markets/compliance-contract.ts` + `lib/markets/legal-overrides.ts`  
 Catalog / sign-offs: `lib/markets/compliance-catalog.ts` (`INDIA_COMPLIANCE_PARKED`)  
 Enforcement (do not bypass): `lib/markets/enforce.ts` (#47)  
-**Hosting consumer:** Cloudflare + OCI launch pack (ER-48) — DNS / workers must not enable `in-pay` / `ca-pay` while flags stay OFF.  
-**Convention:** CountryPack / money keys use camelCase (`ontarioConnectDirectPad`, …). Reserved **host rails** use hostname labels `in-pay` / `ca-pay` (not CountryPack toggles).
+**Hosting consumer:** Cloudflare + Canada origin launch pack (ER-48)  
+**Direction:** **Canada-first**; **PARK India** (`in-pay` reserved, no build).  
+**Convention:** CountryPack / money keys use camelCase (`ontarioConnectDirectPad`, …). Reserved **host rails** use hostname labels `ca-pay` / `in-pay` (not CountryPack toggles).
 
 ## CountryPack LEGAL keys (meta override `legal.flag.{ISO}.{key}`)
 
@@ -48,12 +49,12 @@ Go-live blockers (always unchecked in `/console/compliance`): Ontario lawyer wri
 
 ## Host-rail payment planes (ER-48) — not CountryPack keys
 
-| Flag id | Env | Host | Default |
+| Flag id | Env | Host | Build / default |
 | --- | --- | --- | --- |
-| `in-pay` | `EASYRENTAL_FLAG_IN_PAY` | `in-pay.easyrental.space` | OFF (**India parked**) |
-| `ca-pay` | `EASYRENTAL_FLAG_CA_PAY` | `ca-pay.easyrental.space` | OFF (Canada focus) |
+| `ca-pay` | `EASYRENTAL_FLAG_CA_PAY` | `ca-pay.easyrental.space` | OFF — **stub focus** (Worker Stripe Connect + EU D1 unpublished); do not create DNS while OFF |
+| `in-pay` | `EASYRENTAL_FLAG_IN_PAY` | `in-pay.easyrental.space` | OFF — **PARKED, no build**; do not create DNS |
 
-Meta: `compliance.pay_plane.in-pay` / `compliance.pay_plane.ca-pay`. Console SoT; env is hosting mirror. DNS must not exist while OFF.
+Meta: `compliance.pay_plane.in-pay` / `compliance.pay_plane.ca-pay`. Console SoT; env is hosting mirror.
 
 If ER-47/48 renames an id, update this file + `deploy/cloudflare/dns-records.json` + hosting docs in the same wave.
 
