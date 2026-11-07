@@ -9,7 +9,7 @@ import {
   stripCountryPrefix,
 } from "@/lib/markets/path-segments"
 import { legalFlag, resolveLegalFlags } from "@/lib/markets/legal-flags"
-import { computeCountryTax } from "@/lib/markets/tax-adapters"
+import { computeCountryTax, taxRegistrationIdForIso } from "@/lib/markets/tax-adapters"
 import { paymentRailsForIso } from "@/lib/markets/payment-rails"
 import { aiPolicyForIso, assertAiPiiAllowed } from "@/lib/markets/ai-policy"
 import { assertAccountCountryMatch } from "@/lib/markets/account-country"
@@ -25,6 +25,15 @@ describe("country path packs (Aloke Nov7)", () => {
     expect(inPack.legalEntity).toBe("Deskulpt Commerce India Pvt Ltd")
     expect(caPack.legalEntity).toBe("Deskulpt Inc")
     expect(knownPathSegments().sort()).toEqual(["ca", "in"])
+  })
+
+  it("records Deskulpt Inc GST/HST registration on CA pack (adapter still OFF)", () => {
+    const caPack = CountryPackSchema.parse(CANADA_PACK)
+    expect(caPack.taxRegistrationId).toMatch(/^\d{9}RT\d{4}$/)
+    expect(taxRegistrationIdForIso("CA")).toBe(caPack.taxRegistrationId)
+    expect(taxRegistrationIdForIso("IN")).toBeNull()
+    expect(legalFlag("CA", "caStripeTaxHst")).toBe(false)
+    expect(caPack.taxAdapter.enabled).toBe(false)
   })
 
   it("maps path segments and strips prefixes", () => {

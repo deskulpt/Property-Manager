@@ -10,11 +10,25 @@ import type { CountryPack } from "@/lib/markets/types"
 export type TaxAdapterKind = "ca_stripe_tax_hst" | "in_gst_matrix" | "labels_only"
 
 export type TaxAdapterResult =
-  | { ok: true; kind: TaxAdapterKind; taxableMinor: number; taxMinor: number; label: string }
+  | {
+      ok: true
+      kind: TaxAdapterKind
+      taxableMinor: number
+      taxMinor: number
+      label: string
+      taxRegistrationId?: string
+    }
   | { ok: false; reason: string; kind: TaxAdapterKind }
 
 export function taxAdapterKindForPack(pack: CountryPack): TaxAdapterKind {
   return pack.taxAdapter?.kind ?? "labels_only"
+}
+
+/** Pack tax registration for landlord statements — available even while tax adapter flag is OFF. */
+export function taxRegistrationIdForIso(iso: string, pack?: CountryPack | null): string | null {
+  const resolved = pack ?? builtinPack(iso)
+  const id = resolved?.taxRegistrationId?.trim()
+  return id ? id : null
 }
 
 /**
@@ -47,6 +61,7 @@ export function computeCountryTax(input: {
       taxableMinor: input.taxableMinor,
       taxMinor,
       label: pack.taxLabels[0] ?? "HST",
+      taxRegistrationId: pack.taxRegistrationId,
     }
   }
   if (kind === "in_gst_matrix") {
@@ -64,6 +79,7 @@ export function computeCountryTax(input: {
       taxableMinor: input.taxableMinor,
       taxMinor,
       label: pack.taxLabels[0] ?? "GST",
+      taxRegistrationId: pack.taxRegistrationId,
     }
   }
   return { ok: false, reason: "No live tax adapter for pack", kind: "labels_only" }
