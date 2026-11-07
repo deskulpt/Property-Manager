@@ -47,6 +47,7 @@ export default async function ConsoleHomePage() {
     { href: "/console/referrals", title: "Refer & Earn", body: "Advance indications · demo INR rewards.", meta: `${indications.length} leads` },
     { href: "/console/ask-easy", title: "Ask Easy memory", body: "DPDP purge per landlord org.", meta: `${memoryTenants.reduce((n, t) => n + t.count, 0)} rows` },
     { href: "/console/flags", title: "Feature flags", body: "Durable ops toggles (meta-backed).", meta: `${flagsOn}/${listOpsFlags().length} on` },
+    { href: "/console/compliance", title: "Compliance", body: "Per-country LEGAL / money / pay-plane toggles + sign-offs.", meta: "defaults OFF" },
     { href: "/console/providers", title: "Service providers", body: "Verify trades + landlord approvals.", meta: `${kpi.providers} providers` },
     { href: "/console/pricing", title: "Pricing packages", body: "Basic / Growth / Pro entitlements.", meta: "per tenant" },
     { href: "/console/shops", title: "Shops catalog", body: "SKU enable across landlord tenants.", meta: money(kpi.shopGmvCents) },

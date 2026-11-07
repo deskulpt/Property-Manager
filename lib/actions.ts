@@ -534,6 +534,50 @@ export async function consoleSetOpsFlag(formData: FormData) {
   ])
 }
 
+export async function consoleRequestEnableComplianceFlag(formData: FormData) {
+  const session = await requireConsoleAdmin()
+  if (!session) return
+  const {
+    adminRequestEnableFlag,
+    ensureLegalFlagOverridesRegistered,
+  } = await import("@/lib/markets/legal-overrides")
+  ensureLegalFlagOverridesRegistered()
+  const iso = String(formData.get("iso") ?? "")
+  const key = String(formData.get("key") ?? "")
+  adminRequestEnableFlag({ iso, key, actorUserId: session.id })
+  refresh(["/console/compliance", "/console"])
+}
+
+export async function consoleApproveComplianceFlag(formData: FormData) {
+  const session = await requireConsoleAdmin()
+  if (!session) return
+  const { adminApproveEnableProposal } = await import("@/lib/markets/legal-overrides")
+  const proposalId = String(formData.get("proposalId") ?? "")
+  if (!proposalId) return
+  adminApproveEnableProposal({ proposalId, actorUserId: session.id })
+  refresh(["/console/compliance", "/console"])
+}
+
+export async function consoleRejectComplianceFlag(formData: FormData) {
+  const session = await requireConsoleAdmin()
+  if (!session) return
+  const { adminRejectEnableProposal } = await import("@/lib/markets/legal-overrides")
+  const proposalId = String(formData.get("proposalId") ?? "")
+  if (!proposalId) return
+  adminRejectEnableProposal({ proposalId, actorUserId: session.id })
+  refresh(["/console/compliance", "/console"])
+}
+
+export async function consoleDisableComplianceFlag(formData: FormData) {
+  const session = await requireConsoleAdmin()
+  if (!session) return
+  const { adminDisableFlag } = await import("@/lib/markets/legal-overrides")
+  const iso = String(formData.get("iso") ?? "")
+  const key = String(formData.get("key") ?? "")
+  adminDisableFlag({ iso, key, actorUserId: session.id })
+  refresh(["/console/compliance", "/console"])
+}
+
 export async function consolePromoteCountryPack(formData: FormData) {
   if (!(await requireConsoleAdmin())) return
   const iso = String(formData.get("iso") ?? "")
