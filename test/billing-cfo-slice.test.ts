@@ -34,10 +34,12 @@ import {
   ALOKE_AI_STACK,
   ALOKE_ENTITY_NAMES,
   ALOKE_INDIAN_ENTITY_DECISION,
+  BILLING_PERMANENT_OFF_FLAGS,
   D13_LEGAL_WORDING,
   LEGAL_CFO_RENT_RAIL_CONFLICT,
   LEGAL_FEATURE_FLAGS,
   ONTARIO_COMMISSION_LEGAL,
+  RESERVED_HOST_PAY_FLAGS,
   evaluateRouteDepositGates,
 } from "@/lib/billing/legal-flags"
 import {
@@ -290,10 +292,12 @@ describe("D11 BM — Stripe subscriptions; no Route; surcharge separate", () => 
   })
 
   it("Legal flags OFF; D13 wording; OPEN Legal↔CFO narrowed to CA Stripe UPI", () => {
-    expect(LEGAL_FEATURE_FLAGS.routeRentSplits).toBe(false)
-    expect(LEGAL_FEATURE_FLAGS.depositHoldsOnDeskulpt).toBe(false)
+    expect(LEGAL_FEATURE_FLAGS.routeHolds).toBe(false)
+    expect(LEGAL_FEATURE_FLAGS.depositHolds).toBe(false)
     expect(LEGAL_FEATURE_FLAGS.ontarioConnectDirectPad).toBe(false)
-    expect(LEGAL_FEATURE_FLAGS.affiliateLive).toBe(false)
+    expect(LEGAL_FEATURE_FLAGS.caStripeTaxHst).toBe(false)
+    expect(LEGAL_FEATURE_FLAGS.razorpayIndianEntity).toBe(false)
+    expect(LEGAL_FEATURE_FLAGS.affiliate).toBe(false)
     expect(LEGAL_FEATURE_FLAGS.realPiiAiConnectorsMedia).toBe(false)
     expect(D13_LEGAL_WORDING).toContain("Telangana and Ontario selected")
     expect(LEGAL_CFO_RENT_RAIL_CONFLICT.status).toBe("OPEN")
@@ -313,8 +317,11 @@ describe("D11 BM — Stripe subscriptions; no Route; surcharge separate", () => 
     expect(ONTARIO_CONNECT_FEATURE.alokeApproved).toBe(false)
     expect(ONTARIO_PRICING_CONFIG.amountsFinal).toBe(false)
     expect(LEGAL_FEATURE_FLAGS.ontarioConnectDirectPad).toBe(false)
-    expect(LEGAL_FEATURE_FLAGS.tenantCardConvenienceFee).toBe(false)
-    expect(LEGAL_FEATURE_FLAGS.quebecCardSurcharge).toBe(false)
+    expect(LEGAL_FEATURE_FLAGS.mandatoryTenantSurcharge).toBe(false)
+    expect(BILLING_PERMANENT_OFF_FLAGS.tenantCardConvenienceFee).toBe(false)
+    expect(BILLING_PERMANENT_OFF_FLAGS.quebecCardSurcharge).toBe(false)
+    expect(RESERVED_HOST_PAY_FLAGS["in-pay"]).toBe(false)
+    expect(RESERVED_HOST_PAY_FLAGS["ca-pay"]).toBe(false)
     expect(ONTARIO_COMMISSION_LEGAL.live).toBe(false)
     expect(ONTARIO_COMMISSION_LEGAL.padOptionalNeverMandatory).toBe(true)
     expect(useSeparateInvoicePath("ontario")).toBe(true)

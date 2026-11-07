@@ -11,6 +11,8 @@ export const CountryPackSchema = z.object({
    * Source of truth for billing statement helpers — live tax still gated OFF.
    */
   taxRegistrationId: z.string().min(2).optional(),
+  /** Per-country legal/product gates — omit or false = fail-closed OFF. Canonical keys match Admin compliance console. */
+  legalFeatureFlags: z.record(z.string(), z.boolean()).default({}),
   locale: z.string().min(2),
   currency: z.string().min(3).max(3),
   minorExponent: z.number().int().min(0).max(4),
