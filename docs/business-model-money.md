@@ -78,16 +78,18 @@ Sale window (code): **1 Dec 2026 → 31 Mar 2027 IST**, capped at **500** paying
 | Rule | Tip fact |
 | --- | --- |
 | Meter | **Units** in portfolio, mixed by segment |
-| Currency of record | Catalogue still INR paise; **tax via `lib/billing/tax.ts`** (customer location + B2B/B2C). Legacy `GST_BPS=1800` = India display helper only — **no blanket 18% GST**. Deskulpt Inc = Canadian. |
-| Volume | **Graduated** bands (1–5 0%, 6–20 15%, 21–50 25% on those units); sale/volume/affiliate **do not stack** |
-| Checkout UI | `/landlord/billing` · `components/billing/billing-desk.tsx` |
-| Providers | **Dodo = MoR**; **PayPal = processor only** (not interchangeable). IN → dodo/stripe/demo; non-IN → paypal processor. Live money fail-closed until `go-live-gate.ts`. |
-| Intl settlement | PayPal converts INR → **CAD/USD** via env FX (`lib/billing/fx.ts`) — processor path, **not** MoR |
-| Price lock | 12 months from join (`lockRatesFromQuote`) |
-| Annual | Prepay = **deferred revenue**, recognize monthly (stub on quote) |
+| Currency of record | Catalogue still INR paise for unit metre; **tax via Stripe Tax stub** (`lib/billing/tax.ts`). Deskulpt Inc = **Canadian**. Launch: **Ontario + Telangana** (TG gated). |
+| Volume | **Graduated** bands; sale/volume/affiliate **do not stack** |
+| Subscriptions | **Stripe** processor; Deskulpt files/remits tax via Stripe Tax (ON HST; IN RC + GSTIN) |
+| Rent | Landlord-owned **UPI / Razorpay** — Deskulpt **never touches rent**. **No Route / linked accounts / splits.** |
+| Surcharge | **% after rent settles** — separate Stripe invoice (card/mandate); not Route |
+| Deposits | **Not held** by Deskulpt — landlord or licensed escrow only |
+| Checkout UI | `/landlord/billing` · fail-closed until `go-live-gate.ts` |
+| Price lock | 12 months from join |
+| Annual | Prepay = deferred revenue, recognize monthly (stub) |
 | Cancel | One-click → Free (1 unit) |
 
-**Do not invent seeker SKUs.** Rent never through Deskulpt books. Affiliate documented inactive (D12). Matterport = add-on/BYO (D15 pending Aloke).
+**Do not invent seeker SKUs.** D11/D12/D13/D15 not Aloke-approved. Affiliate inactive. Matterport add-on/BYO.
 
 ### 4.2 Package ladder (entitlements) — D01/D02 reconciled
 

@@ -1,41 +1,32 @@
-# Advisor vs Aloke approval summary — 7 Nov 2026
+# Advisor vs Aloke approval summary — 7 Nov 2026 (BM + CFO Stripe update)
 
-**Purpose:** Flag every D0x where Aloke marked **Approve** but any required advisor is **Approve with changes** or **Reject**.  
-**Sources:** [`prd-unified-approval-checklist.md`](./prd-unified-approval-checklist.md) · [`prd-decisions-d01-d15.md`](./prd-decisions-d01-d15.md)  
-**Rule:** Fully approved only when Aloke + all required advisors signed. Aloke marks preserved; they do **not** alone equal full approval.  
-**Eng baseline:** GH `main` @ `5ca1b25` (checklist absent) — Eng verdicts conditional on checklist commit `16a549b9f53f0d3f749f8b3094e5a140ddc26665` on `cursor/cfo-review-pricing-tax-0ae5`.
+**Rule:** Fully approved only when Aloke + all required advisors signed. D11/D12/D13/D15 **not** Aloke-approved (BM answers ≠ Approve).  
+**Legal:** update pending — Legal statuses unchanged this pass.
 
 | ID | Aloke | Blocking advisor signal(s) | Fully approved? |
 | --- | --- | --- | --- |
 | D01 | Approve | Legal AwC · Finance AwC · Eng AwC | **No** |
 | D02 | Approve | Legal AwC · Finance AwC · Eng AwC | **No** |
-| D03 | Approve | Eng AwC (Legal Approve · Finance Approve) | **No** |
+| D03 | Approve | Eng AwC | **No** |
 | D04 | Approve | Legal AwC · Eng AwC | **No** |
 | D05 | Approve | Legal AwC · Finance AwC · Eng AwC | **No** |
 | D06 | Approve | Legal AwC · Finance AwC · Eng AwC | **No** |
 | D07 | Approve | **Eng Reject** · Legal AwC | **No** |
-| D08 | Approve | Eng AwC (Legal Approve · Finance Approve) | **No** |
-| D09 | Approve | **Eng Reject** · Legal AwC · Finance AwC | **No** |
+| D08 | Approve | Eng AwC | **No** |
+| D09 | Approve | **Eng Reject** · Legal AwC · **Finance Approve** (policy OK; Eng blocks) | **No** |
 | D14 | Approve | Legal AwC · Eng AwC | **No** |
 
-### Aloke not Approved (excluded from “Aloke Approved but advisors disagree” set; still open)
+### Gated (Aloke Pending — BM direction only)
 
-| ID | Aloke | Advisors | Note |
-| --- | --- | --- | --- |
-| D10 | Pending | All AwC | Go-live gate |
-| D11 | Pending | All AwC | MoR — only Aloke can approve |
-| D12 | Pending | All AwC | Affiliate inactive — only Aloke can approve |
-| D13 | Pending | **Legal Reject** · Finance/Eng AwC | Wording must become India demo only… |
-| D15 | Pending | All AwC | Matterport add-on — only Aloke can approve |
-
-### Reject blockers (must remediate before Aloke final)
-
-1. **D07 Eng Reject** — prod OAuth, tenant-bound tokens, revocation, cert matrix.  
-2. **D09 Eng Reject** — dual control + tamper-resistant audit (distinct approvers, request binding, expiry/replay/race). Security sibling: `lib/mcp/approvals.ts`.  
-3. **D13 Legal Reject** — replace live/launch wording with: “India demo only; production pending documented country/state/feature gates; Canada sales parked.”
+| ID | Finance | Note |
+| --- | --- | --- |
+| D10 | AwC | Stripe Tax go-live gate |
+| D11 | **AwC** (conditional: no Route; deposits not held) | Stripe + landlord Razorpay/UPI + surcharge invoice |
+| D12 | AwC | Affiliate inactive |
+| D13 | **AwC** (Ontario first; Telangana gated) | Legal Reject wording pending Legal update |
+| D15 | AwC | Matterport add-on |
 
 ### Counts
 
-- Aloke Approve but **not fully approved:** **D01–D09, D14** (10 items).  
-- Fully approved today: **0**.  
-- Advisor Reject open: **3** (D07 Eng, D09 Eng, D13 Legal).
+- Fully approved: **0**  
+- Finance Approve on D09 (override). Eng Reject still open on D07 + D09. Legal Reject on D13.

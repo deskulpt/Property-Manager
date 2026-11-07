@@ -1,36 +1,42 @@
 /**
- * Platform subscription tax adapter (CFO D01 — DEMO/STUB labelled).
+ * Platform subscription tax adapter (CFO D01 — DEMO/STUB).
  *
- * Deskulpt Inc is Canadian; no Indian entity.
- * Tax is driven by customer location + business vs consumer.
- * When MoR collects tax, this adapter steps aside.
+ * Deskulpt Inc is Canadian. Subscriptions via Stripe (processor).
+ * Tax path: **Stripe Tax** calculates; Deskulpt files/remits (not MoR-as-seller).
+ * - CA (Ontario launch): Stripe Tax HST
+ * - India B2B with GSTIN: reverse charge (platform does not collect IN GST)
+ * - India without GSTIN: blocked / entity+GST gate (Telangana gated)
  *
- * NOT live tax advice. India B2C OIDAR requires Indian GST registration (flagged dependency).
+ * NOT live tax advice. Stripe Tax live rates required at D10 go-live.
  */
 
 export type CustomerKind = "business" | "consumer"
 
-export type TaxCollector = "platform" | "mor" | "customer_reverse_charge" | "none"
+export type TaxCollector =
+  | "deskulpt_via_stripe_tax"
+  | "customer_reverse_charge"
+  | "none"
 
 export type TaxTreatment =
   | "in_b2b_reverse_charge"
-  | "in_b2c_oidar"
-  | "ca_gst_hst"
+  | "in_b2c_blocked_pending_entity"
+  | "ca_gst_hst_stripe_tax"
   | "zero_rated_export"
-  | "mor_collects"
   | "blocked_missing_registration"
   | "unknown"
 
 export type TaxCustomer = {
-  /** ISO 3166-1 alpha-2 */
   country: string
-  /** Subdivision: IN state / CA province code (e.g. ON, BC, MH) */
+  /** CA province / IN state — Ontario + Telangana are launch targets */
   region?: string | null
   kind: CustomerKind
-  /** India GSTIN or CA business number when business */
+  /** India GSTIN or CA BN */
   taxId?: string | null
-  /** When true, MoR (e.g. Dodo) collects tax — platform adapter yields */
-  morCollectsTax?: boolean
+  /**
+   * When true (default for Stripe subscription path), amounts are calculated
+   * as Stripe Tax would — Deskulpt remits. Not “MoR collects / step aside”.
+   */
+  stripeTaxEnabled?: boolean
 }
 
 export type TaxLine = {
@@ -38,42 +44,41 @@ export type TaxLine = {
   label: string
   rateBps: number
   amountMinor: number
+  calculatedBy: "stripe_tax_stub" | "reverse_charge" | "none"
 }
 
 export type TaxQuote = {
   treatment: TaxTreatment
   collector: TaxCollector
-  /** Exclusive taxable base (same minor units as input) */
   taxableMinor: number
   lines: TaxLine[]
   taxMinor: number
   totalInclusiveMinor: number
-  /** Human-readable blockers / dependencies (never silent) */
   dependencies: string[]
   labelledDemo: true
   notes: string[]
+  /** Launch market hint */
+  launchMarket: "ontario" | "telangana" | "other" | "unknown"
 }
 
-/** Canada GST/HST by province (demo rates — replace with live tables at go-live). */
 export const CA_GST_HST_BPS: Record<string, number> = {
-  AB: 500, // GST 5%
-  BC: 500, // GST 5% (+ PST separate; not modelled here)
+  AB: 500,
+  BC: 500,
   MB: 500,
-  NB: 1500, // HST 15%
+  NB: 1500,
   NL: 1500,
   NS: 1500,
   NT: 500,
   NU: 500,
-  ON: 1300, // HST 13%
+  ON: 1300, // HST 13% — Ontario launch
   PE: 1500,
-  QC: 500, // GST 5% (+ QST separate; not modelled here)
+  QC: 500,
   SK: 500,
   YT: 500,
 }
 
-export const IN_GST_BPS = 1800 // OIDAR display rate when platform may collect (demo)
+export const IN_GST_BPS = 1800
 
-/** Env flag: Indian GST registration present for OIDAR B2C. Default false. */
 export function hasIndianGstRegistration(): boolean {
   return process.env.TAX_IN_GST_REGISTERED === "1"
 }
@@ -91,9 +96,18 @@ export function hasBusinessTaxId(taxId: string | null | undefined): boolean {
   return Boolean(taxId && taxId.trim().length >= 5)
 }
 
+function launchMarketFor(country: string, region: string): TaxQuote["launchMarket"] {
+  if (country === "CA" && (region === "ON" || region === "")) return "ontario"
+  if (country === "IN" && (region === "TG" || region === "TS" || region === "TELANGANA")) {
+    return "telangana"
+  }
+  if (country === "CA" || country === "IN") return "other"
+  return "unknown"
+}
+
 /**
  * Resolve tax on a platform SaaS subtotal (exclusive minor units).
- * Pure function — no I/O. DEMO labelled always.
+ * Models Stripe Tax calculation + Deskulpt remittance (demo rates).
  */
 export function quoteSubscriptionTax(input: {
   exclusiveMinor: number
@@ -104,21 +118,11 @@ export function quoteSubscriptionTax(input: {
   const country = normalizeCountry(input.customer.country)
   const region = normalizeRegion(input.customer.region)
   const deps: string[] = []
-  const notes: string[] = ["DEMO/STUB tax adapter — not live rates until D10 go-live gate"]
-
-  if (input.customer.morCollectsTax) {
-    return {
-      treatment: "mor_collects",
-      collector: "mor",
-      taxableMinor,
-      lines: [],
-      taxMinor: 0,
-      totalInclusiveMinor: taxableMinor,
-      dependencies: [],
-      labelledDemo: true,
-      notes: [...notes, "MoR collects tax — Easy Rental tax adapter stepped aside"],
-    }
-  }
+  const notes: string[] = [
+    "DEMO/STUB — Stripe Tax path; Deskulpt remits; live Stripe Tax tables at D10",
+  ]
+  const launchMarket = launchMarketFor(country, region)
+  const stripeTax = input.customer.stripeTaxEnabled !== false
 
   if (!country) {
     return {
@@ -131,6 +135,7 @@ export function quoteSubscriptionTax(input: {
       dependencies: ["customer.country required for tax"],
       labelledDemo: true,
       notes,
+      launchMarket: "unknown",
     }
   }
 
@@ -138,7 +143,10 @@ export function quoteSubscriptionTax(input: {
   if (country === "IN") {
     const isBiz = input.customer.kind === "business" && hasBusinessTaxId(input.customer.taxId)
     if (isBiz) {
-      notes.push("India B2B reverse charge — platform does not collect Indian GST on SaaS")
+      notes.push("India B2B reverse charge with GSTIN — Stripe Tax / invoice line shows RC")
+      if (launchMarket === "telangana") {
+        deps.push("Telangana gated on entity + GST questions (Finance D13)")
+      }
       return {
         treatment: "in_b2b_reverse_charge",
         collector: "customer_reverse_charge",
@@ -146,17 +154,17 @@ export function quoteSubscriptionTax(input: {
         lines: [],
         taxMinor: 0,
         totalInclusiveMinor: taxableMinor,
-        dependencies: [],
+        dependencies: deps,
         labelledDemo: true,
         notes,
+        launchMarket,
       }
     }
 
-    // B2C / unregistered → OIDAR
+    deps.push(
+      "India without GSTIN / B2C: Telangana gated on entity+GST; Indian director option open (Aloke BM)",
+    )
     if (!hasIndianGstRegistration()) {
-      deps.push(
-        "India B2C OIDAR requires Indian GST registration (Deskulpt Inc has no Indian entity) — blocked for live money",
-      )
       return {
         treatment: "blocked_missing_registration",
         collector: "none",
@@ -166,49 +174,44 @@ export function quoteSubscriptionTax(input: {
         totalInclusiveMinor: taxableMinor,
         dependencies: deps,
         labelledDemo: true,
-        notes: [...notes, "Prefer MoR-as-seller (Dodo) for India until registration resolved"],
+        notes: [...notes, "Do not collect IN GST without entity/registration decision"],
+        launchMarket,
       }
     }
 
-    const taxMinor = Math.round((taxableMinor * IN_GST_BPS) / 10_000)
     return {
-      treatment: "in_b2c_oidar",
-      collector: "platform",
+      treatment: "in_b2c_blocked_pending_entity",
+      collector: "none",
       taxableMinor,
-      lines: [
-        {
-          code: "IN_GST_OIDAR",
-          label: "India GST (OIDAR demo 18%)",
-          rateBps: IN_GST_BPS,
-          amountMinor: taxMinor,
-        },
-      ],
-      taxMinor,
-      totalInclusiveMinor: taxableMinor + taxMinor,
+      lines: [],
+      taxMinor: 0,
+      totalInclusiveMinor: taxableMinor,
       dependencies: deps,
       labelledDemo: true,
-      notes: [...notes, "OIDAR path — confirm place-of-supply with India tax specialist (P0)"],
+      notes,
+      launchMarket,
     }
   }
 
-  // Canada
+  // Canada — Stripe Tax HST/GST stub (Ontario first)
   if (country === "CA") {
-    const bps = CA_GST_HST_BPS[region] ?? 500
-    const taxMinor = Math.round((taxableMinor * bps) / 10_000)
+    const bps = CA_GST_HST_BPS[region || "ON"] ?? 500
+    const taxMinor = stripeTax ? Math.round((taxableMinor * bps) / 10_000) : 0
     const label =
-      bps >= 1300 ? `GST/HST (${(bps / 100).toFixed(0)}%)` : `GST (${(bps / 100).toFixed(0)}%)`
-    if (!region) deps.push("CA province recommended for accurate HST; defaulted GST 5%")
-    notes.push("PST/QST not modelled in this stub — expand at go-live")
+      bps >= 1300 ? `HST via Stripe Tax (${(bps / 100).toFixed(0)}%)` : `GST via Stripe Tax (${(bps / 100).toFixed(0)}%)`
+    if (!region) deps.push("CA province recommended; defaulted Ontario HST for launch stub")
+    notes.push("Deskulpt files/remits; Stripe is processor not MoR")
     return {
-      treatment: "ca_gst_hst",
-      collector: "platform",
+      treatment: "ca_gst_hst_stripe_tax",
+      collector: "deskulpt_via_stripe_tax",
       taxableMinor,
       lines: [
         {
-          code: `CA_GST_HST_${region || "DEFAULT"}`,
+          code: `CA_STRIPE_TAX_${region || "ON"}`,
           label,
           rateBps: bps,
           amountMinor: taxMinor,
+          calculatedBy: "stripe_tax_stub",
         },
       ],
       taxMinor,
@@ -216,11 +219,11 @@ export function quoteSubscriptionTax(input: {
       dependencies: deps,
       labelledDemo: true,
       notes,
+      launchMarket,
     }
   }
 
-  // Other countries — treat as zero-rated export from CA seller (demo framing)
-  notes.push("Zero-rated export framing (demo) — confirm with counsel per market")
+  notes.push("Zero-rated export framing (demo) — confirm per market")
   return {
     treatment: "zero_rated_export",
     collector: "none",
@@ -231,5 +234,6 @@ export function quoteSubscriptionTax(input: {
     dependencies: deps,
     labelledDemo: true,
     notes,
+    launchMarket: "other",
   }
 }
