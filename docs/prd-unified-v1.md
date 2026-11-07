@@ -5,7 +5,7 @@ Date: 6 November 2026
 Product: Easy Rental / DeSkulpt Inc.  
 Repository: https://github.com/deskulpt/Property-Manager  
 Document owner: Product owner; engineering, security, finance and legal jointly approve their sections.  
-Status: **APPROVED** canonical specification (D01–D15 owner sign-off). Not an assertion that every requirement is implemented. See [`prd-decisions-d01-d15.md`](./prd-decisions-d01-d15.md).
+Status: **PARTIAL APPROVAL** — D01–D09 + D14 product/eng Approved; **D11/D12/D13/D15 NOT approved** (CFO tax billing review). See [`prd-decisions-d01-d15.md`](./prd-decisions-d01-d15.md). Not an assertion that requirements are implemented.
 
 ## 0. Document authority, evidence and corrections
 
@@ -574,7 +574,7 @@ Track product, automation, service, trust, business and AI metrics as specified 
 
 ## 19. Decisions requiring explicit owner approval
 
-**Resolved 6 Nov 2026** — see [`prd-decisions-d01-d15.md`](./prd-decisions-d01-d15.md) and [`prd-unified-approval-checklist.md`](./prd-unified-approval-checklist.md). Rows below remain the decision index; statuses are Approved.
+**Partial 7 Nov 2026** — see [`prd-decisions-d01-d15.md`](./prd-decisions-d01-d15.md) and [`prd-unified-approval-checklist.md`](./prd-unified-approval-checklist.md). D11/D12/D13/D15 await CFO tax billing review; do not treat as Approved.
 
 | ID | Decision |
 |---|---|
@@ -594,7 +594,7 @@ Track product, automation, service, trust, business and AI metrics as specified 
 | D14 | UI framework direction and design consistency; not conflated with security readiness |
 | D15 | Media requirements, rights and publication override policy per profile |
 
-D01–D15 are Approved. Implementation agents must follow the decisions register; do not invent live money, weaken never-auto, or claim untested host MCP support.
+Follow the checklist Approved? column. D11/D12/D13/D15 are NOT approved pending CFO. Do not invent live money, weaken never-auto, or claim untested host MCP support.
 
 ---
 
