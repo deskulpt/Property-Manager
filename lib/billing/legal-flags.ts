@@ -1,20 +1,26 @@
 /**
  * Legal / Aloke feature-flag defaults (DEMO).
- * Route splits + deposit holds: OFF until ALL gates pass.
- * Conditional Legal advisory only — not go-live auth.
+ * Conditional Legal advisory only — not licensed go-live auth.
  * D11/D12/D13/D15 are NOT Aloke-approved.
  */
 
 export const LEGAL_FEATURE_FLAGS = {
-  /** Route rent splits / linked accounts — OFF until entity + Razorpay acceptance + Legal */
+  /** IN Route rent splits — OFF until entity + Razorpay written approval + Legal */
   routeRentSplits: false,
   platformFundPooling: false,
-  /** Deposit holds on Deskulpt/IN entity books — OFF until same three gates */
+  /** Deposit holds — OFF until same gates / written approval */
   depositHoldsOnDeskulpt: false,
+  /**
+   * Tenant card convenience fee — **permanently OFF** (RTA s134; no safe harbour).
+   * Do not enable for Ontario residential.
+   */
+  tenantCardConvenienceFee: false,
+  /** Quebec card surcharges prohibited — keep OFF in QC */
+  quebecCardSurcharge: false,
   mandatoryTenantSurcharges: false,
   /**
-   * Ontario Stripe Connect DIRECT + PAD rent collection.
-   * Finance D11 AwC documented; Legal ON tenant-fee / provider-reg **pending** → OFF.
+   * Ontario Connect DIRECT + PAD — Legal AwC = **design/test only, not live**.
+   * Before live: funds-flow diagram+contracts; Stripe use-case acceptance; ON counsel + CPA.
    */
   ontarioConnectDirectPad: false,
   eStoreLive: false,
@@ -29,29 +35,29 @@ export function isLegalFeatureEnabled(flag: LegalFeatureFlag): boolean {
   return LEGAL_FEATURE_FLAGS[flag]
 }
 
-/** Canonical D13 Legal wording (AwC). */
+/** Permanently denied — not a gate that can turn on via env. */
+export const PERMANENTLY_OFF_FLAGS = [
+  "tenantCardConvenienceFee",
+  "quebecCardSurcharge",
+] as const satisfies ReadonlyArray<LegalFeatureFlag>
+
 export const D13_LEGAL_WORDING =
   "Telangana and Ontario selected; synthetic demos allowed; production gated by feature."
 
-/**
- * Aloke decision (owner direction — NOT Aloke Approve on D11/D13):
- * Indian entity will be registered for Razorpay.
- * Razorpay integration keyed to Indian-entity merchant account.
- * Stripe remains Deskulpt Canada subscriptions.
- */
 export const ALOKE_INDIAN_ENTITY_DECISION = {
   indianEntityWillRegister: true,
+  /** Legal: plan IN Pvt Ltd subsidiary */
+  plannedForm: "in_pvt_ltd_subsidiary" as const,
+  /** Razorpay written in-principle acceptance first — before relying on Route eligibility */
+  razorpayInPrincipleAcceptanceFirst: true,
   razorpayMerchantAccount: "indian_entity" as const,
   canadaSubscriptions: "stripe" as const,
-  /** Not an Aloke Approve of D11/D12/D13/D15 */
+  /** Incorporating ≠ Route eligibility */
+  incorporatingDoesNotEqualRouteEligibility: true,
   alokeApproveD11D12D13D15: false,
   labelledDemo: true as const,
 }
 
-/**
- * Gates before Route splits or deposit holds may turn ON.
- * All three required (Aloke + Legal).
- */
 export type RouteDepositGateId =
   | "indian_entity_exists"
   | "razorpay_written_acceptance"
@@ -70,9 +76,8 @@ function envFlag(name: string): boolean {
 }
 
 /**
- * Evaluate Route / deposit-hold readiness.
- * Defaults fail-closed. Ops may set IN_ENTITY_EXISTS=1, RAZORPAY_ACCEPTANCE=1, LEGAL_ROUTE_DEPOSIT_SIGNOFF=1
- * only after real evidence — never from demos.
+ * Route / deposit holds — OFF until entity + Razorpay **written approval** + Legal.
+ * Incorporating alone does not unlock Route.
  */
 export function evaluateRouteDepositGates(
   overrides?: Partial<Record<RouteDepositGateId, boolean>>,
@@ -84,8 +89,8 @@ export function evaluateRouteDepositGates(
     legal_signoff: overrides?.legal_signoff ?? envFlag("LEGAL_ROUTE_DEPOSIT_SIGNOFF"),
   }
   const labels: Record<RouteDepositGateId, string> = {
-    indian_entity_exists: "Indian entity registered and exists",
-    razorpay_written_acceptance: "Razorpay written acceptance on file",
+    indian_entity_exists: "IN Pvt Ltd subsidiary exists",
+    razorpay_written_acceptance: "Razorpay written in-principle / Route approval on file",
     legal_signoff: "Legal sign-off for Route/deposit holds",
   }
   const blockers = (Object.keys(gates) as RouteDepositGateId[])
@@ -94,8 +99,6 @@ export function evaluateRouteDepositGates(
   const all = blockers.length === 0
   return {
     gates,
-    // Even when gates pass, compile-time catalogue flags stay false until explicitly flipped in code review.
-    // Runtime allow only if gates pass AND catalogue flag would be enabled — catalogue remains false today.
     routeSplitsAllowed: (all && LEGAL_FEATURE_FLAGS.routeRentSplits) as false | true,
     depositHoldsAllowed: (all && LEGAL_FEATURE_FLAGS.depositHoldsOnDeskulpt) as false | true,
     blockers,
@@ -111,15 +114,37 @@ export function depositHoldsRuntimeAllowed(): boolean {
   return evaluateRouteDepositGates().depositHoldsAllowed === true
 }
 
-/**
- * OPEN Legal ↔ CFO on whether CA Stripe UPI could collect rent.
- * Aloke path for India: Indian-entity Razorpay (not CA Stripe UPI for IN rent).
- * Stripe remains Canada subscriptions. Conflict on CA rent rails still OPEN if Stripe UPI verified.
- */
+/** Legal Ontario commission — design/test only until live gates clear. */
+export const ONTARIO_COMMISSION_LEGAL = {
+  status: "approve_with_changes_design_test_only" as const,
+  live: false,
+  landlordPaidPercentRange: [100, 200] as const, // 1–2% in bps-of-100? store as 1-2 percent
+  landlordPaidPercentMin: 1,
+  landlordPaidPercentMax: 2,
+  requiresExpressLandlordServiceDeductionAgreement: true,
+  creditTenantFullRentPaid: true,
+  tenantCardConvenienceFee: "permanently_off_rta_s134" as const,
+  padOptionalNeverMandatory: true,
+  paymentsCanadaRuleH1: true,
+  stripeCustomerNotBocOrFintracExemptionAuto: true,
+  deskulptSpecificAssessmentBeforeLive: true,
+  connectAppFeeDoesNotCalcHst: true,
+  computeAndRemitHstOurselves: true,
+  quebecCardSurchargesProhibited: true,
+  beforeLive: [
+    "funds_flow_diagram_and_contracts",
+    "stripe_use_case_acceptance",
+    "ontario_counsel",
+    "cpa",
+  ] as const,
+  labelledDemo: true as const,
+}
+
 export const LEGAL_CFO_RENT_RAIL_CONFLICT = {
   status: "OPEN" as const,
   legalPosition: "Canadian Stripe may support UPI — needs verify with Stripe",
   cfoPosition: "Rent on landlord-owned Razorpay/UPI; Deskulpt never touches rent without gated Route",
-  alokeIndiaPath: "Register Indian entity; Razorpay keyed to Indian-entity merchant; Route/deposits flagged OFF until 3 gates",
+  alokeIndiaPath:
+    "Plan IN Pvt Ltd; Razorpay written in-principle first; Route/deposits OFF until written approval",
   codeFollows: "aloke_indian_entity_razorpay_design_flags_off" as const,
 }

@@ -59,6 +59,12 @@ Stripe Connect **DIRECT** + PAD; application fee only incl. 13% HST; no tenant f
 
 Owner direction (not Approve on D11–D15). Implementation owned by sibling **Country path routing** PR — billing/#45 cross-link only.
 
+## Legal Ontario commission + IN entity (conditional advisory)
+
+- ON commission Legal → **AwC design/test only, not live** (landlord 1–2% needs express agreement; credit tenant full rent; tenant card fee permanently OFF RTA s134; PAD optional/Rule H1; compute HST ourselves; QC no card surcharge; before live: funds-flow, Stripe acceptance, ON counsel+CPA).
+- IN: plan **Pvt Ltd subsidiary**; Razorpay written in-principle **first**; incorporating ≠ Route eligibility; Route/deposits OFF until written approval.
+- **Not Aloke-approved** D11–D15.
+
 ### LEGAL
 
 1. Re-review D13 Reject wording vs Aloke BM (Telangana + Ontario launch) — Legal update pending.  
