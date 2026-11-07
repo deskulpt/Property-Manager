@@ -20,6 +20,7 @@ const LINKS = [
   { href: "/console/esign", label: "eSign" },
   { href: "/console/ask-easy", label: "Ask Easy" },
   { href: "/console/flags", label: "Flags" },
+  { href: "/console/compliance", label: "Compliance", primary: true },
   { href: "/console/shops", label: "Shops" },
 ]
 
