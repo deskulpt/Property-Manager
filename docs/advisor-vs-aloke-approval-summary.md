@@ -1,19 +1,23 @@
-# Advisor vs Aloke — Legal Ontario + IN entity update
+# Advisor vs Aloke — Aloke Approve with advisors’ changes (7 Nov)
 
-**D11/D12/D13/D15 not Aloke-approved.**
+Aloke recorded **Approve with advisors' changes** on **D11, D12, D13, D15**. That is **not** full approval — advisor conditions/gates remain open; flags **OFF**.
 
-| ID | Aloke | Legal | Finance | Fully? |
-| --- | --- | --- | --- | --- |
-| D11 | Pending ◇ | **AwC — design/test only, not live** | AwC (Connect DIRECT+PAD) | **No** |
-| D12 | Pending ◇ | AwC | AwC | **No** |
-| D13 | Pending ◇ | AwC | AwC | **No** |
-| D15 | Pending ◇ | AwC | AwC | **No** |
-| D09 | Approve | AwC | **Approve** | **No** (Eng Reject) |
+| ID | Aloke | Blocking remaining | Fully? |
+| --- | --- | --- | --- |
+| D11 | Approve w/ advisors' changes | Legal design/test-only + before-live list; Finance hybrid pricing not final; Connect flag OFF | **No** |
+| D12 | Approve w/ advisors' changes | Affiliate OFF; Legal/Finance activation | **No** |
+| D13 | Approve w/ advisors' changes | Feature gates; Deskulpt Commerce India Pvt Ltd + Razorpay; IN counsel not engaged | **No** |
+| D15 | Approve w/ advisors' changes | Add-on/BYO; media/PII gates | **No** |
+| D07 | Approve | **Eng Reject** | **No** |
+| D09 | Approve | **Eng Reject** (Finance Approve on policy) | **No** |
+| D01–D06, D08, D14 | Approve | Various AwC | **No** |
+| D10 | Pending | AwC | **No** |
 
-### Cross-links
+### Entities / AI / pricing (Aloke)
 
-- `/in`+`/ca` CountryPack → sibling **Country path routing**  
-- IN Pvt Ltd + Razorpay in-principle first; Route/deposits OFF until written approval  
-- Tenant card convenience fee permanently OFF; Quebec card surcharge OFF  
+- Deskulpt Inc (federal CA) — GST/HST TBD accountant  
+- Deskulpt Commerce India Pvt Ltd — IN CA/lawyers not engaged  
+- Cloudflare AI Gateway + Workers AI + daily neuron limits; real PII blocked  
+- ON hybrid: CA$3–5/unit + 0.5–1% rent cap CA$15/unit + CA$10/mo min  
 
 Fully approved: **0**.

@@ -1,82 +1,87 @@
-# D01–D15 decisions register (PARTIAL — Legal Ontario + IN entity update)
+# D01–D15 decisions register (PARTIAL — Aloke Approve with advisors’ changes 7 Nov)
 
-**Status:** PARTIAL · **D11/D12/D13/D15 not Aloke-approved** · Finance D11 Ontario AwC · Legal Ontario commission → **AwC design/test only, not live** · Finance D09 Approve · Eng Rejects D07/D09  
+**Status:** PARTIAL · Aloke recorded **Approve with advisors' changes** on **D11, D12, D13, D15** · **Not fully approved** until advisor gates/flags met · Advisor gates remain **OFF** · Finance D09 Approve · Eng Rejects D07/D09  
 **PR:** [#45](https://cursor.com/codebase/deskulpt/Property-Manager/pull/45)  
-**Legal caveat:** conditional advisory only — **NOT** licensed legal sign-off or go-live auth.
+**Legal caveat:** conditional advisory only — not licensed go-live auth.
 
 ---
 
-## Aloke decision — country URL paths `/in` + `/ca` (owner direction)
+## Aloke 7 Nov — direct decisions
 
-**Not Aloke Approve of D11–D15.** Config via **CountryPack**.
+### D11 / D12 / D13 / D15 — Aloke status
 
-| Path | Pack |
+| ID | Aloke | Fully approved? |
+| --- | --- | --- |
+| D11 | **Approve with advisors' changes** | **No** |
+| D12 | **Approve with advisors' changes** | **No** |
+| D13 | **Approve with advisors' changes** | **No** |
+| D15 | **Approve with advisors' changes** | **No** |
+
+His approval is on the register. Live/feature flags stay **OFF** until Finance/Legal/Eng conditions are met.
+
+### Entities
+
+| Legal name | Role |
 | --- | --- |
-| `/in` | India CountryPack |
-| `/ca` | Canada CountryPack |
+| **Deskulpt Inc** | Federal Canada; GST/HST registration **TBD accountant** |
+| **Deskulpt Commerce India Pvt Ltd** | Indian subsidiary (planned) |
+| Indian CA / lawyers | **Not yet engaged** |
 
-**Implementation owner:** sibling **Country path routing** (separate PR). Billing/#45 cross-link only.
+### Ontario pricing (CFO hybrid — config, not final)
+
+CA$3–5 / unit / mo + **0.5–1% of rent** capped **CA$15 / unit / mo** + **CA$10 / mo min** on payments plans.
+
+### Refunds (CFO D09)
+
+2nd approver when refund **> CAD 500** or **> 1 month subscription**; every payout/deposit release = two people; **no self-approve**; **CAD 2,000 / day / approver**; books-exportable audit. Eng Reject still blocks production dual-control.
+
+### AI
+
+**Cloudflare AI Gateway** + free **Workers AI** + **daily neuron limits**; **real PII blocked** until data-handling reviewed.
+
+### Country paths
+
+`/in` + `/ca` CountryPack — sibling **Country path routing** owns implementation PR.
 
 ---
 
-## Aloke + Legal — Indian entity / Razorpay (owner direction — not Approve)
-
-| Item | Decision |
-| --- | --- |
-| Form | Plan **IN Pvt Ltd subsidiary** |
-| Razorpay | Written **in-principle acceptance first** |
-| Route / linked accounts | **OFF** until **written approval** — incorporating ≠ Route eligibility |
-| Deposits | **OFF** until written approval |
-| Canada SaaS | Stripe (Deskulpt Canada) |
-
----
-
-## D11 — **NOT Aloke-approved** ◇
+## D11 — Aloke Approve with advisors' changes ⚑ (not fully approved)
 
 | Approver | Status |
 | --- | --- |
-| Aloke | Pending |
-| Legal | **Approve with changes — design/test only, not live** |
-| Finance | Approve with changes (Ontario Connect DIRECT + PAD) |
-| Eng/Security | Approve with changes |
+| Aloke | **Approve with advisors' changes** |
+| Legal | AwC — design/test only, not live |
+| Finance | AwC — Connect DIRECT + PAD + hybrid pricing |
+| Eng/Security | AwC |
 
-### Finance Ontario model (unchanged intent)
-
-Stripe Connect **DIRECT** · PAD · application fee only · monthly statement w/ GST/HST # · no tenant fees · reverse fee on PAD dispute · separate invoice without Connect · pricing config-only.
-
-### Legal Ontario commission (AwC — design/test only)
-
-| Rule | Detail |
-| --- | --- |
-| Landlord-paid 1–2% | Needs **express landlord service/deduction agreement**; **credit tenant full rent paid** |
-| Tenant card convenience fee | **Permanently OFF** (RTA s134 — no safe harbour) |
-| PAD | **Optional, never mandatory**; Payments Canada **Rule H1** mandates + cancel rights |
-| Stripe customer | ≠ BoC payment-provider registration / FINTRAC MSB exemption — **Deskulpt-specific assessment before live** |
-| Connect app fee HST | Stripe **does not** calc HST — **compute/remit ourselves** |
-| Quebec | Card surcharges **prohibited** |
-| Before live | Funds-flow diagram + contracts; Stripe use-case acceptance; **ON counsel + CPA** |
-
-Feature flag `ontarioConnectDirectPad` = **OFF** (not live).
-
-Code: `lib/billing/ontario-connect.ts` · `ONTARIO_COMMISSION_LEGAL` in `legal-flags.ts`.
+**Gates still OFF:** `ontarioConnectDirectPad`; tenant card fee permanent OFF; before-live Legal list (funds-flow, Stripe acceptance, ON counsel + CPA); HST compute ourselves.
 
 ---
 
-## D12 / D13 / D15 — **NOT Aloke-approved**
+## D12 — Aloke Approve with advisors' changes ⚑ (not fully approved)
 
-D13 Legal wording: “Telangana and Ontario selected; synthetic demos allowed; production gated by feature.”
-
----
-
-## D09 Finance Approve (unchanged)
-
-Eng Reject stands.
+Affiliate documented; **flag OFF** until Legal/Finance activation pack (disclosure, clawbacks, tax).
 
 ---
 
-## Fully approved
+## D13 — Aloke Approve with advisors' changes ⚑ (not fully approved)
 
-**0.**
+Legal wording: “Telangana and Ontario selected; synthetic demos allowed; production gated by feature.”  
+Entity: **Deskulpt Commerce India Pvt Ltd**; Razorpay in-principle first; Route/deposits OFF until written approval; Indian CA/lawyers **not yet engaged**.
+
+---
+
+## D15 — Aloke Approve with advisors' changes ⚑ (not fully approved)
+
+Matterport/360 = paid add-on or BYO; media storage caps; real-PII media blocked until DPA/retention.
+
+---
+
+## Still-open items (summary)
+
+See end-of-run LEGAL / FINANCE / TECH in [`cfo-review-applied-nov7.md`](./cfo-review-applied-nov7.md). Highlights: GST/HST # for Deskulpt Inc; engage IN counsel/CA; Razorpay in-principle; ON counsel+CPA before Connect live; Eng D07/D09 Rejects; Cloudflare AI data-handling review; dual-control production implementation.
+
+**Fully approved: 0.**
 
 ---
 

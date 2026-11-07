@@ -55,6 +55,8 @@ export const D11_DOCUMENTED = {
   stripeIsProcessor: true,
   deskulptRemitsTaxViaStripeTax: true,
   indianEntityWillRegister: true,
+  indianLegalName: "Deskulpt Commerce India Pvt Ltd" as const,
+  canadaLegalName: "Deskulpt Inc" as const,
   razorpayMerchantAccount: "indian_entity" as const,
   razorpayRoute: false,
   razorpayRouteGate:

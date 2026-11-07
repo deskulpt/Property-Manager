@@ -31,6 +31,8 @@ import {
 } from "@/lib/billing/pricing"
 import { resolvePrimaryProviderName } from "@/lib/billing/routing"
 import {
+  ALOKE_AI_STACK,
+  ALOKE_ENTITY_NAMES,
   ALOKE_INDIAN_ENTITY_DECISION,
   D13_LEGAL_WORDING,
   LEGAL_CFO_RENT_RAIL_CONFLICT,
@@ -249,7 +251,11 @@ describe("D11 BM — Stripe subscriptions; no Route; surcharge separate", () => 
     expect(D11_DOCUMENTED.alokeApproved).toBe(false)
     expect(D11_DOCUMENTED.indianEntityWillRegister).toBe(true)
     expect(D11_DOCUMENTED.razorpayMerchantAccount).toBe("indian_entity")
-    expect(ALOKE_INDIAN_ENTITY_DECISION.alokeApproveD11D12D13D15).toBe(false)
+    expect(ALOKE_INDIAN_ENTITY_DECISION.fullyApprovedD11D12D13D15).toBe(false)
+    expect(ALOKE_INDIAN_ENTITY_DECISION.alokeApproveWithAdvisorsChanges.D11).toBe(true)
+    expect(ALOKE_ENTITY_NAMES.india).toBe("Deskulpt Commerce India Pvt Ltd")
+    expect(ALOKE_ENTITY_NAMES.indianCaLawyersEngaged).toBe(false)
+    expect(ALOKE_AI_STACK.realPiiBlockedUntilDataHandlingReview).toBe(true)
     const gated = evaluateRouteDepositGates()
     expect(gated.routeSplitsAllowed).toBe(false)
     expect(gated.blockers.length).toBe(3)
