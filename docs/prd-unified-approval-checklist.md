@@ -1,41 +1,69 @@
 # Unified PRD v1.1 — Multi-approver checklist (D01–D15)
 
 **PR:** [#45](https://cursor.com/codebase/deskulpt/Property-Manager/pull/45) · **Decisions:** [`prd-decisions-d01-d15.md`](./prd-decisions-d01-d15.md) · **Summary:** [`advisor-vs-aloke-approval-summary.md`](./advisor-vs-aloke-approval-summary.md)  
-**Date:** 7 Nov 2026 (Legal Ontario commission + IN entity)
+**Date:** 7 Nov 2026 (Aloke Approve with advisors’ changes on D11/D12/D13/D15)
 
-### Hard rules
+### Approver rules
 
-- **D11 / D12 / D13 / D15 not Aloke-approved.**
+- **Aloke** = product owner + final approver on all D01–D15.
+- Per-approver: `Pending` | `Approve` | `Approve with changes` | `Approve with advisors' changes` | `Reject` | `N/A`.
+- **Fully approved** only when Aloke has signed **and** all required advisor conditions/gates are met (flags may stay OFF until then).
 - Legal = conditional advisory only — not licensed go-live auth.
-- Fully approved: **0**.
+- **Advisor gates/flags remain OFF** as conditions (Connect live, Route, deposits, tenant card fee, real-PII AI, affiliate, etc.).
 
-### Legal — Ontario commission (AwC = design/test only, **not live**)
+### Aloke 7 Nov — D11 / D12 / D13 / D15
 
-- Landlord-paid 1–2%: express service/deduction agreement; credit tenant full rent  
-- Tenant card convenience fee: **permanently OFF** (RTA s134)  
-- PAD optional never mandatory; Rule H1  
-- Stripe customer ≠ BoC/FINTRAC auto-exemption — Deskulpt assessment before live  
-- Compute/remit HST ourselves (Connect app fee doesn’t)  
-- Quebec: no card surcharges  
-- Before live: funds-flow + contracts; Stripe acceptance; ON counsel + CPA  
-- Flag `ontarioConnectDirectPad` **OFF**
+| ID | Aloke status | Fully approved? |
+| --- | --- | --- |
+| D11 | **Approve with advisors' changes** | **No** — Finance/Legal/Eng conditions + flags OFF |
+| D12 | **Approve with advisors' changes** | **No** — affiliate inactive / Legal–Finance gates |
+| D13 | **Approve with advisors' changes** | **No** — production feature-gated; entity/GST/counsel |
+| D15 | **Approve with advisors' changes** | **No** — Matterport add-on/BYO; media/PII gates |
 
-### Legal — Indian entity
+Aloke’s approval is **recorded**. These are **not** fully approved until advisor conditions are satisfied.
 
-- Plan **IN Pvt Ltd subsidiary**; Razorpay **written in-principle first**  
-- Incorporating ≠ Route eligibility — Route/linked accounts + deposits **OFF** until written approval  
+### Entities (Aloke)
 
-### Aloke `/in` + `/ca`
+| Entity | Note |
+| --- | --- |
+| **Deskulpt Inc** | Federal Canada; **GST/HST number TBD accountant** |
+| **Deskulpt Commerce India Pvt Ltd** | Indian subsidiary (planned) |
+| Indian CA / lawyers | **Not yet engaged** |
 
-CountryPack paths — sibling **Country path routing** owns PR.
+### Ontario pricing (CFO hybrid — config, not final)
+
+CA$3–5/unit/mo + 0.5–1% rent fee capped CA$15/unit/mo + CA$10/mo min on payments plans.
+
+### Refunds (CFO D09 — Finance Approve; Eng Reject open)
+
+2nd approver if refund >CAD500 or >1 mo sub; 2-person payout/deposit release; no self-approve; CAD2k/day/approver; audit log. Flag/production dual-control still Eng-blocked.
+
+### AI (Aloke + prior Legal/Eng)
+
+Cloudflare **AI Gateway** + free **Workers AI** + **daily neuron limits**; **real PII blocked** until data-handling reviewed. Flag `realPiiAiConnectorsMedia` OFF.
+
+### Still OFF (advisor conditions)
+
+`ontarioConnectDirectPad` · Route/deposits · tenant card convenience fee (permanent) · Quebec card surcharge · affiliate · real-PII AI/media · e-store/concierge until gates.
 
 ---
 
 | ID | Aloke | Legal | Finance | Eng | Fully? | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| D09 | Approve ⚑✖ | AwC | **Approve** | **Reject** | **No** | |
-| D11 | Pending ◇ | **AwC design/test only** | AwC | AwC | **No** | **Not Aloke-approved.** ON Connect DIRECT+PAD; live blocked |
-| D12 | Pending ◇ | AwC | AwC | AwC | **No** | **Not Aloke-approved** |
-| D13 | Pending ◇ | AwC | AwC | AwC | **No** | **Not Aloke-approved** |
-| D15 | Pending ◇ | AwC | AwC | AwC | **No** | **Not Aloke-approved** |
-| D01–D08, D10, D14 | prior | prior | prior | D07 Reject | **No** | |
+| D01 | Approve ⚑ | AwC | AwC | AwC | **No** | |
+| D02 | Approve ⚑ | AwC | AwC | AwC | **No** | AI Gateway / Workers AI / neuron limits; real PII blocked |
+| D03 | Approve ⚑ | Approve | Approve | AwC | **No** | |
+| D04 | Approve ⚑ | AwC | N/A | AwC | **No** | |
+| D05 | Approve ⚑ | AwC | AwC | AwC | **No** | |
+| D06 | Approve ⚑ | AwC | AwC | AwC | **No** | + Cloudflare AI path; real PII blocked |
+| D07 | Approve ⚑✖ | AwC | Approve | **Reject** | **No** | |
+| D08 | Approve ⚑ | Approve | Approve | AwC | **No** | |
+| D09 | Approve ⚑✖ | AwC | **Approve** | **Reject** | **No** | CFO refund dual-control policy recorded |
+| D10 | Pending | AwC | AwC | AwC | **No** | |
+| D11 | **Approve w/ advisors' changes** ⚑ | AwC design/test | AwC | AwC | **No** | Connect DIRECT+PAD; live flags OFF |
+| D12 | **Approve w/ advisors' changes** ⚑ | AwC | AwC | AwC | **No** | Affiliate OFF |
+| D13 | **Approve w/ advisors' changes** ⚑ | AwC | AwC | AwC | **No** | TG+ON; production feature-gated; Deskulpt Commerce India Pvt Ltd |
+| D14 | Approve ⚑ | AwC | N/A | AwC | **No** | |
+| D15 | **Approve w/ advisors' changes** ⚑ | AwC | AwC | AwC | **No** | Matterport add-on/BYO; media caps |
+
+**Fully approved today: 0.**

@@ -65,6 +65,16 @@ Owner direction (not Approve on D11–D15). Implementation owned by sibling **Co
 - IN: plan **Pvt Ltd subsidiary**; Razorpay written in-principle **first**; incorporating ≠ Route eligibility; Route/deposits OFF until written approval.
 - **Not Aloke-approved** D11–D15.
 
+## Aloke 7 Nov — Approve with advisors' changes (D11/D12/D13/D15)
+
+Aloke status recorded on D11, D12, D13, D15 as **Approve with advisors' changes**. **Not fully approved** — advisor gates/flags stay **OFF**.
+
+Also recorded: ON hybrid pricing; D09 refund dual-control; Cloudflare AI Gateway + Workers AI + daily neuron limits (real PII blocked); **Deskulpt Inc** (federal CA, GST/HST TBD); **Deskulpt Commerce India Pvt Ltd**; Indian CA/lawyers **not yet engaged**.
+
+### Still open (short)
+
+- Eng Rejects D07 / D09 · Connect live before-live Legal list · Razorpay in-principle · IN counsel/CA engage · Deskulpt Inc GST/HST # · AI data-handling review · affiliate activation · Matterport commercial SKU
+
 ### LEGAL
 
 1. Re-review D13 Reject wording vs Aloke BM (Telangana + Ontario launch) — Legal update pending.  

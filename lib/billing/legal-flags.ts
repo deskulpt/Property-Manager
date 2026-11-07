@@ -44,17 +44,41 @@ export const PERMANENTLY_OFF_FLAGS = [
 export const D13_LEGAL_WORDING =
   "Telangana and Ontario selected; synthetic demos allowed; production gated by feature."
 
+export const ALOKE_ENTITY_NAMES = {
+  canada: "Deskulpt Inc" as const,
+  canadaJurisdiction: "federal_canada" as const,
+  /** GST/HST number TBD accountant */
+  canadaGstHstNumber: null as string | null,
+  india: "Deskulpt Commerce India Pvt Ltd" as const,
+  indianCaLawyersEngaged: false,
+} as const
+
 export const ALOKE_INDIAN_ENTITY_DECISION = {
   indianEntityWillRegister: true,
-  /** Legal: plan IN Pvt Ltd subsidiary */
   plannedForm: "in_pvt_ltd_subsidiary" as const,
-  /** Razorpay written in-principle acceptance first — before relying on Route eligibility */
+  legalName: "Deskulpt Commerce India Pvt Ltd" as const,
   razorpayInPrincipleAcceptanceFirst: true,
   razorpayMerchantAccount: "indian_entity" as const,
   canadaSubscriptions: "stripe" as const,
-  /** Incorporating ≠ Route eligibility */
+  canadaLegalName: "Deskulpt Inc" as const,
   incorporatingDoesNotEqualRouteEligibility: true,
-  alokeApproveD11D12D13D15: false,
+  /** Aloke recorded Approve with advisors' changes — not fully approved; gates OFF */
+  alokeApproveWithAdvisorsChanges: {
+    D11: true,
+    D12: true,
+    D13: true,
+    D15: true,
+  } as const,
+  fullyApprovedD11D12D13D15: false,
+  labelledDemo: true as const,
+}
+
+/** Aloke AI path — real PII still blocked until data-handling review. */
+export const ALOKE_AI_STACK = {
+  gateway: "cloudflare_ai_gateway" as const,
+  inference: "workers_ai_free" as const,
+  dailyNeuronLimits: true,
+  realPiiBlockedUntilDataHandlingReview: true,
   labelledDemo: true as const,
 }
 
