@@ -1,13 +1,12 @@
 /**
  * Subscription / rent / surcharge commerce model (D11 — NOT Aloke-approved).
  *
- * Aloke decision (owner direction):
- * - Indian entity **will be registered** for Razorpay.
- * - Razorpay integration design keyed to **Indian-entity merchant account**.
- * - Stripe remains Deskulpt **Canada** subscriptions.
- * - Route splits + deposit holds: behind flags, OFF until entity + Razorpay acceptance + Legal sign-off.
+ * Aloke Canada-first (Nov7):
+ * - Prefer **Canada Stripe Connect hosted checkout** completeness.
+ * - **PARK India money** — Route / Razorpay / in-pay flags OFF for now (forever until unparked).
+ * - Stripe remains Deskulpt **Canada** subscriptions + Connect DIRECT+PAD (flag OFF until Legal).
  *
- * CFO: no live Route until gates; deposits not held until gates; surcharge = separate Stripe invoice.
+ * CFO: no live Route; deposits not held; surcharge = separate Stripe invoice.
  */
 
 import {
@@ -59,15 +58,16 @@ export const D11_DOCUMENTED = {
   canadaLegalName: "Deskulpt Inc" as const,
   razorpayMerchantAccount: "indian_entity" as const,
   razorpayRoute: false,
-  razorpayRouteGate:
-    "OFF until indian_entity_exists + razorpay_written_acceptance + legal_signoff" as const,
+  indiaMoneyParked: true as const,
+  razorpayRouteGate: "PARKED — India money plane OFF for now" as const,
   depositsHeldByDeskulpt: false,
-  depositHoldGate: "OFF until same three gates" as const,
+  depositHoldGate: "PARKED with India money plane" as const,
   /** Ontario Finance AwC — flag OFF until Legal tenant-fee/provider-reg */
   ontario: {
     financeStatus: "approve_with_changes" as const,
     connectChargeType: "direct" as const,
     rentMethod: "pad" as const,
+    hostedCheckout: "stripe_connect_hosted" as const,
     deskulptRevenue: "application_fee_only_incl_hst" as const,
     feesToTenants: false,
     reverseFeeOnPadDispute: true,
@@ -76,7 +76,8 @@ export const D11_DOCUMENTED = {
     featureFlagEnabled: false,
     legalTenantFeeProviderReg: "pending" as const,
   },
-  rentRailsDefault: ["landlord_upi", "landlord_razorpay"] as const,
+  /** CA-first rent rail; India UPI/Razorpay parked */
+  rentRailsDefault: ["landlord_stripe_connect_pad"] as const,
   /** Separate invoice path for markets without Connect (and ON while flag OFF) */
   surchargeSeparateStripeInvoice: true,
   commissionsEnabled: false,

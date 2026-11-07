@@ -7,20 +7,31 @@ import type {
 } from "@/lib/billing/types"
 
 /**
- * Stripe adapter stub — swap via BILLING_PROVIDER=stripe.
+ * Stripe adapter stub — Deskulpt Inc Canada subscriptions (+ Stripe Tax).
+ * Rent / Connect DIRECT hosted checkout: see `ca-connect-checkout.ts` (flag OFF).
  * Test mode only; no live Stripe SDK dependency in this slice.
  */
 export const stripeBillingProvider: PlatformBillingProvider = {
   name: "stripe",
   async createCheckoutSession(input: CheckoutSessionInput): Promise<CheckoutSessionResult> {
     const externalSessionId = `cs_test_${input.clientReferenceId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 24)}`
-    const url = `/landlord/billing/confirm?session=${encodeURIComponent(externalSessionId)}&ref=${encodeURIComponent(input.clientReferenceId)}&provider=stripe`
+    const country = (input.billingCountry ?? "CA").toUpperCase()
+    const url = `/landlord/billing/confirm?session=${encodeURIComponent(externalSessionId)}&ref=${encodeURIComponent(input.clientReferenceId)}&provider=stripe&country=${encodeURIComponent(country)}`
+    const cad =
+      country === "CA"
+        ? {
+            settlementCurrency: "CAD" as const,
+            settlementAmountMinor: input.quote.totalInclusivePaise,
+            settlementLabel: "Deskulpt Inc CA · Stripe Tax HST (demo)",
+          }
+        : {}
     return {
       ok: true,
       provider: "stripe",
       url,
       externalSessionId,
       labelledTestMode: true,
+      ...cad,
     }
   },
 

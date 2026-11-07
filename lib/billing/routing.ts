@@ -22,11 +22,10 @@ export function isIndiaBillingCountry(country: string | null | undefined): boole
 }
 
 /**
- * Subscription checkout routing (Aloke BM + CFO 7 Nov):
+ * Subscription checkout routing (Aloke Canada-first):
  * - Default processor: **Stripe** (+ Stripe Tax). Deskulpt remits.
- * - PayPal remains available as alternate processor — never MoR.
- * - Dodo left as legacy stub — not subscription path.
- * - Rent is NOT routed here — landlord UPI/Razorpay only; no Route/splits.
+ * - India money plane PARKED — do not special-case Razorpay/Route here.
+ * - Rent Connect DIRECT+PAD is separate (`ca-connect-checkout`), flag OFF.
  * Override: BILLING_FORCE_PROVIDER=… for ops / tests.
  */
 export function resolveProviderNameForPayer(
@@ -35,7 +34,7 @@ export function resolveProviderNameForPayer(
   const force = process.env.BILLING_FORCE_PROVIDER?.trim()
   if (force) return parseBillingProviderName(force)
 
-  // Single subscription processor path — Stripe for CA and IN SaaS
+  // Canada-first subscription processor — Stripe (India SaaS MoR path parked)
   return parseBillingProviderName(process.env.BILLING_PROVIDER, "stripe")
 }
 

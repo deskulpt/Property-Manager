@@ -114,3 +114,9 @@ Aloke added Deskulpt Inc GST/HST # to PRD checklist. Billing helpers on #45 read
 ## Build behind toggles (Aloke)
 
 Do not block on advisor optionals. Money/compliance flags use canonical names shared with Admin compliance console (`LEGAL_FEATURE_FLAG_KEYS`) and stay **OFF**. Reserved `in-pay` / `ca-pay` OFF. Merge order when green: [#46](https://cursor.com/codebase/deskulpt/Property-Manager/pull/46) → [#47](https://cursor.com/codebase/deskulpt/Property-Manager/pull/47) → [#45](https://cursor.com/codebase/deskulpt/Property-Manager/pull/45) — see [`merge-order-45-46-47.md`](./merge-order-45-46-47.md).
+
+## Canada-first — India money PARKED
+
+Aloke: prefer **Canada Stripe Connect hosted checkout** completeness on #45. India pay-plane (Route / Razorpay / `in-pay` / OCI India) is **PARKED** — flags stay OFF for now. Live CA Connect still gated by `ontarioConnectDirectPad` (OFF) until Legal.
+
+Code: `lib/billing/ca-connect-checkout.ts` builds Stripe-hosted Checkout Session body (DIRECT + `application_fee_amount` incl. HST + ACSS PAD) + demo hosted URL; no live charges.
