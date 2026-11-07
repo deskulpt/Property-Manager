@@ -20,7 +20,7 @@ export default async function ConfirmBillingPage({
       <PageHeader
         kicker={params.provider ?? "checkout"}
         title="Confirm test payment"
-        lede="This step stands in for hosted Dodo / Stripe / PayPal (sandbox) checkout while keys are unset."
+        lede="Stand-in for Stripe-hosted Checkout (Deskulpt Inc CA subscriptions). Ontario rent Connect DIRECT+PAD uses /landlord/billing/connect-checkout — flag OFF. India money parked."
       />
       {session && ref ? (
         <ConfirmCheckoutForm session={session} refId={ref} />

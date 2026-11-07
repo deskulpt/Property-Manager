@@ -31,7 +31,7 @@ export async function startCheckoutAction(formData: FormData): Promise<void> {
     ? "annual"
     : "monthly") as BillingCadence
   const mix = parseMix(formData)
-  const billingCountry = String(formData.get("billing_country") ?? "IN")
+  const billingCountry = String(formData.get("billing_country") ?? "CA")
   const result = await startBillingCheckout({
     tenantId: user.tenantId,
     email: user.email,

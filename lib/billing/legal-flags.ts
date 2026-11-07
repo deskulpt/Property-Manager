@@ -63,6 +63,33 @@ export const RESERVED_HOST_PAY_FLAGS = {
   "ca-pay": false,
 } as const
 
+/**
+ * India money plane — **PARKED** (Aloke Canada-first).
+ * Route / Razorpay / in-pay / IN tax matrix stay OFF for now; do not build against them on #45.
+ */
+export const INDIA_MONEY_PLANE = {
+  parked: true as const,
+  razorpayIndianEntity: false,
+  routeHolds: false,
+  depositHolds: false,
+  inTaxMatrix: false,
+  "in-pay": false,
+  note: "PARK India pay-plane; prefer Canada Stripe Connect hosted checkout completeness",
+} as const
+
+/** Forever-for-now: IN Route/Razorpay flags must not flip on while India money is parked. */
+export function assertIndiaMoneyParked(): void {
+  if (
+    LEGAL_FEATURE_FLAGS.razorpayIndianEntity ||
+    LEGAL_FEATURE_FLAGS.routeHolds ||
+    LEGAL_FEATURE_FLAGS.depositHolds ||
+    LEGAL_FEATURE_FLAGS.inTaxMatrix ||
+    RESERVED_HOST_PAY_FLAGS["in-pay"]
+  ) {
+    throw new Error("India money plane is PARKED — IN Route/Razorpay/in-pay flags must stay OFF")
+  }
+}
+
 export const D13_LEGAL_WORDING =
   "Telangana and Ontario selected; synthetic demos allowed; production gated by feature."
 

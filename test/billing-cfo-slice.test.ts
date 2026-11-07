@@ -36,12 +36,20 @@ import {
   ALOKE_INDIAN_ENTITY_DECISION,
   BILLING_PERMANENT_OFF_FLAGS,
   D13_LEGAL_WORDING,
+  INDIA_MONEY_PLANE,
   LEGAL_CFO_RENT_RAIL_CONFLICT,
   LEGAL_FEATURE_FLAGS,
   ONTARIO_COMMISSION_LEGAL,
   RESERVED_HOST_PAY_FLAGS,
+  assertIndiaMoneyParked,
   evaluateRouteDepositGates,
 } from "@/lib/billing/legal-flags"
+import {
+  CANADA_CONNECT_CHECKOUT,
+  INDIA_MONEY_PARKED,
+  buildCanadaConnectHostedCheckout,
+  planReverseApplicationFeeOnPadDispute,
+} from "@/lib/billing/ca-connect-checkout"
 import {
   ONTARIO_CONNECT_FEATURE,
   ONTARIO_PRICING_CONFIG,
@@ -352,5 +360,47 @@ describe("D11 BM — Stripe subscriptions; no Route; surcharge separate", () => 
     expect(
       landlordStatementTaxBlock({ applicationFeeExclusiveCadCents: 100_00 }).hstCadCents,
     ).toBe(13_00)
+  })
+
+  it("Canada Connect hosted checkout payload complete; live OFF; India money parked", () => {
+    expect(INDIA_MONEY_PARKED).toBe(true)
+    expect(INDIA_MONEY_PLANE.parked).toBe(true)
+    expect(() => assertIndiaMoneyParked()).not.toThrow()
+    expect(CANADA_CONNECT_CHECKOUT.uiMode).toBe("hosted")
+    expect(CANADA_CONNECT_CHECKOUT.chargeType).toBe("direct")
+    expect(D11_DOCUMENTED.indiaMoneyParked).toBe(true)
+    expect(D11_DOCUMENTED.ontario.hostedCheckout).toBe("stripe_connect_hosted")
+    expect(D11_DOCUMENTED.rentRailsDefault).toEqual(["landlord_stripe_connect_pad"])
+
+    const plan = buildCanadaConnectHostedCheckout({
+      connectedAccountId: "acct_test_landlord",
+      rentCadCents: 200_000,
+      paymentsFeeBps: 50,
+      customerEmail: "landlord@example.com",
+      successUrl: "https://example.test/ok",
+      cancelUrl: "https://example.test/cancel",
+      clientReferenceId: "sub_demo_1",
+    })
+    expect(plan.liveEnabled).toBe(false)
+    expect(plan.blockedReason).toMatch(/ontarioConnectDirectPad OFF/)
+    expect(plan.indiaMoneyParked).toBe(true)
+    expect(plan.stripeAccountHeader).toBe("acct_test_landlord")
+    expect(plan.stripeCheckoutSessionBody.mode).toBe("payment")
+    expect(plan.stripeCheckoutSessionBody.ui_mode).toBe("hosted")
+    expect(plan.stripeCheckoutSessionBody.currency).toBe("cad")
+    expect(plan.stripeCheckoutSessionBody.payment_method_types).toContain("acss_debit")
+    expect(plan.stripeCheckoutSessionBody.payment_intent_data.application_fee_amount).toBe(
+      plan.quote.applicationFeeInclusiveCadCents,
+    )
+    expect(plan.stripeCheckoutSessionBody.line_items[0]?.price_data.unit_amount).toBe(200_000)
+    expect(plan.demoHostedCheckoutUrl).toContain("/landlord/billing/connect-checkout")
+    expect(plan.gstHstNumber).toBe(CANADA_PACK.taxRegistrationId)
+
+    const rev = planReverseApplicationFeeOnPadDispute({
+      originalApplicationFeeInclusiveCadCents: plan.quote.applicationFeeInclusiveCadCents,
+      disputeId: "dp_test",
+    })
+    expect(rev.action).toBe("refund_application_fee")
+    expect(rev.amountCadCents).toBe(plan.quote.applicationFeeInclusiveCadCents)
   })
 })
