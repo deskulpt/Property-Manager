@@ -1,18 +1,19 @@
 /**
  * D10 go-live gate — fail-closed for live money (CFO + Legal + Eng).
- * Demo adapters remain until every check is true.
+ * Stripe + Stripe Tax path; no Razorpay Route; no Deskulpt-held deposits.
  */
 
 export type GoLiveCheckId =
   | "live_tax_rates"
-  | "signed_mor_contract"
+  | "signed_stripe_agreement"
   | "kyc_vendor_dpa"
   | "test_invoice_tax_lines"
+  | "no_route_splits_confirmed"
+  | "deposits_not_held_confirmed"
 
 export type GoLiveCheck = {
   id: GoLiveCheckId
   label: string
-  /** Explicit evidence flag — never inferred from demo success */
   satisfied: boolean
   evidenceNote: string
 }
@@ -29,23 +30,25 @@ function envFlag(name: string): boolean {
 }
 
 /**
- * Evaluate go-live readiness. Defaults all false (fail-closed).
- * Ops may flip TAX_LIVE_RATES=1, MOR_CONTRACT_SIGNED=1, KYC_DPA_SIGNED=1,
- * TEST_INVOICE_TAX_OK=1 only after real evidence — never from demo runs.
+ * Evaluate go-live readiness. Defaults fail-closed.
+ * Ops flags: TAX_LIVE_RATES, STRIPE_AGREEMENT_SIGNED, KYC_DPA_SIGNED,
+ * TEST_INVOICE_TAX_OK, NO_ROUTE_CONFIRMED, DEPOSITS_NOT_HELD_CONFIRMED.
  */
-export function evaluateGoLiveGate(overrides?: Partial<Record<GoLiveCheckId, boolean>>): GoLiveGateResult {
+export function evaluateGoLiveGate(
+  overrides?: Partial<Record<GoLiveCheckId, boolean>>,
+): GoLiveGateResult {
   const checks: GoLiveCheck[] = [
     {
       id: "live_tax_rates",
-      label: "Live tax rates loaded and verified",
+      label: "Live Stripe Tax rates verified (ON HST + IN RC)",
       satisfied: overrides?.live_tax_rates ?? envFlag("TAX_LIVE_RATES"),
-      evidenceNote: "India specialist + CA GST/HST tables; no blanket 18%",
+      evidenceNote: "Stripe Tax enabled; Ontario HST + India reverse-charge with GSTIN",
     },
     {
-      id: "signed_mor_contract",
-      label: "Signed MoR contract on file",
-      satisfied: overrides?.signed_mor_contract ?? envFlag("MOR_CONTRACT_SIGNED"),
-      evidenceNote: "Dodo (or chosen MoR) eligibility in writing — PayPal is not MoR",
+      id: "signed_stripe_agreement",
+      label: "Stripe agreement on file (processor; Deskulpt remits)",
+      satisfied: overrides?.signed_stripe_agreement ?? envFlag("STRIPE_AGREEMENT_SIGNED"),
+      evidenceNote: "Stripe = processor not MoR; Deskulpt files/remits tax",
     },
     {
       id: "kyc_vendor_dpa",
@@ -55,9 +58,21 @@ export function evaluateGoLiveGate(overrides?: Partial<Record<GoLiveCheckId, boo
     },
     {
       id: "test_invoice_tax_lines",
-      label: "Test invoice with correct tax lines",
+      label: "Test Stripe invoice with correct tax lines",
       satisfied: overrides?.test_invoice_tax_lines ?? envFlag("TEST_INVOICE_TAX_OK"),
-      evidenceNote: "Verified invoice: reverse charge / OIDAR / CA GST-HST lines correct",
+      evidenceNote: "HST / reverse-charge lines correct on test invoice",
+    },
+    {
+      id: "no_route_splits_confirmed",
+      label: "No Razorpay Route / linked accounts / splits",
+      satisfied: overrides?.no_route_splits_confirmed ?? envFlag("NO_ROUTE_CONFIRMED"),
+      evidenceNote: "CFO BLOCKER — landlords own UPI/Razorpay; surcharge is separate Stripe invoice",
+    },
+    {
+      id: "deposits_not_held_confirmed",
+      label: "Deskulpt does not hold deposits",
+      satisfied: overrides?.deposits_not_held_confirmed ?? envFlag("DEPOSITS_NOT_HELD_CONFIRMED"),
+      evidenceNote: "CFO REJECT — landlord or licensed escrow only",
     },
   ]
 
@@ -70,7 +85,6 @@ export function evaluateGoLiveGate(overrides?: Partial<Record<GoLiveCheckId, boo
   }
 }
 
-/** Hard block helper for checkout / webhook live paths. */
 export function assertLiveMoneyAllowed():
   | { ok: true }
   | { ok: false; blockers: string[] } {

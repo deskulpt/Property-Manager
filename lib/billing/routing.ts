@@ -4,17 +4,17 @@ const PROVIDERS: BillingProviderName[] = ["dodo", "stripe", "demo", "paypal"]
 
 export function parseBillingProviderName(
   raw: string | null | undefined,
-  fallback: BillingProviderName = "dodo",
+  fallback: BillingProviderName = "stripe",
 ): BillingProviderName {
   const name = (raw ?? "").trim().toLowerCase()
   return (PROVIDERS.includes(name as BillingProviderName) ? name : fallback) as BillingProviderName
 }
 
-/** ISO 3166-1 alpha-2; empty → IN (domestic default). */
+/** ISO 3166-1 alpha-2; empty → CA (Ontario launch default). */
 export function normalizeBillingCountry(raw: string | null | undefined): string {
   const c = (raw ?? "").trim().toUpperCase()
   if (/^[A-Z]{2}$/.test(c)) return c
-  return "IN"
+  return "CA"
 }
 
 export function isIndiaBillingCountry(country: string | null | undefined): boolean {
@@ -22,27 +22,24 @@ export function isIndiaBillingCountry(country: string | null | undefined): boole
 }
 
 /**
- * Route checkout (D11 — NOT Aloke-approved; roles are not interchangeable):
- * - Dodo = Merchant of Record (MoR). PayPal = payment processor only — never MoR.
- * - India (IN) → BILLING_PROVIDER (dodo / stripe / demo) — PayPal does not process domestic IN.
- * - Outside India → BILLING_INTL_PROVIDER (default paypal as processor).
- * - Rent never settles on Deskulpt platform books (see commerce-roles.ts).
+ * Subscription checkout routing (Aloke BM + CFO 7 Nov):
+ * - Default processor: **Stripe** (+ Stripe Tax). Deskulpt remits.
+ * - PayPal remains available as alternate processor — never MoR.
+ * - Dodo left as legacy stub — not subscription path.
+ * - Rent is NOT routed here — landlord UPI/Razorpay only; no Route/splits.
  * Override: BILLING_FORCE_PROVIDER=… for ops / tests.
- * Live money blocked until go-live-gate.ts passes.
  */
 export function resolveProviderNameForPayer(
-  billingCountry: string | null | undefined,
+  _billingCountry: string | null | undefined,
 ): BillingProviderName {
   const force = process.env.BILLING_FORCE_PROVIDER?.trim()
   if (force) return parseBillingProviderName(force)
 
-  if (isIndiaBillingCountry(billingCountry)) {
-    return parseBillingProviderName(process.env.BILLING_PROVIDER, "dodo")
-  }
-  return parseBillingProviderName(process.env.BILLING_INTL_PROVIDER, "paypal")
+  // Single subscription processor path — Stripe for CA and IN SaaS
+  return parseBillingProviderName(process.env.BILLING_PROVIDER, "stripe")
 }
 
-/** Primary / domestic provider (India path + default webhook fallback). */
+/** Primary subscription processor (Stripe). */
 export function resolvePrimaryProviderName(): BillingProviderName {
-  return parseBillingProviderName(process.env.BILLING_PROVIDER, "dodo")
+  return parseBillingProviderName(process.env.BILLING_PROVIDER, "stripe")
 }

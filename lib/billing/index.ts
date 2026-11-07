@@ -24,18 +24,18 @@ export function getBillingProviderByName(name: BillingProviderName): PlatformBil
 }
 
 /**
- * Primary MoR (India / default). Swap via BILLING_PROVIDER.
- * PayPal is never the primary for domestic IN — use resolveBillingProviderForPayer.
+ * Primary subscription processor — Stripe (Aloke BM + CFO).
+ * Deskulpt remits tax via Stripe Tax. Swap via BILLING_PROVIDER.
  */
 export function resolveBillingProvider(): PlatformBillingProvider {
   const name = resolvePrimaryProviderName()
-  if (name === "dodo" && !process.env.DODO_API_KEY?.trim() && process.env.BILLING_REQUIRE_KEYS === "1") {
+  if (name === "stripe" && !process.env.STRIPE_SECRET_KEY?.trim() && process.env.BILLING_REQUIRE_KEYS === "1") {
     return demoBillingProvider
   }
   return getBillingProviderByName(name)
 }
 
-/** Route by payer country: IN → primary; elsewhere → BILLING_INTL_PROVIDER (paypal). */
+/** Subscription checkout — Stripe default for all markets (rent is not routed here). */
 export function resolveBillingProviderForPayer(
   billingCountry: string | null | undefined,
 ): PlatformBillingProvider {
@@ -57,3 +57,4 @@ export * from "@/lib/billing/dual-control"
 export * from "@/lib/billing/go-live-gate"
 export * from "@/lib/billing/affiliate-terms"
 export * from "@/lib/billing/commerce-roles"
+export * from "@/lib/billing/surcharge"
