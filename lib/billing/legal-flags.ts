@@ -1,50 +1,67 @@
 /**
- * Legal / Aloke feature-flag defaults (DEMO).
- * Conditional Legal advisory only — not licensed go-live auth.
- * D11/D12/D13/D15 Aloke Approve with advisors' changes — not fully approved; gates OFF.
+ * Billing-side legal/money gates (DEMO).
+ * Canonical money flag **names** match Admin compliance console + CountryPack
+ * (`lib/markets/legal-flags.ts` / #47). Build behind toggles; do not block demos.
+ * D11–D15 Aloke AwC — not fully approved; live gates stay OFF.
  */
 
 import {
   DESKULPT_CANADA_GST_HST_NUMBER,
   DESKULPT_CANADA_LEGAL_NAME,
 } from "@/lib/billing/tax-identity"
+import {
+  LEGAL_FEATURE_FLAG_KEYS,
+  LEGAL_FEATURE_FLAGS_OFF,
+  legalFlag,
+  type LegalFeatureFlagKey,
+} from "@/lib/markets/legal-flags"
 
+/** Re-export canonical catalog for Admin console / billing callers. */
+export {
+  LEGAL_FEATURE_FLAG_KEYS,
+  LEGAL_FEATURE_FLAGS_OFF,
+  legalFlag,
+}
+export type { LegalFeatureFlagKey }
+
+/**
+ * Billing defaults — same keys/names as markets catalog, all fail-closed OFF.
+ * Prefer `legalFlag(iso, key)` for pack-aware checks; this object is the billing mirror.
+ */
 export const LEGAL_FEATURE_FLAGS = {
-  /** IN Route rent splits — OFF until entity + Razorpay written approval + Legal */
-  routeRentSplits: false,
-  platformFundPooling: false,
-  /** Deposit holds — OFF until same gates / written approval */
-  depositHoldsOnDeskulpt: false,
-  /**
-   * Tenant card convenience fee — **permanently OFF** (RTA s134; no safe harbour).
-   * Do not enable for Ontario residential.
-   */
-  tenantCardConvenienceFee: false,
-  /** Quebec card surcharges prohibited — keep OFF in QC */
-  quebecCardSurcharge: false,
-  mandatoryTenantSurcharges: false,
-  /**
-   * Ontario Connect DIRECT + PAD — Legal AwC = **design/test only, not live**.
-   * Before live: funds-flow diagram+contracts; Stripe use-case acceptance; ON counsel + CPA.
-   */
-  ontarioConnectDirectPad: false,
-  eStoreLive: false,
-  conciergeLive: false,
-  affiliateLive: false,
-  realPiiAiConnectorsMedia: false,
-} as const
+  ...LEGAL_FEATURE_FLAGS_OFF,
+} as const satisfies Record<LegalFeatureFlagKey, boolean>
 
-export type LegalFeatureFlag = keyof typeof LEGAL_FEATURE_FLAGS
+export type LegalFeatureFlag = LegalFeatureFlagKey
 
 export function isLegalFeatureEnabled(flag: LegalFeatureFlag): boolean {
-  return LEGAL_FEATURE_FLAGS[flag]
+  return LEGAL_FEATURE_FLAGS[flag] === true
 }
 
-/** Permanently denied — not a gate that can turn on via env. */
+/**
+ * Billing-only permanent locks (not in CountryPack catalog — never toggleable).
+ * Canada tenant card fee: RTA s134; Quebec card surcharge prohibited.
+ */
+export const BILLING_PERMANENT_OFF_FLAGS = {
+  tenantCardConvenienceFee: false,
+  quebecCardSurcharge: false,
+  platformFundPooling: false,
+} as const
+
+/** @deprecated use BILLING_PERMANENT_OFF_FLAGS */
 export const PERMANENTLY_OFF_FLAGS = [
   "tenantCardConvenienceFee",
   "quebecCardSurcharge",
-] as const satisfies ReadonlyArray<LegalFeatureFlag>
+] as const
+
+/**
+ * Reserved host pay rails (prefs) — OFF until Aloke/ops turn on.
+ * Names aligned for Admin compliance console (`in-pay` / `ca-pay`).
+ */
+export const RESERVED_HOST_PAY_FLAGS = {
+  "in-pay": false,
+  "ca-pay": false,
+} as const
 
 export const D13_LEGAL_WORDING =
   "Telangana and Ontario selected; synthetic demos allowed; production gated by feature."
@@ -107,7 +124,7 @@ function envFlag(name: string): boolean {
 
 /**
  * Route / deposit holds — OFF until entity + Razorpay **written approval** + Legal.
- * Incorporating alone does not unlock Route.
+ * Incorporating alone does not unlock Route. Uses canonical `routeHolds` / `depositHolds`.
  */
 export function evaluateRouteDepositGates(
   overrides?: Partial<Record<RouteDepositGateId, boolean>>,
@@ -129,8 +146,8 @@ export function evaluateRouteDepositGates(
   const all = blockers.length === 0
   return {
     gates,
-    routeSplitsAllowed: (all && LEGAL_FEATURE_FLAGS.routeRentSplits) as false | true,
-    depositHoldsAllowed: (all && LEGAL_FEATURE_FLAGS.depositHoldsOnDeskulpt) as false | true,
+    routeSplitsAllowed: (all && LEGAL_FEATURE_FLAGS.routeHolds) as false | true,
+    depositHoldsAllowed: (all && LEGAL_FEATURE_FLAGS.depositHolds) as false | true,
     blockers,
     labelledDemo: true,
   }
@@ -148,7 +165,7 @@ export function depositHoldsRuntimeAllowed(): boolean {
 export const ONTARIO_COMMISSION_LEGAL = {
   status: "approve_with_changes_design_test_only" as const,
   live: false,
-  landlordPaidPercentRange: [100, 200] as const, // 1–2% in bps-of-100? store as 1-2 percent
+  landlordPaidPercentRange: [100, 200] as const,
   landlordPaidPercentMin: 1,
   landlordPaidPercentMax: 2,
   requiresExpressLandlordServiceDeductionAgreement: true,

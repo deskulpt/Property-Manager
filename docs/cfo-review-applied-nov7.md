@@ -110,3 +110,7 @@ Aloke added Deskulpt Inc GST/HST # to PRD checklist. Billing helpers on #45 read
 ---
 
 *End CFO apply note.*
+
+## Build behind toggles (Aloke)
+
+Do not block on advisor optionals. Money/compliance flags use canonical names shared with Admin compliance console (`LEGAL_FEATURE_FLAG_KEYS`) and stay **OFF**. Reserved `in-pay` / `ca-pay` OFF. Merge order when green: [#46](https://cursor.com/codebase/deskulpt/Property-Manager/pull/46) → [#47](https://cursor.com/codebase/deskulpt/Property-Manager/pull/47) → [#45](https://cursor.com/codebase/deskulpt/Property-Manager/pull/45) — see [`merge-order-45-46-47.md`](./merge-order-45-46-47.md).
