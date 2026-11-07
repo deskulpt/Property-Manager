@@ -26,7 +26,13 @@ India money keys stay OFF while parked — enable/approve returns `india_parked`
 | `tgProductionLease` | IN | no |
 | `realPiiAiConnectorsMedia` | IN/CA | no |
 
-Hard-locked (not toggleable): **CA tenant card fee** (`caTenantCardFee`) — RTA s134.
+Hard-locked (not toggleable): **CA tenant card fee** (`caTenantCardFee`) — label `Disabled by product policy; Ontario residential legal risk`. Counsel review + code release to change.
+
+Money enables: second-admin approve · no self-approval · **24h expiry** · dual-admin alerts · single-admin **kill-switch OFF**.
+
+Audit CSV: `/api/console/compliance/audit` — UTF-8 · UTC · amount+currency+tax · hash + row count · date-range.
+
+Go-live blockers (always unchecked in `/console/compliance`): Ontario lawyer written review · Stripe money-flow + RPAA/FINTRAC · Listing rights · RTA and privacy controls demonstrated.
 
 ## Host-rail payment planes (ER-48) — not CountryPack keys
 
@@ -39,4 +45,4 @@ Meta: `compliance.pay_plane.in-pay` / `compliance.pay_plane.ca-pay`. Console SoT
 
 ## dataResidency
 
-Declarative pack notes only (`enforcedByStorage: false`) until storage pins regions. Console shows notes — not a green “enforced” badge.
+Demo declaration only. Console shows **target location** separately from **actual location: unverified**. `enforcedByStorage: false`. No compliant/verified badges.
