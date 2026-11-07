@@ -27,6 +27,12 @@ export function resetCountryPacksCache() {
 
 export function ensureCountryPacksSchema() {
   if (ensured && packDb) return
+  try {
+    const { ensureLegalFlagOverridesRegistered } = require("@/lib/markets/legal-overrides") as typeof import("@/lib/markets/legal-overrides")
+    ensureLegalFlagOverridesRegistered()
+  } catch {
+    /* overrides optional during early boot */
+  }
   const db = getDb()
   db.exec(`
     CREATE TABLE IF NOT EXISTS country_packs (

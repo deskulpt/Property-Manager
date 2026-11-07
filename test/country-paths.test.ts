@@ -77,15 +77,15 @@ describe("country path packs (Aloke Nov7)", () => {
     expect(assertAiPiiAllowed("CA").ok).toBe(false)
   })
 
-  it("binds accounts to one country (L0 may cross)", () => {
+  it("binds accounts to one country (L0/L1 no bypass — CTO)", () => {
     expect(
       assertAccountCountryMatch({ accountIso: "IN", requestIso: "CA", roleLevel: 2 }).ok,
     ).toBe(false)
     expect(
       assertAccountCountryMatch({ accountIso: "IN", requestIso: "CA", roleLevel: 0 }).ok,
-    ).toBe(true)
+    ).toBe(false)
     expect(
-      assertAccountCountryMatch({ accountIso: "CA", requestIso: "CA", roleLevel: 2 }).ok,
+      assertAccountCountryMatch({ accountIso: "CA", requestIso: "CA", roleLevel: 0 }).ok,
     ).toBe(true)
   })
 })

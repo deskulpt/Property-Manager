@@ -1,6 +1,7 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
 import { createEasyRentalMcpServer } from "@/lib/mcp/server"
 import { sessionFromRequestHeaders } from "@/lib/mcp/session"
+import { guardApiCountry } from "@/lib/markets/api-country-guard"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -11,6 +12,17 @@ export const runtime = "nodejs"
  */
 async function handle(req: Request): Promise<Response> {
   const session = sessionFromRequestHeaders(req.headers)
+  const guarded = await guardApiCountry({
+    session: session.user
+      ? {
+          countryIso: session.user.countryIso,
+          roleLevel: session.user.roleLevel,
+          tenantCountryIso: session.user.tenantCountryIso,
+          tenantId: session.user.tenantId,
+        }
+      : null,
+  })
+  if (!guarded.ok) return guarded.response
   const server = createEasyRentalMcpServer(session)
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,

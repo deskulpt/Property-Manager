@@ -41,6 +41,7 @@ export const INDIA_PACK: CountryPack = {
     region: "IN",
     notes:
       "Prefer India-region processing for Deskulpt Commerce India Pvt Ltd personal data when live; synthetic demo until privacy/security gates close. AI: Cloudflare AI Gateway + Workers AI + neuron limits; real PII blocked.",
+    enforcedByStorage: false,
   },
   leaseTemplates: [
     {
@@ -133,6 +134,7 @@ export const CANADA_PACK: CountryPack = {
     region: "CA",
     notes:
       "Prefer Canadian/North-America processing for Deskulpt Inc personal data when live; synthetic demo until privacy/security gates close. AI: Cloudflare AI Gateway + Workers AI + neuron limits; real PII blocked.",
+    enforcedByStorage: false,
   },
   leaseTemplates: [
     {

@@ -19,12 +19,14 @@ export const metadata = { title: "L0 command center" }
 
 export default async function ConsoleHomePage() {
   await requirePlatformAdmin()
+  const { requestCountryIso } = await import("@/lib/markets/request-country")
+  const countryIso = await requestCountryIso()
   const kpi = platformAnalytics()
-  const subs = listPlatformSubscriptions()
+  const subs = listPlatformSubscriptions(countryIso)
   const activeSubs = subs.filter((s) => ["active", "trialing", "past_due"].includes(s.status)).length
   const partners = listPartnerApplications().filter((a) => a.status !== "rejected" && a.status !== "active")
   const indications = listAllIndications()
-  const memoryTenants = listAskEasyMemoryStats()
+  const memoryTenants = listAskEasyMemoryStats(countryIso)
   const flagsOn = listOpsFlags().filter((f) => f.on).length
   const schema = countrySchemaSnapshot()
   const adapters = [

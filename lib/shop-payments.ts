@@ -1,10 +1,11 @@
 import "server-only"
+import { canUseRazorpayIndianEntity } from "@/lib/markets/payment-rails"
 
 /**
  * Shop checkout payment boundary (PRD §15.3).
  * demoShopPay: local success, no network.
- * razorpayShopPay: selected when landlord keys exist and demo mode is off —
- * still does not call Razorpay HTTP in this OSS slice (no live charges).
+ * razorpayShopPay: selected when landlord keys exist, demo mode off, AND
+ * razorpayIndianEntity LEGAL flag ON — still no Razorpay HTTP in this OSS slice.
  */
 export type ShopPayResult = {
   ok: true
@@ -66,8 +67,14 @@ export function resolveShopPaymentProvider(settings: {
   demoMode: boolean
   hasSecret: boolean
   keyId: string | null
+  /** Country ISO for LEGAL_FEATURE_FLAGS — defaults IN. */
+  countryIso?: string | null
 }): ShopPaymentProvider {
   if (settings.demoMode || !settings.hasSecret || !settings.keyId) {
+    return demoShopPay
+  }
+  // Live Razorpay stub path still requires Indian-entity LEGAL flag (fail-closed).
+  if (!canUseRazorpayIndianEntity(settings.countryIso ?? "IN")) {
     return demoShopPay
   }
   return razorpayShopPay

@@ -27,6 +27,8 @@ export type PlanTurnInput = {
   unitId?: string | null
   /** Prefer summarize_portfolio for first onboard turn. */
   onboard?: boolean
+  /** Country pack ISO — live model gated by realPiiAiConnectorsMedia. */
+  countryIso?: string | null
 }
 
 const ALL_TOOLS = new Set<AgentToolName>([
@@ -208,6 +210,10 @@ function parseLiveToolName(content: string): AgentToolName | null {
 }
 
 export async function planLiveTurn(input: PlanTurnInput): Promise<ModelPlan> {
+  const { assertLiveModelAllowed } = await import("@/lib/markets/enforce")
+  const aiGate = assertLiveModelAllowed(input.countryIso ?? "IN")
+  if (!aiGate.ok) throw new Error(aiGate.error)
+
   const apiKey =
     process.env.ASK_EASY_MODEL_API_KEY?.trim() ||
     process.env.GEMINI_API_KEY?.trim() ||
@@ -305,6 +311,15 @@ function mapAdkToAskEasy(
 
 export async function resolveModelPlan(input: PlanTurnInput): Promise<ModelPlan> {
   if (!liveModelConfigured()) return planStubTurn(input)
+  const { assertLiveModelAllowed } = await import("@/lib/markets/enforce")
+  const aiGate = assertLiveModelAllowed(input.countryIso ?? "IN")
+  if (!aiGate.ok) {
+    const stub = planStubTurn(input)
+    return {
+      ...stub,
+      note: "Live model blocked (realPiiAiConnectorsMedia OFF) — stub retrieval only.",
+    }
+  }
   try {
     return await planLiveTurn(input)
   } catch {
