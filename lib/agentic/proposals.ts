@@ -8,6 +8,11 @@ import type {
   ProposalStatus,
   ToolPayload,
 } from "@/lib/agentic/types"
+import {
+  amountCadCentsFromProposal,
+  proposalBindingHash,
+  proposalExpiresAtIso,
+} from "@/lib/mcp/dual-control"
 
 function asRow(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== "object") return undefined
@@ -28,6 +33,12 @@ function mapProposal(row: Record<string, unknown>): AgentProposal {
     decidedAt: row.decided_at == null ? null : String(row.decided_at),
     outcomeJson: row.outcome_json == null ? null : String(row.outcome_json),
     error: row.error == null ? null : String(row.error),
+    expiresAt: row.expires_at == null ? null : String(row.expires_at),
+    bindingHash: row.binding_hash == null ? null : String(row.binding_hash),
+    amountCadCents:
+      row.amount_cad_cents == null || row.amount_cad_cents === ""
+        ? null
+        : Number(row.amount_cad_cents),
   }
 }
 
@@ -65,32 +76,10 @@ export function createProposal(input: {
   const id = crypto.randomUUID()
   const createdAt = new Date().toISOString()
   const status: ProposalStatus = input.requiresApproval ? "pending" : "executed"
-  getDb()
-    .prepare(
-      `INSERT INTO agent_proposals
-        (id, tenant_id, tool_name, payload_json, status, prompt_summary, created_by, created_at,
-         decided_by, decided_at, outcome_json, error)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL)`,
-    )
-    .run(
-      id,
-      input.tenantId,
-      input.toolName,
-      JSON.stringify(input.payload),
-      status,
-      input.promptSummary,
-      input.createdBy,
-      createdAt,
-    )
-  writeAuditEvent({
-    tenantId: input.tenantId,
-    kind: "propose",
-    proposalId: id,
-    summary: `Proposed ${input.toolName}`,
-    detail: { toolName: input.toolName, requiresApproval: input.requiresApproval },
-    actorUserId: input.createdBy,
-  })
-  return {
+  const expiresAt = input.requiresApproval
+    ? proposalExpiresAtIso(createdAt, input.toolName)
+    : null
+  const draft: AgentProposal = {
     id,
     tenantId: input.tenantId,
     toolName: input.toolName,
@@ -103,7 +92,47 @@ export function createProposal(input: {
     decidedAt: null,
     outcomeJson: null,
     error: null,
+    expiresAt,
+    bindingHash: null,
+    amountCadCents: null,
   }
+  const bindingHash = proposalBindingHash(draft)
+  const amountCadCents = amountCadCentsFromProposal({ ...draft, bindingHash })
+  getDb()
+    .prepare(
+      `INSERT INTO agent_proposals
+        (id, tenant_id, tool_name, payload_json, status, prompt_summary, created_by, created_at,
+         decided_by, decided_at, outcome_json, error, expires_at, binding_hash, amount_cad_cents)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?)`,
+    )
+    .run(
+      id,
+      input.tenantId,
+      input.toolName,
+      JSON.stringify(input.payload),
+      status,
+      input.promptSummary,
+      input.createdBy,
+      createdAt,
+      expiresAt,
+      bindingHash,
+      amountCadCents,
+    )
+  writeAuditEvent({
+    tenantId: input.tenantId,
+    kind: "propose",
+    proposalId: id,
+    summary: `Proposed ${input.toolName}`,
+    detail: {
+      toolName: input.toolName,
+      requiresApproval: input.requiresApproval,
+      bindingHash,
+      expiresAt,
+      amountCadCents,
+    },
+    actorUserId: input.createdBy,
+  })
+  return { ...draft, bindingHash, amountCadCents }
 }
 
 export function getProposal(tenantId: string, proposalId: string): AgentProposal | null {
@@ -171,6 +200,40 @@ export function markProposal(
 }
 
 /**
+ * Race-safe transition from pending → approved|rejected.
+ * Returns null when another actor already decided (changes === 0).
+ */
+export function claimPendingProposal(
+  tenantId: string,
+  proposalId: string,
+  patch: {
+    status: "approved" | "rejected"
+    decidedBy: string
+    outcome?: unknown
+    error?: string | null
+  },
+): AgentProposal | null {
+  const decidedAt = new Date().toISOString()
+  const result = getDb()
+    .prepare(
+      `UPDATE agent_proposals
+       SET status = ?, decided_by = ?, decided_at = ?, outcome_json = ?, error = ?
+       WHERE id = ? AND tenant_id = ? AND status = 'pending'`,
+    )
+    .run(
+      patch.status,
+      patch.decidedBy,
+      decidedAt,
+      patch.outcome === undefined ? null : JSON.stringify(patch.outcome),
+      patch.error ?? null,
+      proposalId,
+      tenantId,
+    )
+  if (Number(result.changes) !== 1) return null
+  return getProposal(tenantId, proposalId)
+}
+
+/**
  * Edit a pending proposal payload in place (MCP `approvals.resolve` decision=edit).
  * Does not execute — proposal stays pending until Approve.
  */
@@ -187,19 +250,33 @@ export function updateProposalPayload(input: {
     return { ok: false, error: `Cannot edit a ${existing.status} proposal.` }
   }
   const summary = input.promptSummary?.trim() || existing.promptSummary
+  const next: AgentProposal = {
+    ...existing,
+    payload: input.payload,
+    promptSummary: summary,
+  }
+  const bindingHash = proposalBindingHash(next)
+  const amountCadCents = amountCadCentsFromProposal(next)
   getDb()
     .prepare(
       `UPDATE agent_proposals
-       SET payload_json = ?, prompt_summary = ?
+       SET payload_json = ?, prompt_summary = ?, binding_hash = ?, amount_cad_cents = ?
        WHERE id = ? AND tenant_id = ? AND status = 'pending'`,
     )
-    .run(JSON.stringify(input.payload), summary, input.proposalId, input.tenantId)
+    .run(
+      JSON.stringify(input.payload),
+      summary,
+      bindingHash,
+      amountCadCents,
+      input.proposalId,
+      input.tenantId,
+    )
   writeAuditEvent({
     tenantId: input.tenantId,
     kind: "propose",
     proposalId: input.proposalId,
     summary: `Edited pending ${existing.toolName}`,
-    detail: { toolName: existing.toolName, edit: true },
+    detail: { toolName: existing.toolName, edit: true, bindingHash, amountCadCents },
     actorUserId: input.actorUserId,
   })
   const proposal = getProposal(input.tenantId, input.proposalId)

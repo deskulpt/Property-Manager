@@ -40,6 +40,7 @@ export {
   createProposal,
   getProposal,
   markProposal,
+  claimPendingProposal,
   updateProposalPayload,
   pendingProposals,
   proposalsForTenant,
@@ -47,7 +48,12 @@ export {
   applyListingDraft,
   publishListingDraft,
 } from "@/lib/agentic/proposals"
-export { auditEventsForTenant, writeAuditEvent } from "@/lib/agentic/audit"
+export {
+  auditEventsForTenant,
+  writeAuditEvent,
+  approverApprovedCadCentsToday,
+  exportDualControlAuditCsv,
+} from "@/lib/agentic/audit"
 export {
   listAgentMemory,
   upsertAgentMemory,

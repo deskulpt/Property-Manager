@@ -3,6 +3,7 @@ import { assignJob, createJob, getDb } from "@/lib/db"
 import { notify } from "@/lib/notifications"
 import { writeAuditEvent } from "@/lib/agentic/audit"
 import {
+  claimPendingProposal,
   getProposal,
   markProposal,
   publishListingDraft,
@@ -25,7 +26,8 @@ import type {
   UpsertLeasePartyPayload,
   UpsertOccupantLedgerPayload,
 } from "@/lib/agentic/types"
-import { assertDistinctApprover } from "@/lib/mcp/dual-control"
+import { approverApprovedCadCentsToday } from "@/lib/agentic/audit"
+import { assertDualControlApprove } from "@/lib/mcp/dual-control"
 
 /**
  * Hard gate: mutating tools run only after an approved proposal.
@@ -54,6 +56,11 @@ export type ExecuteResult =
         | "tool_error"
         | "forbidden"
         | "self_approval"
+        | "expired"
+        | "binding_mismatch"
+        | "replay"
+        | "daily_cap"
+        | "race"
     }
 
 /**
@@ -413,6 +420,8 @@ export function approveProposal(input: {
   tenantId: string
   proposalId: string
   actorUserId: string
+  /** Optional binding hash from the approval UI — blocks replay of stale views. */
+  expectedBindingHash?: string | null
 }): ExecuteResult {
   const proposal = getProposal(input.tenantId, input.proposalId)
   if (!proposal) return { ok: false, error: "Proposal not found.", code: "not_found" }
@@ -420,28 +429,50 @@ export function approveProposal(input: {
     return { ok: false, error: `Cannot approve a ${proposal.status} proposal.`, code: "already_done" }
   }
 
-  // D09 — never-auto requires distinct approver (central hard gate).
-  const dual = assertDistinctApprover(proposal, input.actorUserId)
+  const alreadyToday = approverApprovedCadCentsToday(input.tenantId, input.actorUserId)
+  const dual = assertDualControlApprove(proposal, input.actorUserId, {
+    expectedBindingHash: input.expectedBindingHash,
+    alreadyApprovedCadCentsToday: alreadyToday,
+  })
   if (!dual.ok) {
     writeAuditEvent({
       tenantId: input.tenantId,
       kind: "fail",
       proposalId: input.proposalId,
-      summary: `Self-approval blocked for ${proposal.toolName}`,
+      summary: `Dual-control blocked for ${proposal.toolName}: ${dual.code}`,
       detail: {
         code: dual.code,
         createdBy: proposal.createdBy,
         actorUserId: input.actorUserId,
+        bindingHash: dual.bindingHash,
+        booksExportable: true,
       },
       actorUserId: input.actorUserId,
     })
-    return { ok: false, error: dual.error, code: "self_approval" }
+    return { ok: false, error: dual.error, code: dual.code }
   }
 
-  markProposal(input.tenantId, input.proposalId, {
+  // Race-safe claim — second concurrent approver gets already_done / race.
+  const claimed = claimPendingProposal(input.tenantId, input.proposalId, {
     status: "approved",
     decidedBy: input.actorUserId,
   })
+  if (!claimed) {
+    writeAuditEvent({
+      tenantId: input.tenantId,
+      kind: "fail",
+      proposalId: input.proposalId,
+      summary: `Race: proposal no longer pending for ${proposal.toolName}`,
+      detail: { code: "race", bindingHash: dual.bindingHash },
+      actorUserId: input.actorUserId,
+    })
+    return {
+      ok: false,
+      error: "Proposal was already decided by another approver (race).",
+      code: "race",
+    }
+  }
+
   writeAuditEvent({
     tenantId: input.tenantId,
     kind: "approve",
@@ -452,6 +483,10 @@ export function approveProposal(input: {
       createdBy: proposal.createdBy,
       decidedBy: input.actorUserId,
       toolName: proposal.toolName,
+      amountCadCents: dual.amountCadCents,
+      financeRequired: dual.financeRequired,
+      financePolicyVersion: dual.financePolicyVersion,
+      booksExportable: true,
     },
     actorUserId: input.actorUserId,
   })
@@ -488,15 +523,19 @@ export function rejectProposal(input: {
     ).c,
   )
 
-  markProposal(input.tenantId, input.proposalId, {
+  const claimed = claimPendingProposal(input.tenantId, input.proposalId, {
     status: "rejected",
     decidedBy: input.actorUserId,
   })
+  if (!claimed) {
+    return { ok: false, error: "Proposal was already decided by another actor (race)." }
+  }
   writeAuditEvent({
     tenantId: input.tenantId,
     kind: "reject",
     proposalId: input.proposalId,
     summary: `Rejected ${proposal.toolName}`,
+    detail: { booksExportable: true, createdBy: proposal.createdBy },
     actorUserId: input.actorUserId,
   })
 

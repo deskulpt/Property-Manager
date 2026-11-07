@@ -877,7 +877,10 @@ function createSchema(db: Sql) {
       decided_by TEXT,
       decided_at TEXT,
       outcome_json TEXT,
-      error TEXT
+      error TEXT,
+      expires_at TEXT,
+      binding_hash TEXT,
+      amount_cad_cents INTEGER
     );
     CREATE TABLE agent_audit_events (
       id TEXT PRIMARY KEY,
@@ -888,6 +891,21 @@ function createSchema(db: Sql) {
       detail_json TEXT,
       actor_user_id TEXT,
       created_at TEXT NOT NULL
+    );
+    CREATE TABLE mcp_access_tokens (
+      id TEXT PRIMARY KEY,
+      token_hash TEXT NOT NULL UNIQUE,
+      token_prefix TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      tenant_id TEXT NOT NULL,
+      client_id TEXT NOT NULL,
+      audience TEXT NOT NULL,
+      scopes_json TEXT NOT NULL,
+      issued_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      revoked_at TEXT,
+      last_used_at TEXT,
+      label TEXT
     );
     CREATE TABLE listing_drafts (
       id TEXT PRIMARY KEY,
@@ -1180,6 +1198,8 @@ function createSchema(db: Sql) {
     CREATE INDEX idx_shop_rentals_sku ON shop_rental_bookings(sku_id, slot_start);
     CREATE INDEX idx_agent_proposals_tenant ON agent_proposals(tenant_id, status, created_at);
     CREATE INDEX idx_agent_audit_tenant ON agent_audit_events(tenant_id, created_at);
+    CREATE INDEX idx_mcp_tokens_hash ON mcp_access_tokens(token_hash);
+    CREATE INDEX idx_mcp_tokens_tenant ON mcp_access_tokens(tenant_id, issued_at);
     CREATE INDEX idx_listing_drafts_tenant ON listing_drafts(tenant_id, updated_at);
     CREATE INDEX idx_lease_parties_tenant ON lease_parties(tenant_id, unit_id);
     CREATE INDEX idx_lease_agreements_tenant ON lease_agreements(tenant_id, status, updated_at);
@@ -1208,6 +1228,7 @@ function reset(db: Sql) {
     "availability_windows",
     "appointment_types",
     "agent_audit_events",
+    "mcp_access_tokens",
     "agent_memory",
     "agent_proposals",
     "lease_agreements",

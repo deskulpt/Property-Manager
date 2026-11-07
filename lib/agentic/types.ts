@@ -194,6 +194,12 @@ export type AgentProposal = {
   decidedAt: string | null
   outcomeJson: string | null
   error: string | null
+  /** ISO expiry for never-auto proposals (D09). null = soft draft / no TTL. */
+  expiresAt: string | null
+  /** Snapshot of request binding hash at create/edit time. */
+  bindingHash: string | null
+  /** Optional CAD-cents amount for Finance daily-cap accounting. */
+  amountCadCents: number | null
 }
 
 export type AgentAuditEvent = {

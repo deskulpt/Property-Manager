@@ -1,5 +1,6 @@
 import { getUser, type SessionUser } from "@/lib/db"
 import type { Role } from "@/lib/format"
+import { MCP_TOKEN_PREFIX, resolveStoredMcpToken } from "@/lib/mcp/oauth-tokens"
 import { MCP_EXECUTE_PREAUTH_SCOPE, MCP_PROPOSE_SCOPE } from "@/lib/mcp/policy"
 import { roleLevelFor, type RoleLevel } from "@/lib/mcp/role-level"
 
@@ -90,17 +91,23 @@ export function sessionFromUser(user: SessionUser): McpSession {
 /**
  * Resolve a short-lived PAT / OAuth stub token to a session.
  *
- * Accepted forms:
- * - JSON map in `EASYRENTAL_MCP_TOKENS` : `{ "my-pat": "u_nadia" }` (prod-safe PAT stub)
- * - `demo:<userId>` only when {@link mcpDemoTokensAllowed}
- * - bare seeded user id when `EASYRENTAL_MCP_ALLOW_BARE_IDS=1` **and** demo tokens allowed
- * - empty / missing → anonymous (public search_listings only)
+ * Accepted forms (priority order):
+ * 1. Tenant-bound DB grant (`er_pat_*`) — production path (D07)
+ * 2. JSON map in `EASYRENTAL_MCP_TOKENS` : `{ "my-pat": "u_nadia" }` (ops PAT stub)
+ * 3. `demo:<userId>` only when {@link mcpDemoTokensAllowed}
+ * 4. bare seeded user id when `EASYRENTAL_MCP_ALLOW_BARE_IDS=1` **and** demo tokens allowed
+ * 5. empty / missing → anonymous (public search_listings only)
  *
  * Unknown or disallowed tokens never elevate — anonymous (fail-closed).
+ * Tenant always comes from server-side user/grant — never from model args.
  */
 export function resolveMcpToken(token: string | null | undefined): McpSession {
   const raw = token?.trim()
   if (!raw) return anonymousSession()
+
+  if (raw.startsWith(MCP_TOKEN_PREFIX)) {
+    return resolveStoredMcpToken(raw) ?? anonymousSession()
+  }
 
   const mapped = tokenMap()[raw]
   const userId = mapped ?? parseDemoToken(raw)

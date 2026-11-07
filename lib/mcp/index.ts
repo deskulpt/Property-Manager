@@ -21,9 +21,34 @@ export {
 } from "@/lib/mcp/session"
 export {
   assertDistinctApprover,
+  assertDualControlApprove,
   proposalBindingHash,
   proposalContentDigest,
+  proposalExpiresAtIso,
+  amountCadCentsFromProposal,
+  dualControlAuditCsvHeader,
+  DUAL_CONTROL_REFUND_THRESHOLD_CAD_CENTS,
+  DUAL_CONTROL_APPROVER_DAILY_CAP_CAD_CENTS,
+  DUAL_CONTROL_FINANCE_POLICY_VERSION,
 } from "@/lib/mcp/dual-control"
+export {
+  issueMcpAccessToken,
+  revokeMcpAccessToken,
+  introspectMcpAccessToken,
+  resolveStoredMcpToken,
+  listMcpAccessTokensForTenant,
+  mcpOauthMetadata,
+  MCP_TOKEN_PREFIX,
+  MCP_TOKEN_AUDIENCE_DEFAULT,
+} from "@/lib/mcp/oauth-tokens"
+export {
+  MCP_HOST_CERT_MATRIX,
+  hostCertById,
+  certifiedHosts,
+  assertNoFalseHostClaims,
+  type McpHostCertRow,
+  type HostCertStatus,
+} from "@/lib/mcp/host-cert-matrix"
 export {
   isNeverAuto,
   isSoftDraft,

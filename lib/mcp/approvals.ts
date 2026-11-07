@@ -10,7 +10,7 @@ import {
   updateProposalPayload,
 } from "@/lib/agentic/proposals"
 import type { AgentProposal, ProposalStatus, ToolPayload } from "@/lib/agentic/types"
-import { assertDistinctApprover, proposalBindingHash } from "@/lib/mcp/dual-control"
+import { assertDualControlApprove, proposalBindingHash } from "@/lib/mcp/dual-control"
 import { isNeverAuto, MCP_PROPOSE_SCOPE, neverAutoClassFor } from "@/lib/mcp/policy"
 import type { McpSession } from "@/lib/mcp/session"
 
@@ -75,6 +75,9 @@ function summarizeProposal(p: AgentProposal) {
     created_by: p.createdBy,
     decided_by: p.decidedBy,
     decided_at: p.decidedAt,
+    expires_at: p.expiresAt,
+    binding_hash: p.bindingHash ?? proposalBindingHash(p),
+    amount_cad_cents: p.amountCadCents,
     payload: p.payload,
     outcome_json: p.outcomeJson,
     error: p.error,
@@ -254,7 +257,15 @@ function resolveApproval(session: McpSession, args: Record<string, unknown>): Mc
 
   // approve → only path that mutates never-auto tools
   // D09 pre-check (also enforced inside approveProposal) — surface binding + clear error.
-  const dual = assertDistinctApprover(existing, session.userId!)
+  const expectedBinding =
+    typeof args.expected_binding_hash === "string"
+      ? args.expected_binding_hash
+      : typeof args.expectedBindingHash === "string"
+        ? args.expectedBindingHash
+        : null
+  const dual = assertDualControlApprove(existing, session.userId!, {
+    expectedBindingHash: expectedBinding,
+  })
   if (!dual.ok) {
     return {
       ok: false,
@@ -274,13 +285,14 @@ function resolveApproval(session: McpSession, args: Record<string, unknown>): Mc
     tenantId: session.tenantId!,
     proposalId,
     actorUserId: session.userId!,
+    expectedBindingHash: expectedBinding,
   })
   if (!executed.ok) {
     return {
       ok: false,
       tool: "approvals.resolve",
       error: executed.error,
-      data: { code: executed.code, decision: "approve" },
+      data: { code: executed.code, decision: "approve", binding_hash: dual.bindingHash },
     }
   }
   const after = getProposal(session.tenantId!, proposalId)
@@ -295,7 +307,8 @@ function resolveApproval(session: McpSession, args: Record<string, unknown>): Mc
       binding_hash: dual.bindingHash,
       created_by: existing.createdBy,
       decided_by: session.userId,
-      note: "Approved and executed via shared Ask Easy hard gate (D09 distinct approver).",
+      amount_cad_cents: dual.amountCadCents,
+      note: "Approved and executed via shared Ask Easy hard gate (D09 dual-control).",
     },
   }
 }
