@@ -4,7 +4,7 @@
 **Authority:** Checklist [`prd-unified-approval-checklist.md`](./prd-unified-approval-checklist.md) · Summary [`advisor-vs-aloke-approval-summary.md`](./advisor-vs-aloke-approval-summary.md) · CFO note [`cfo-review-applied-nov7.md`](./cfo-review-applied-nov7.md)  
 **Stack base:** `039b379` on `cursor/d01-d02-pricing-entitlements-6564` — **do not merge #44**  
 **Build branch:** `cursor/cfo-review-pricing-tax-0ae5`  
-**Eng review baseline:** GH `main` @ `5ca1b25` (checklist absent) — Eng verdicts conditional; **link checklist commit SHA** on CFO branch (see checklist header after push).
+**Eng review baseline:** GH `main` @ `5ca1b25` (checklist absent) — Eng verdicts conditional on checklist commit `16a549b9f53f0d3f749f8b3094e5a140ddc26665`.
 
 **Approver statuses:** `Pending` | `Approve` | `Approve with changes` | `Reject` | `N/A`  
 **Legal caveat:** advisory / internal conditional compliance only — **NOT** licensed legal sign-off or go-live auth.
