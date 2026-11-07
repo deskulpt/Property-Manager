@@ -7,6 +7,7 @@ import {
   consoleRequestEnableComplianceFlag,
 } from "@/lib/actions"
 import { requirePlatformAdmin } from "@/lib/console-gate"
+import { INDIA_COMPLIANCE_PARKED } from "@/lib/markets/compliance-catalog"
 import { dataResidencyDeclarative } from "@/lib/markets/enforce"
 import {
   adminListConsoleCompliance,
@@ -20,30 +21,33 @@ export const metadata = { title: "Compliance · Command center" }
 export default async function ConsoleCompliancePage() {
   await requirePlatformAdmin()
   const session = await getSessionUser()
-  const rows = adminListConsoleCompliance(["IN", "CA"])
-  const pending = listPendingComplianceProposals()
+  // Canada focus — CA rows first from adminListConsoleCompliance.
+  const rows = adminListConsoleCompliance(["CA", "IN"])
+  const pending = listPendingComplianceProposals().filter((p) =>
+    INDIA_COMPLIANCE_PARKED ? p.iso !== "IN" : true,
+  )
   const audit = listComplianceAudit(25)
-  const residencyIn = dataResidencyDeclarative("IN")
   const residencyCa = dataResidencyDeclarative("CA")
+  const residencyIn = dataResidencyDeclarative("IN")
 
   const byIso = {
-    IN: rows.filter((r) => r.iso === "IN"),
     CA: rows.filter((r) => r.iso === "CA"),
+    IN: rows.filter((r) => r.iso === "IN"),
   } as const
 
   return (
     <div data-testid="console-compliance">
       <PageHeader
-        kicker="LEGAL / money / residency"
+        kicker="Canada focus · LEGAL / money / residency"
         title="Compliance toggles"
-        lede="Per-country Admin overrides (default OFF). Money enables need a distinct L0/L1 peer — no self-approval. Checkout / model / API still go through enforce*. dataResidency is declarative until storage pins regions."
+        lede="Canada is the active money surface. India money toggles stay OFF and are labelled parked. Defaults OFF; money enables need a distinct L0/L1 peer. Checkout / model / API still go through enforce*. dataResidency is declarative until storage pins regions. Open LEGAL/FINANCE/TECH questions held."
       />
 
       <section className="mb-8 grid gap-3 sm:grid-cols-2">
         {[
-          { iso: "IN", r: residencyIn },
-          { iso: "CA", r: residencyCa },
-        ].map(({ iso, r }) => (
+          { iso: "CA", r: residencyCa, focus: true },
+          { iso: "IN", r: residencyIn, focus: false },
+        ].map(({ iso, r, focus }) => (
           <article
             key={iso}
             className="border border-brand/15 bg-gradient-to-br from-brand/[0.05] to-terra/[0.08] p-4"
@@ -51,6 +55,7 @@ export default async function ConsoleCompliancePage() {
           >
             <p className="font-mono text-[10px] uppercase tracking-wider text-terra">
               dataResidency · {iso} · declarative
+              {!focus && INDIA_COMPLIANCE_PARKED ? " · India parked" : focus ? " · Canada focus" : ""}
             </p>
             <p className="mt-1 font-serif text-lg font-semibold text-brand">
               Region {r.region ?? "—"}
@@ -63,11 +68,21 @@ export default async function ConsoleCompliancePage() {
         ))}
       </section>
 
-      {(["IN", "CA"] as const).map((iso) => (
+      {(["CA", "IN"] as const).map((iso) => (
         <section key={iso} className="mb-10" data-testid={`compliance-iso-${iso}`}>
-          <h2 className="mb-3 font-serif text-xl font-semibold text-brand">
-            {iso === "IN" ? "India" : "Canada"} ({iso})
+          <h2 className="mb-1 font-serif text-xl font-semibold text-brand">
+            {iso === "CA" ? "Canada (focus)" : "India (parked)"} ({iso})
           </h2>
+          {iso === "IN" && INDIA_COMPLIANCE_PARKED ? (
+            <p className="mb-3 text-sm text-ink-soft" data-testid="india-parked-banner">
+              India money / pay-plane toggles are parked and forced OFF. Canada is the live compliance
+              focus. Non-money IN lease/AI rows may still be reviewed; money enables are blocked.
+            </p>
+          ) : (
+            <p className="mb-3 text-sm text-ink-soft">
+              Active money surface — peer approve required to enable money flags.
+            </p>
+          )}
           <div className="grid gap-3">
             {byIso[iso].map((row) => (
               <article
@@ -84,6 +99,7 @@ export default async function ConsoleCompliancePage() {
                       {row.payPlane ? " · host-rail" : ""}
                       {row.money ? " · money" : ""}
                       {row.hardLocked ? " · hard-locked" : ""}
+                      {row.indiaParked ? " · india-parked" : ""}
                       {" · "}
                       {row.effective ? "ON" : "OFF"}
                       {row.envMirror ? ` · env ${row.envMirror}` : ""}
@@ -112,6 +128,13 @@ export default async function ConsoleCompliancePage() {
                     {row.hardLocked ? (
                       <span className="font-mono text-[11px] uppercase tracking-wider text-ink-faint">
                         Locked OFF
+                      </span>
+                    ) : row.indiaParked ? (
+                      <span
+                        className="font-mono text-[11px] uppercase tracking-wider text-ink-faint"
+                        data-testid={`india-parked-${row.key}`}
+                      >
+                        India parked · OFF
                       </span>
                     ) : row.pendingProposal ? (
                       <>

@@ -70,6 +70,32 @@ export function isMoneyLegalFlag(key: LegalFeatureFlagKey): boolean {
   return (MONEY_LEGAL_FLAG_KEYS as readonly string[]).includes(key)
 }
 
+/**
+ * India money / pay-plane surface is **parked** — Canada focus.
+ * IN money toggles stay OFF; console labels India parked; enables rejected.
+ */
+export const INDIA_COMPLIANCE_PARKED = true
+
+export const INDIA_MONEY_FLAG_KEYS = [
+  "razorpayIndianEntity",
+  "inTaxMatrix",
+  "routeHolds",
+  "depositHolds",
+  "mandatoryTenantSurcharge",
+  "eStore",
+  "concierge",
+  "affiliate",
+  "in-pay",
+] as const
+
+export function isIndiaMoneyFlag(key: string): boolean {
+  return (INDIA_MONEY_FLAG_KEYS as readonly string[]).includes(key)
+}
+
+export function isIndiaMoneyParked(iso: string, key: string): boolean {
+  return INDIA_COMPLIANCE_PARKED && iso.toUpperCase() === "IN" && isIndiaMoneyFlag(key)
+}
+
 export const COMPLIANCE_CATALOG: ReadonlyArray<ComplianceCatalogEntry> = [
   {
     key: "razorpayIndianEntity",
