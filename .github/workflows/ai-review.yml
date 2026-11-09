@@ -1,0 +1,13 @@
+name: Trigger Central Workflow
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  call-central-workflow:
+    uses: deskulpt/central-workflow-repo/.github/workflows/ai-review.yml@main
+    secrets:
+      PR_QA_PAT: ${{ secrets.PR_QA_PAT }}
+      OMNI_TEST_USER_EMAIL: ${{ secrets.OMNI_TEST_USER_EMAIL }}
+      OMNI_TEST_USER_PASSWORD: ${{ secrets.OMNI_TEST_USER_PASSWORD }}
