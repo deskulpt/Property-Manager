@@ -1,6 +1,7 @@
 import "server-only"
 import { getDb } from "@/lib/db"
 import { registerLivePackLookup } from "@/lib/market"
+import { ensureLegalFlagOverridesRegistered } from "@/lib/markets/legal-overrides"
 import { builtinPack, CANADA_PACK, INDIA_PACK } from "@/lib/markets/packs"
 import {
   CountryPackSchema,
@@ -28,7 +29,6 @@ export function resetCountryPacksCache() {
 export function ensureCountryPacksSchema() {
   if (ensured && packDb) return
   try {
-    const { ensureLegalFlagOverridesRegistered } = require("@/lib/markets/legal-overrides") as typeof import("@/lib/markets/legal-overrides")
     ensureLegalFlagOverridesRegistered()
   } catch {
     /* overrides optional during early boot */
