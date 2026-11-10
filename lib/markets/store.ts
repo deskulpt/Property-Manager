@@ -1,6 +1,7 @@
 import "server-only"
 import { getDb } from "@/lib/db"
 import { registerLivePackLookup } from "@/lib/market"
+import { ensureLegalFlagOverridesRegistered } from "@/lib/markets/legal-overrides"
 import { builtinPack, CANADA_PACK, INDIA_PACK } from "@/lib/markets/packs"
 import {
   CountryPackSchema,
@@ -27,6 +28,11 @@ export function resetCountryPacksCache() {
 
 export function ensureCountryPacksSchema() {
   if (ensured && packDb) return
+  try {
+    ensureLegalFlagOverridesRegistered()
+  } catch {
+    /* overrides optional during early boot */
+  }
   const db = getDb()
   db.exec(`
     CREATE TABLE IF NOT EXISTS country_packs (

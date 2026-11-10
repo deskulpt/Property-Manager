@@ -3,6 +3,7 @@ import { resolveImportActor } from "@/lib/import/auth"
 import { fetchAndParseListing } from "@/lib/import/fetch-listing"
 import { listingSiteIdSchema } from "@/lib/import/listing-schema"
 import { checkImportRateLimit } from "@/lib/import/rate-limit"
+import { guardApiCountry } from "@/lib/markets/api-country-guard"
 import { z } from "zod"
 
 export const runtime = "nodejs"
@@ -35,6 +36,8 @@ export async function POST(request: Request) {
   if ("error" in actor) {
     return Response.json({ error: actor.error }, { status: actor.status })
   }
+  const guarded = await guardApiCountry({ session: actor.user })
+  if (!guarded.ok) return guarded.response
 
   const rateKey = `${actor.user.id}:${actor.tenantId}`
   const rate = checkImportRateLimit(rateKey)

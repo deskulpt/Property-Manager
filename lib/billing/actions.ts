@@ -27,11 +27,22 @@ export async function startCheckoutAction(formData: FormData): Promise<void> {
   if (!user?.tenantId || user.role !== "landlord_admin") {
     redirect("/login?next=/landlord/billing")
   }
+  const { requestCountryIso } = await import("@/lib/markets/request-country")
+  const { assertCountryDataScope } = await import("@/lib/markets/enforce")
+  const requestIso = await requestCountryIso()
+  const scope = assertCountryDataScope({
+    requestIso,
+    resourceIso: user.countryIso,
+    label: "billing",
+  })
+  if (!scope.ok) {
+    redirect(`/landlord/billing?error=${encodeURIComponent(scope.error)}`)
+  }
   const cadence = (String(formData.get("cadence") ?? "monthly") === "annual"
     ? "annual"
     : "monthly") as BillingCadence
   const mix = parseMix(formData)
-  const billingCountry = String(formData.get("billing_country") ?? "IN")
+  const billingCountry = String(formData.get("billing_country") ?? requestIso)
   const result = await startBillingCheckout({
     tenantId: user.tenantId,
     email: user.email,

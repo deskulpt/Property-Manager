@@ -1,27 +1,32 @@
 import { expect, test } from "@playwright/test"
-import { expectPageOk, setDemoIdentity } from "./helpers"
+import { countryPath, expectPageOk, setCountryConsent, setDemoIdentity } from "./helpers"
 
 /**
  * Live-demo critical funnel — no dead ends on primary journeys (demo mode, no vendor keys).
+ * Country paths: `/in` is the India segment; root `/` is the consent picker.
  */
 test.describe("Demo funnel — primary journeys", () => {
+  test.beforeEach(async ({ page }) => {
+    await setCountryConsent(page, "IN")
+  })
+
   test("landing → listings → unit → book visit", async ({ page }) => {
-    await page.goto("/", { waitUntil: "domcontentloaded" })
+    await page.goto(countryPath("/"), { waitUntil: "domcontentloaded" })
     await expectPageOk(page)
     await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible()
     await expect(page.locator("body")).toContainText(/Easy Rental/i)
 
     await page.getByRole("link", { name: /browse listings/i }).first().click()
-    await expect(page).toHaveURL(/\/listings/)
+    await expect(page).toHaveURL(/\/(in\/)?listings/)
     await expectPageOk(page)
     await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible()
 
-    await page.goto("/properties/waterman/units/B1", { waitUntil: "domcontentloaded" })
+    await page.goto(countryPath("/properties/waterman/units/B1"), { waitUntil: "domcontentloaded" })
     await expectPageOk(page)
     await expect(page.getByRole("heading", { level: 1 }).first()).toContainText(/B1/i)
     await expect(page.locator("body")).toContainText(/Waterman|back|property/i)
 
-    await page.goto("/properties/waterman/book", { waitUntil: "domcontentloaded" })
+    await page.goto(countryPath("/properties/waterman/book"), { waitUntil: "domcontentloaded" })
     await expectPageOk(page)
     await expect(
       page.getByTestId("book-visit-form").or(page.getByRole("heading", { level: 1 })).first(),
@@ -30,7 +35,7 @@ test.describe("Demo funnel — primary journeys", () => {
 
   test("anon desks show login CTAs (no blank RoleGates)", async ({ page }) => {
     for (const path of ["/landlord", "/portal", "/provider", "/inbox", "/shop", "/refer/dashboard"] as const) {
-      await page.goto(path, { waitUntil: "domcontentloaded" })
+      await page.goto(countryPath(path), { waitUntil: "domcontentloaded" })
       await expectPageOk(page)
       await expect(page.getByRole("link", { name: /log in/i }).first()).toBeVisible()
       await expect(page.locator("body")).not.toContainText(/demo header/i)
@@ -39,7 +44,7 @@ test.describe("Demo funnel — primary journeys", () => {
 
   test("marketing + partner routes load", async ({ page }) => {
     for (const path of ["/pricing", "/refer", "/partners", "/partners/services", "/about", "/careers"] as const) {
-      await page.goto(path, { waitUntil: "domcontentloaded" })
+      await page.goto(countryPath(path), { waitUntil: "domcontentloaded" })
       await expectPageOk(page)
       await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible()
     }
@@ -47,7 +52,7 @@ test.describe("Demo funnel — primary journeys", () => {
 
   test("signup → role → subscribe → landlord → Ask Easy stub", async ({ page }) => {
     const email = `demo-funnel-${Date.now()}@example.com`
-    await page.goto("/signup", { waitUntil: "domcontentloaded" })
+    await page.goto(countryPath("/signup"), { waitUntil: "domcontentloaded" })
     await expectPageOk(page)
     await page.getByTestId("signup-form").getByLabel(/your name/i).fill("Demo Funnel Landlord")
     await page.getByTestId("signup-form").getByLabel(/work email/i).fill(email)
@@ -66,30 +71,30 @@ test.describe("Demo funnel — primary journeys", () => {
     await expect(page).toHaveURL(/\/landlord/)
     await expectPageOk(page)
 
-    await page.goto("/landlord?ask=open", { waitUntil: "domcontentloaded" })
+    await page.goto(countryPath("/landlord?ask=open"), { waitUntil: "domcontentloaded" })
     await expectPageOk(page)
     await expect(page.getByTestId("ask-easy-island")).toBeVisible()
     await expect(page.getByTestId("ask-easy-island")).toContainText(/Ask Easy|stub|onboard/i)
 
-    await page.goto("/landlord/billing", { waitUntil: "domcontentloaded" })
+    await page.goto(countryPath("/landlord/billing"), { waitUntil: "domcontentloaded" })
     await expectPageOk(page)
     await expect(page.getByRole("heading", { name: /billing/i }).first()).toBeVisible()
   })
 
   test("seeded desks: landlord Ask Easy, portal, provider, L0 console", async ({ page }) => {
     await setDemoIdentity(page, "u_nadia")
-    await page.goto("/landlord?ask=open", { waitUntil: "domcontentloaded" })
+    await page.goto(countryPath("/landlord?ask=open"), { waitUntil: "domcontentloaded" })
     await expectPageOk(page)
     await expect(page.getByTestId("ask-easy-island")).toBeVisible()
     await expect(page.getByTestId("ask-easy-island")).toContainText(/Ask Easy|stub|onboard/i)
 
     await setDemoIdentity(page, "u_devon")
-    await page.goto("/portal", { waitUntil: "domcontentloaded" })
+    await page.goto(countryPath("/portal"), { waitUntil: "domcontentloaded" })
     await expectPageOk(page)
     await expect(page.getByRole("heading", { name: /lease desk|portal|your lease/i }).first()).toBeVisible()
 
     await setDemoIdentity(page, "u_luis")
-    await page.goto("/provider", { waitUntil: "domcontentloaded" })
+    await page.goto(countryPath("/provider"), { waitUntil: "domcontentloaded" })
     await expectPageOk(page)
     await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible()
 
@@ -104,7 +109,7 @@ test.describe("Demo funnel — primary journeys", () => {
         sameSite: "Lax",
       },
     ])
-    await page.goto("/console", { waitUntil: "domcontentloaded" })
+    await page.goto(countryPath("/console"), { waitUntil: "domcontentloaded" })
     await expectPageOk(page)
     await expect(
       page.getByRole("heading", { name: /l0 command center|platform console/i }).first(),
@@ -113,19 +118,31 @@ test.describe("Demo funnel — primary journeys", () => {
   })
 
   test("404 recovery links", async ({ page }) => {
-    await page.goto("/this-route-does-not-exist-demo", { waitUntil: "domcontentloaded" })
+    await page.goto(countryPath("/this-route-does-not-exist-demo"), { waitUntil: "domcontentloaded" })
     await expect(page.getByRole("heading", { name: /not on the plan/i })).toBeVisible()
     await expect(page.getByRole("link", { name: /browse listings/i })).toBeVisible()
     await expect(page.getByRole("link", { name: /^home$/i })).toBeVisible()
   })
+
+  test("root country picker never auto-redirects", async ({ browser }) => {
+    // Fresh context without storageState consent — must stay on picker.
+    const context = await browser.newContext({ storageState: undefined })
+    const page = await context.newPage()
+    await page.goto("/", { waitUntil: "domcontentloaded" })
+    await expect(page.getByTestId("country-picker")).toBeVisible()
+    await expect(page).toHaveURL(/\/(\?.*)?$/)
+    await expect(page.getByTestId("country-pick-IN")).toBeVisible()
+    await context.close()
+  })
 })
 
 test("home + listings readable on mobile viewport", async ({ page }) => {
+  await setCountryConsent(page, "IN")
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto("/", { waitUntil: "domcontentloaded" })
+  await page.goto(countryPath("/"), { waitUntil: "domcontentloaded" })
   await expectPageOk(page)
   await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible()
-  await page.goto("/listings", { waitUntil: "domcontentloaded" })
+  await page.goto(countryPath("/listings"), { waitUntil: "domcontentloaded" })
   await expectPageOk(page)
   await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible()
 })

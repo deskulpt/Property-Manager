@@ -8,7 +8,8 @@ export const metadata = { title: "Billing · Command center" }
 
 export default async function ConsoleBillingPage() {
   await requirePlatformAdmin()
-  const rows = listPlatformSubscriptions()
+  const { requestCountryIso } = await import("@/lib/markets/request-country")
+  const rows = listPlatformSubscriptions(await requestCountryIso())
   const adapters = billingAdapterStatus()
 
   return (

@@ -17,17 +17,20 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>
 }
 
+function readStandaloneInstalled(): boolean {
+  if (typeof window === "undefined") return false
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    // iOS Safari
+    ("standalone" in navigator && Boolean((navigator as { standalone?: boolean }).standalone))
+  )
+}
+
 export function InstallButton({ compact = false }: { compact?: boolean }) {
   const [prompt, setPrompt] = useState<BeforeInstallPromptEvent | null>(null)
-  const [installed, setInstalled] = useState(false)
+  const [installed, setInstalled] = useState(readStandaloneInstalled)
 
   useEffect(() => {
-    const standalone =
-      window.matchMedia("(display-mode: standalone)").matches ||
-      // iOS Safari
-      ("standalone" in navigator && Boolean((navigator as { standalone?: boolean }).standalone))
-    if (standalone) setInstalled(true)
-
     const onPrompt = (event: Event) => {
       event.preventDefault()
       setPrompt(event as BeforeInstallPromptEvent)

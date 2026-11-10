@@ -34,7 +34,9 @@ export default async function ConsoleMarketsPage() {
           {live.primaryPaymentMethods.map((m) => m.label).join(", ")}
         </p>
         <p className="mt-2 text-xs text-ink-faint">
-          Header flag uses live packs only. No <code className="font-mono">/ca/*</code> shard.
+          Public hosts use CountryPack <code className="font-mono">pathSegment</code> (
+          <code className="font-mono">/in</code>, <code className="font-mono">/ca</code>). Adding{" "}
+          <code className="font-mono">/us</code> is config-only — promote the pack, no app fork.
         </p>
       </section>
 

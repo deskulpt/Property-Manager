@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { adkRuntimeMode, runAdkTurn } from "@/lib/adk"
 import { askEasyGateReason } from "@/lib/agentic/gate"
+import { guardApiCountry } from "@/lib/markets/api-country-guard"
 import { getSessionUser } from "@/lib/session"
 
 export const runtime = "nodejs"
@@ -36,6 +37,9 @@ export async function POST(request: Request) {
   const { message, scope, propertyId } = parsed.data
 
   if (scope === "public") {
+    // Public catalog: country-scoped request; live AI still fail-closed on PII flag.
+    const guarded = await guardApiCountry({ requireLiveAi: false })
+    if (!guarded.ok) return guarded.response
     const turn = await runAdkTurn({
       message,
       scope: "public",
@@ -44,6 +48,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ...turn,
       runtime: adkRuntimeMode(),
+      countryIso: guarded.requestIso,
     })
   }
 
@@ -54,6 +59,8 @@ export async function POST(request: Request) {
       { status: 401 },
     )
   }
+  const guarded = await guardApiCountry({ session: user, requireLiveAi: false })
+  if (!guarded.ok) return guarded.response
   if (askEasyGateReason(user.tenantId) === "upgrade") {
     return NextResponse.json({ error: "Ask Easy requires Pro or higher." }, { status: 403 })
   }

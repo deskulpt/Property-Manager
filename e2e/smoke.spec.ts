@@ -1,17 +1,21 @@
 import { expect, test } from "@playwright/test"
-import { expectPageOk, gotoMaybe, setDemoIdentity } from "./helpers"
+import { countryPath, expectPageOk, gotoMaybe, setCountryConsent, setDemoIdentity } from "./helpers"
 
 test.describe("Easy Rental critical paths (India demo)", () => {
+  test.beforeEach(async ({ page }) => {
+    await setCountryConsent(page, "IN")
+  })
+
   test("home loads", async ({ page }) => {
-    await page.goto("/", { waitUntil: "domcontentloaded" })
+    await page.goto(countryPath("/"), { waitUntil: "domcontentloaded" })
     await expectPageOk(page)
     await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible()
-    // Brand may be DeSkulpt (main) or Easy Rental (rebrand PR); accept either.
-    await expect(page.locator("body")).toContainText(/Easy Rental|DeSkulpt|industrial|leasing|listings/i)
+    // Brand may be Deskulpt / Easy Rental; accept either spelling.
+    await expect(page.locator("body")).toContainText(/Easy Rental|Deskulpt|DeSkulpt|industrial|leasing|listings/i)
   })
 
   test("listings load", async ({ page }) => {
-    await page.goto("/listings", { waitUntil: "domcontentloaded" })
+    await page.goto(countryPath("/listings"), { waitUntil: "domcontentloaded" })
     await expectPageOk(page)
     await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible()
     // Seeded Bhiwandi / portfolio content, or empty-state copy — not a blank shell.
@@ -50,7 +54,7 @@ test.describe("Easy Rental critical paths (India demo)", () => {
   })
 
   test("unit page Matterport embed container", async ({ page }) => {
-    await page.goto("/properties/waterman/units/B1", { waitUntil: "domcontentloaded" })
+    await page.goto(countryPath("/properties/waterman/units/B1"), { waitUntil: "domcontentloaded" })
     await expectPageOk(page)
     await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible()
 
@@ -83,7 +87,7 @@ test.describe("Easy Rental critical paths (India demo)", () => {
   })
 
   test("header phone / WhatsApp utility (skip if absent)", async ({ page }) => {
-    await page.goto("/", { waitUntil: "domcontentloaded" })
+    await page.goto(countryPath("/"), { waitUntil: "domcontentloaded" })
     await expectPageOk(page)
 
     // Header ships responsive duplicates (sm:hidden + sm:flex); assert a visible one.
@@ -106,14 +110,14 @@ test.describe("Easy Rental critical paths (India demo)", () => {
   })
 
   test("public header has no demo switcher (L0/L1 sticky bar only)", async ({ page }) => {
-    await page.goto("/", { waitUntil: "domcontentloaded" })
+    await page.goto(countryPath("/"), { waitUntil: "domcontentloaded" })
     await expectPageOk(page)
     await expect(page.getByTestId("demo-identity")).toHaveCount(0)
     await expect(page.getByTestId("admin-session-bar")).toHaveCount(0)
   })
 
   test("pricing page + demo subscribe (Growth)", async ({ page }) => {
-    await page.goto("/pricing", { waitUntil: "domcontentloaded" })
+    await page.goto(countryPath("/pricing"), { waitUntil: "domcontentloaded" })
     await expectPageOk(page)
     await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible()
     await expect(page.locator("body")).toContainText(/No Broker/i)
@@ -124,7 +128,7 @@ test.describe("Easy Rental critical paths (India demo)", () => {
     await expect(page.getByTestId("pricing-gst-note")).toBeVisible()
 
     await setDemoIdentity(page, "u_nadia")
-    await page.goto("/pricing/subscribe?plan=growth&from=e2e", {
+    await page.goto(countryPath("/pricing/subscribe?plan=growth&from=e2e"), {
       waitUntil: "domcontentloaded",
     })
     await expectPageOk(page)

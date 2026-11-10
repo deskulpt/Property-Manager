@@ -245,7 +245,8 @@ export type PlatformSubscriptionRow = {
   updatedAt: string
 }
 
-export function listPlatformSubscriptions(): PlatformSubscriptionRow[] {
+export function listPlatformSubscriptions(countryIso?: string | null): PlatformSubscriptionRow[] {
+  const iso = countryIso?.trim().toUpperCase() || null
   return (
     getDb()
       .prepare(
@@ -254,9 +255,10 @@ export function listPlatformSubscriptions(): PlatformSubscriptionRow[] {
                 s.current_period_end, s.updated_at
          FROM billing_subscriptions s
          JOIN tenants t ON t.id = s.tenant_id
+         WHERE (? IS NULL OR COALESCE(t.country_iso, 'IN') = ?)
          ORDER BY s.updated_at DESC`,
       )
-      .all() as Record<string, unknown>[]
+      .all(iso, iso) as Record<string, unknown>[]
   ).map((row) => ({
     id: String(row.id),
     tenantId: String(row.tenant_id),
@@ -283,8 +285,9 @@ export type PlatformListingRow = {
   sqft: number
 }
 
-export function listPlatformListingsInventory(): PlatformListingRow[] {
+export function listPlatformListingsInventory(countryIso?: string | null): PlatformListingRow[] {
   const db = getDb()
+  const iso = countryIso?.trim().toUpperCase() || null
   const cols = db.prepare("PRAGMA table_info(units)").all() as { name: string }[]
   const hasListedCol = cols.some((c) => c.name === "listed")
   const listedExpr = hasListedCol
@@ -300,9 +303,10 @@ export function listPlatformListingsInventory(): PlatformListingRow[] {
          FROM units u
          JOIN properties p ON p.id = u.property_id
          JOIN tenants t ON t.id = p.tenant_id
+         WHERE (? IS NULL OR COALESCE(t.country_iso, 'IN') = ?)
          ORDER BY t.name, p.name, u.code`,
       )
-      .all() as Record<string, unknown>[]
+      .all(iso, iso) as Record<string, unknown>[]
   ).map((row) => ({
     unitId: String(row.unit_id),
     code: String(row.code),
@@ -324,7 +328,8 @@ export type MemoryTenantStat = {
   latestAt: string | null
 }
 
-export function listAskEasyMemoryStats(): MemoryTenantStat[] {
+export function listAskEasyMemoryStats(countryIso?: string | null): MemoryTenantStat[] {
+  const iso = countryIso?.trim().toUpperCase() || null
   return (
     getDb()
       .prepare(
@@ -332,10 +337,11 @@ export function listAskEasyMemoryStats(): MemoryTenantStat[] {
                 COUNT(*) AS c, MAX(m.updated_at) AS latest_at
          FROM agent_memory m
          JOIN tenants t ON t.id = m.tenant_id
+         WHERE (? IS NULL OR COALESCE(t.country_iso, 'IN') = ?)
          GROUP BY m.tenant_id
          ORDER BY c DESC, t.name`,
       )
-      .all() as Record<string, unknown>[]
+      .all(iso, iso) as Record<string, unknown>[]
   ).map((row) => ({
     tenantId: String(row.tenant_id),
     tenantName: String(row.tenant_name),

@@ -202,10 +202,13 @@ export async function signupAccount(
   const policy = passwordPolicyError(parsed.data.password)
   if (policy) return { error: policy, fieldErrors: { password: policy } }
   const passwordHash = await hashPassword(parsed.data.password)
+  const { requestCountryIso } = await import("@/lib/markets/request-country")
+  const countryIso = await requestCountryIso()
   const result = createPendingAccount({
     name: parsed.data.name,
     email: parsed.data.email,
     passwordHash,
+    countryIso,
   })
   if (!result.ok) return { error: result.error, fieldErrors: {} }
   recordConsentEvent({
@@ -2169,6 +2172,15 @@ export async function submitAskEasyPrompt(
   if (!user || user.role !== "landlord_admin" || !user.tenantId) {
     return { ...askEasyInitial, error: "Switch to a landlord admin to use Ask Easy." }
   }
+  const { requestCountryIso } = await import("@/lib/markets/request-country")
+  const { assertCountryDataScope } = await import("@/lib/markets/enforce")
+  const requestIso = await requestCountryIso()
+  const scope = assertCountryDataScope({
+    requestIso,
+    resourceIso: user.countryIso,
+    label: "landlord",
+  })
+  if (!scope.ok) return { ...askEasyInitial, error: scope.error }
   const { askEasyGateReason, runAskEasy } = await import("@/lib/agentic")
   if (askEasyGateReason(user.tenantId) === "upgrade") {
     return {
@@ -2187,6 +2199,7 @@ export async function submitAskEasyPrompt(
     propertyId,
     unitId,
     onboard,
+    countryIso: requestIso,
   })
   refresh(["/landlord/ask-easy", "/landlord/ask", "/landlord", "/landlord/jobs", "/landlord/ledger", "/provider", "/inbox"])
   if (result.kind === "error") {
@@ -2441,6 +2454,15 @@ export async function checkoutShopCart(
   }
   const tenantId = String(formData.get("tenantId") ?? "")
   const note = String(formData.get("note") ?? "")
+  const { requestCountryIso } = await import("@/lib/markets/request-country")
+  const { assertCountryDataScope } = await import("@/lib/markets/enforce")
+  const requestIso = await requestCountryIso()
+  const scope = assertCountryDataScope({
+    requestIso,
+    resourceIso: user.countryIso,
+    label: "occupant",
+  })
+  if (!scope.ok) return { error: scope.error }
   const result = checkoutCart({ userId: user.id, tenantId, note })
   if (!result.ok) return { error: result.error }
   notifyMany(
@@ -2480,6 +2502,13 @@ export async function saveRazorpaySettingsAction(
   const demoMode = formData.get("demoMode") === "on"
   const enabled = formData.get("enabled") === "on"
   const razorpayMode = formData.get("razorpayMode") === "live" ? "live" : "test"
+  if (!demoMode && razorpayMode === "live") {
+    const { assertRazorpayCheckoutAllowed } = await import("@/lib/markets/enforce")
+    const { requestCountryIso } = await import("@/lib/markets/request-country")
+    const iso = await requestCountryIso()
+    const gate = assertRazorpayCheckoutAllowed(user.countryIso || iso)
+    if (!gate.ok) return { error: gate.error }
+  }
   const publicSettings = saveShopRazorpaySettings(user.tenantId, {
     keyId: keyId || null,
     keySecret: keySecret.trim() ? keySecret : null,
@@ -2818,7 +2847,9 @@ export async function signUpAction(
     return { ...emptyAuth, error: "Check the form.", fieldErrors: issues(parsed.error) }
   }
   const auth = getAuthProvider()
-  const result = await auth.signUp(parsed.data)
+  const { requestCountryIso } = await import("@/lib/markets/request-country")
+  const countryIso = await requestCountryIso()
+  const result = await auth.signUp({ ...parsed.data, countryIso })
   if (!result.ok) return { ...emptyAuth, error: result.error }
   await setSessionUserId(result.userId)
   {
@@ -2836,7 +2867,9 @@ export async function logInAction(
   const email = String(formData.get("email") ?? "").trim()
   const password = String(formData.get("password") ?? "")
   const auth = getAuthProvider()
-  const result = await auth.logIn({ email, password })
+  const { requestCountryIso } = await import("@/lib/markets/request-country")
+  const requestIso = await requestCountryIso()
+  const result = await auth.logIn({ email, password, requestCountryIso: requestIso })
   if (!result.ok) return { ...emptyAuth, error: result.error }
   await setSessionUserId(result.userId)
   if (canImpersonate(getUser(result.userId)?.roleLevel ?? 5)) {

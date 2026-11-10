@@ -68,7 +68,7 @@ import {
   type RewardStatus,
 } from "@/lib/referrals"
 
-const SEED_VERSION = "27"
+const SEED_VERSION = "28"
 
 function dbPath() {
   return process.env.DESKULPT_DB_PATH || path.join(process.cwd(), "data", "deskulpt.sqlite")
@@ -135,6 +135,10 @@ export type SessionUser = {
   /** Alias of tenantPackage for Slice A AuthProvider. */
   subscriptionPackage: SubscriptionPackage | null
   emailVerifiedAt: string | null
+  /** Account bound to one CountryPack ISO (`/in` or `/ca`). */
+  countryIso: string
+  /** Tenant org country when present — should match account. */
+  tenantCountryIso: string | null
 }
 
 export type FloorRecord = {
@@ -304,6 +308,8 @@ function mapUser(row: Record<string, unknown>): SessionUser {
       (role === "landlord_admin" ? ("owner" as SeatRole) : null),
     subscriptionPackage,
     emailVerifiedAt: str(row, "email_verified_at"),
+    countryIso: str(row, "country_iso") ?? "IN",
+    tenantCountryIso: str(row, "tenant_country_iso"),
   }
 }
 
@@ -374,11 +380,13 @@ const USER_SQL = `
          COALESCE(u.is_demo, 0) AS is_demo,
          COALESCE(u.role_level, 5) AS role_level,
          COALESCE(u.onboarding_complete, 1) AS onboarding_complete,
+         COALESCE(u.country_iso, 'IN') AS country_iso,
          t.name AS tenant_name, t.kind AS tenant_kind,
          COALESCE(t.display_currency, 'INR') AS display_currency,
          COALESCE(t.package, 'starter') AS tenant_package,
          COALESCE(t.status, 'active') AS tenant_status,
          COALESCE(t.is_demo, 0) AS tenant_is_demo,
+         COALESCE(t.country_iso, 'IN') AS tenant_country_iso,
          ls.seat_role AS seat_role
   FROM users u
   LEFT JOIN tenants t ON t.id = u.tenant_id
@@ -396,7 +404,8 @@ function createSchema(db: Sql) {
       display_currency TEXT NOT NULL DEFAULT 'INR',
       package TEXT NOT NULL DEFAULT 'starter',
       status TEXT NOT NULL DEFAULT 'active',
-      is_demo INTEGER NOT NULL DEFAULT 0
+      is_demo INTEGER NOT NULL DEFAULT 0,
+      country_iso TEXT NOT NULL DEFAULT 'IN'
     );
     CREATE TABLE users (
       id TEXT PRIMARY KEY,
@@ -413,7 +422,8 @@ function createSchema(db: Sql) {
       phone TEXT,
       password_hash TEXT,
       is_demo INTEGER NOT NULL DEFAULT 0,
-      email_verified_at TEXT
+      email_verified_at TEXT,
+      country_iso TEXT NOT NULL DEFAULT 'IN'
     );
     CREATE TABLE landlord_seats (
       id TEXT PRIMARY KEY,
@@ -1819,6 +1829,8 @@ export function resetSeedDatabase() {
 /** Close the process-wide SQLite handle so the next getDb() reopens (tests). */
 export function closeDatabase() {
   try {
+    // Lazy CJS require avoids circular init during test teardown.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- sync teardown
     const { resetCountryPacksCache } = require("@/lib/markets/store") as typeof import("@/lib/markets/store")
     resetCountryPacksCache()
   } catch {
@@ -2680,18 +2692,20 @@ export function createPendingAccount(input: {
   name: string
   email: string
   passwordHash: string
+  countryIso?: string
 }) {
   const db = getDb()
   const email = input.email.trim().toLowerCase()
   const existing = asRow(db.prepare("SELECT id FROM users WHERE lower(email) = ?").get(email))
   if (existing) return { ok: false as const, error: "An account with that email already exists." }
   const userId = crypto.randomUUID()
+  const countryIso = (input.countryIso ?? "IN").trim().toUpperCase() || "IN"
   db.prepare(
     `INSERT INTO users (
       id, name, email, role, role_level, onboarding_complete, tenant_id, company, trade,
-      service_area, provider_verified, phone, password_hash, is_demo
-    ) VALUES (?, ?, ?, 'pending', 5, 0, NULL, NULL, NULL, NULL, 0, NULL, ?, 0)`,
-  ).run(userId, input.name.trim(), email, input.passwordHash)
+      service_area, provider_verified, phone, password_hash, is_demo, country_iso
+    ) VALUES (?, ?, ?, 'pending', 5, 0, NULL, NULL, NULL, NULL, 0, NULL, ?, 0, ?)`,
+  ).run(userId, input.name.trim(), email, input.passwordHash, countryIso)
   return { ok: true as const, userId }
 }
 
@@ -4744,6 +4758,7 @@ export function publicFormCountries(): { iso: string; name: string; live: boolea
   const byIso = new Map<string, { iso: string; name: string; live: boolean }>()
   byIso.set(LIVE_MARKET.iso, { iso: LIVE_MARKET.iso, name: LIVE_MARKET.name, live: true })
   try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- sync pack lookup
     const { listLiveCountryPacks } = require("@/lib/markets/store") as typeof import("@/lib/markets/store")
     for (const pack of listLiveCountryPacks()) {
       byIso.set(pack.iso, { iso: pack.iso, name: pack.name, live: true })
@@ -5236,10 +5251,14 @@ export function checkoutCart(input: {
     }
   }
 
+  const tenantCountry = asRow(
+    getDb().prepare("SELECT country_iso FROM tenants WHERE id = ?").get(input.tenantId),
+  )
   const provider = resolveShopPaymentProvider({
     demoMode: settings.demoMode,
     hasSecret: settings.hasSecret,
     keyId: settings.keyId,
+    countryIso: tenantCountry ? str(tenantCountry, "country_iso") : "IN",
   })
 
   const amountCents = lines.reduce((sum, line) => sum + line.lineCents, 0)
@@ -5455,8 +5474,9 @@ export type PlatformTenantRow = {
   adminName: string | null
 }
 
-export function platformLandlordDirectory(): PlatformTenantRow[] {
+export function platformLandlordDirectory(countryIso?: string | null): PlatformTenantRow[] {
   const db = getDb()
+  const iso = countryIso?.trim().toUpperCase() || null
   return asRows(
     db
       .prepare(
@@ -5468,9 +5488,10 @@ export function platformLandlordDirectory(): PlatformTenantRow[] {
                 (SELECT u.name FROM users u WHERE u.tenant_id = t.id AND u.role = 'landlord_admin' ORDER BY u.name LIMIT 1) AS admin_name
          FROM tenants t
          WHERE t.kind = 'landlord'
+           AND (? IS NULL OR COALESCE(t.country_iso, 'IN') = ?)
          ORDER BY t.name`,
       )
-      .all(),
+      .all(iso, iso),
   ).map((row) => ({
     id: String(row.id),
     name: String(row.name),
@@ -5493,16 +5514,18 @@ export function setTenantStatus(tenantId: string, status: "active" | "suspended"
   return { ok: true as const }
 }
 
-export function platformShopCatalog() {
+export function platformShopCatalog(countryIso?: string | null) {
+  const iso = countryIso?.trim().toUpperCase() || null
   return asRows(
     getDb()
       .prepare(
         `SELECT s.id, s.tenant_id, s.name, s.kind, s.price_cents, s.enabled, t.name AS tenant_name
          FROM shop_skus s
          JOIN tenants t ON t.id = s.tenant_id
+         WHERE (? IS NULL OR COALESCE(t.country_iso, 'IN') = ?)
          ORDER BY t.name, s.name`,
       )
-      .all(),
+      .all(iso, iso),
   ).map((row) => ({
     id: String(row.id),
     tenantId: String(row.tenant_id),
@@ -6011,18 +6034,29 @@ export function createUserAccount(input: {
   email: string
   passwordHash: string
   role: Role
+  /** Bound country — defaults IN. */
+  countryIso?: string
 }) {
   const email = input.email.trim().toLowerCase()
   if (findUserByEmail(email)) {
     return { ok: false as const, error: "That email already has an account." }
   }
   const userId = `u_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`
+  const countryIso = (input.countryIso ?? "IN").trim().toUpperCase() || "IN"
   getDb()
     .prepare(
-      `INSERT INTO users (id, name, email, role, role_level, tenant_id, company, trade, service_area, provider_verified, phone, password_hash, is_demo, email_verified_at)
-       VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, NULL, ?, 0, NULL)`,
+      `INSERT INTO users (id, name, email, role, role_level, tenant_id, company, trade, service_area, provider_verified, phone, password_hash, is_demo, email_verified_at, country_iso)
+       VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, NULL, ?, 0, NULL, ?)`,
     )
-    .run(userId, input.name.trim(), email, input.role, roleToLevel(input.role), input.passwordHash)
+    .run(
+      userId,
+      input.name.trim(),
+      email,
+      input.role,
+      roleToLevel(input.role),
+      input.passwordHash,
+      countryIso,
+    )
   return { ok: true as const, userId }
 }
 
@@ -6045,7 +6079,7 @@ export function createLandlordOrg(input: {
     return { ok: false as const, error: "Enter the organisation legal name." }
   }
   if (!input.city || input.city.length < 2) {
-    return { ok: false as const, error: "Enter a city in India." }
+    return { ok: false as const, error: "Enter a city for your country pack." }
   }
 
   let slug = slugifyOrg(input.legalName)
@@ -6057,19 +6091,22 @@ export function createLandlordOrg(input: {
   const tenantId = `t_${slug}`.slice(0, 40)
   const now = new Date().toISOString()
   const db = getDb()
+  const countryIso = (user.countryIso || "IN").toUpperCase()
+  const displayCurrency = countryIso === "CA" ? "CAD" : "INR"
   db.prepare(
-    `INSERT INTO tenants (id, name, slug, city, kind, display_currency, package, status, is_demo)
-     VALUES (?, ?, ?, ?, 'landlord', 'INR', ?, 'active', 0)`,
-  ).run(tenantId, input.legalName, slug, input.city, input.packageId)
+    `INSERT INTO tenants (id, name, slug, city, kind, display_currency, package, status, is_demo, country_iso)
+     VALUES (?, ?, ?, ?, 'landlord', ?, ?, 'active', 0, ?)`,
+  ).run(tenantId, input.legalName, slug, input.city, displayCurrency, input.packageId, countryIso)
   db.prepare(
     `UPDATE users SET role = 'landlord_admin', role_level = 2, tenant_id = ?, company = ?, name = COALESCE(NULLIF(?, ''), name),
-       email_verified_at = COALESCE(email_verified_at, ?), onboarding_complete = 1
+       email_verified_at = COALESCE(email_verified_at, ?), onboarding_complete = 1, country_iso = COALESCE(country_iso, ?)
      WHERE id = ?`,
   ).run(
     tenantId,
     input.actingAs || input.entityType || input.legalName,
     input.contactName,
     now,
+    countryIso,
     input.userId,
   )
   db.prepare(

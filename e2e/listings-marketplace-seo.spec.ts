@@ -1,9 +1,13 @@
 import { expect, test } from "@playwright/test"
-import { expectPageOk } from "./helpers"
+import { countryPath, expectPageOk, setCountryConsent } from "./helpers"
 
 test.describe("listings marketplace + SEO pack", () => {
+  test.beforeEach(async ({ page }) => {
+    await setCountryConsent(page, "IN")
+  })
+
   test("homepage primary CTA and nav Listings → /listings", async ({ page }) => {
-    await page.goto("/", { waitUntil: "domcontentloaded" })
+    await page.goto(countryPath("/"), { waitUntil: "domcontentloaded" })
     await expectPageOk(page)
     const heroCta = page.getByRole("link", { name: /browse listings/i }).first()
     await expect(heroCta).toHaveAttribute("href", "/listings")
@@ -12,7 +16,7 @@ test.describe("listings marketplace + SEO pack", () => {
   })
 
   test("marketplace defaults available, shows featured rail", async ({ page }) => {
-    await page.goto("/listings", { waitUntil: "domcontentloaded" })
+    await page.goto(countryPath("/listings"), { waitUntil: "domcontentloaded" })
     await expectPageOk(page)
     await expect(page.getByRole("heading", { name: /available spaces/i })).toBeVisible()
     await expect(page.getByRole("heading", { name: /pro-pinned spaces/i })).toBeVisible()
@@ -23,7 +27,7 @@ test.describe("listings marketplace + SEO pack", () => {
   })
 
   test("segment filter SSR still lists units", async ({ page }) => {
-    await page.goto("/listings?segment=warehouse", { waitUntil: "domcontentloaded" })
+    await page.goto(countryPath("/listings?segment=warehouse"), { waitUntil: "domcontentloaded" })
     await expectPageOk(page)
     await expect(page.locator("body")).toContainText(/warehouse|dock|SF/i)
   })
@@ -44,12 +48,17 @@ test.describe("listings marketplace + SEO pack", () => {
     const sitemap = await request.get("/sitemap.xml")
     expect(sitemap.ok()).toBeTruthy()
     const sitemapText = await sitemap.text()
-    expect(sitemapText).toContain("/listings")
-    expect(sitemapText).toContain("/properties/")
+    expect(sitemapText).toMatch(/sitemap-in\.xml|\/in\//i)
+
+    const inSitemap = await request.get("/sitemap-in.xml")
+    expect(inSitemap.ok()).toBeTruthy()
+    const inText = await inSitemap.text()
+    expect(inText).toContain("/in/listings")
+    expect(inText).toContain("/in/properties/")
   })
 
   test("unit page JSON-LD includes RealEstateListing and INR", async ({ page }) => {
-    await page.goto("/properties/waterman/units/B1", { waitUntil: "domcontentloaded" })
+    await page.goto(countryPath("/properties/waterman/units/B1"), { waitUntil: "domcontentloaded" })
     await expectPageOk(page)
     const scripts = page.locator('script[type="application/ld+json"]')
     const count = await scripts.count()
@@ -64,7 +73,7 @@ test.describe("listings marketplace + SEO pack", () => {
   })
 
   test("apply stays gated for anon visitors", async ({ page }) => {
-    await page.goto("/apply/u_waterman_b1", { waitUntil: "domcontentloaded" })
+    await page.goto(countryPath("/apply/u_waterman_b1"), { waitUntil: "domcontentloaded" })
     await expectPageOk(page)
     await expect(page.locator("body")).toContainText(/applicant|sign in|log in|browse only/i)
   })

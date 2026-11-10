@@ -10,7 +10,9 @@ export const metadata = { title: "Listings · Command center" }
 
 export default async function ConsoleListingsPage() {
   await requirePlatformAdmin()
-  const rows = listPlatformListingsInventory()
+  const { requestCountryIso } = await import("@/lib/markets/request-country")
+  const countryIso = await requestCountryIso()
+  const rows = listPlatformListingsInventory(countryIso)
   const marketplaceOn = isOpsFlagOn("listings_marketplace")
 
   return (
@@ -18,7 +20,7 @@ export default async function ConsoleListingsPage() {
       <PageHeader
         kicker="Inventory"
         title="Listings inventory"
-        lede="Cross-tenant unit catalogue. Publish / hide updates listed_at (and listed when present). Landlord CRUD stays on the desk."
+        lede={`Country-scoped unit catalogue (/${countryIso.toLowerCase()}). Publish / hide updates listed_at. Landlord CRUD stays on the desk.`}
       />
       {!marketplaceOn ? (
         <p className="mb-4 border border-pending/30 bg-pending/10 px-3 py-2 text-sm">

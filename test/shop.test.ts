@@ -136,7 +136,7 @@ describe("occupant shop + Razorpay settings (Slice G)", () => {
     expect(internal.secretEnc).not.toBe(secret)
   })
 
-  it("with keys + demo off, checkout selects razorpay stub (still no live charge)", async () => {
+  it("with keys + demo off, still forces demo while razorpayIndianEntity LEGAL flag OFF", async () => {
     const { saveShopRazorpaySettings, addToCart, checkoutCart, clearCart } = await db()
     clearCart("u_devon", "t_bbm")
     saveShopRazorpaySettings("t_bbm", {
@@ -158,9 +158,9 @@ describe("occupant shop + Razorpay settings (Slice G)", () => {
     const paid = checkoutCart({ userId: "u_devon", tenantId: "t_bbm", note: "" })
     expect(paid.ok).toBe(true)
     if (!paid.ok) return
-    expect(paid.paymentProvider).toBe("razorpay")
-    expect(paid.labelledDemo).toBe(false)
-    expect(paid.paymentRef.startsWith("rzp_order_stub_")).toBe(true)
+    // CTO #47: LEGAL flag fail-closed — demo adapter until razorpayIndianEntity ON.
+    expect(paid.paymentProvider).toBe("demo")
+    expect(paid.labelledDemo).toBe(true)
   })
 
   it("another tenant id cannot list demo SKUs via tenant-scoped query", async () => {

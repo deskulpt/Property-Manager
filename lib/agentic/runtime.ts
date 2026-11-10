@@ -19,6 +19,8 @@ export type RunAskEasyInput = {
   unitId?: string | null
   forceStub?: boolean
   onboard?: boolean
+  /** Active CountryPack ISO for LEGAL AI gates. */
+  countryIso?: string | null
 }
 
 function auditPrompt(input: RunAskEasyInput) {
@@ -58,6 +60,7 @@ async function runWithPlan(input: RunAskEasyInput): Promise<AskEasyTurnResult> {
         propertyId: input.propertyId,
         unitId: input.unitId,
         onboard: input.onboard,
+        countryIso: input.countryIso,
       })
     : await resolveModelPlan({
         tenantId: input.tenantId,
@@ -65,6 +68,7 @@ async function runWithPlan(input: RunAskEasyInput): Promise<AskEasyTurnResult> {
         propertyId: input.propertyId,
         unitId: input.unitId,
         onboard: input.onboard,
+        countryIso: input.countryIso,
       })
 
   const call = plan.toolCalls[0]

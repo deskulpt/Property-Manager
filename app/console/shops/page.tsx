@@ -9,13 +9,15 @@ export const metadata = { title: "Shops · Console" }
 
 export default async function ConsoleShopsPage() {
   await requirePlatformAdmin()
-  const skus = platformShopCatalog()
+  const { requestCountryIso } = await import("@/lib/markets/request-country")
+  const countryIso = await requestCountryIso()
+  const skus = platformShopCatalog(countryIso)
   return (
     <div>
       <PageHeader
         kicker="Catalog"
         title="Shops across tenants"
-        lede="Enable or disable SKUs for any landlord shop. Prices stay in the tenant ledger currency (INR)."
+        lede={`Country-scoped SKUs (/${countryIso.toLowerCase()}). Enable or disable landlord shop items.`}
       />
       <div className="grid gap-3">
         {skus.map((sku) => (

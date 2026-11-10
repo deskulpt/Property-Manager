@@ -203,9 +203,7 @@ export function DraftBuildingViewer({
     }
   }, [])
 
-  useEffect(() => {
-    if (!selectedFloorId && ordered[0]) setSelectedFloorId(ordered[0].id)
-  }, [ordered, selectedFloorId])
+  const activeFloorId = selectedFloorId ?? ordered[0]?.id ?? null
 
   if (ordered.length === 0) {
     return (
@@ -222,7 +220,7 @@ export function DraftBuildingViewer({
 
   const selectedUnit = units.find((u) => u.code === selectedUnitCode)
   const floorUnits = units.filter(
-    (u) => !selectedFloorId || u.floorId == null || u.floorId === selectedFloorId,
+    (u) => !activeFloorId || u.floorId == null || u.floorId === activeFloorId,
   )
 
   return (
@@ -234,7 +232,7 @@ export function DraftBuildingViewer({
         aria-label="Floor select"
       >
         {ordered.map((floor) => {
-          const active = floor.id === selectedFloorId
+          const active = floor.id === activeFloorId
           return (
             <button
               key={floor.id}
@@ -277,7 +275,7 @@ export function DraftBuildingViewer({
               <DraftScene
                 floors={ordered}
                 units={units}
-                selectedFloorId={selectedFloorId}
+                selectedFloorId={activeFloorId}
                 selectedUnitCode={selectedUnitCode}
                 onPickFloor={setSelectedFloorId}
                 onPickUnit={(code) => setSelectedUnitCode(code)}
