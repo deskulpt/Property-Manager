@@ -38,8 +38,6 @@ export const CountryPackSchema = z.object({
       notes: z.string().optional(),
     })
     .default({ kinds: [] }),
-  /** Per-country legal/product gates — omit or false = fail-closed OFF. */
-  legalFeatureFlags: z.record(z.string(), z.boolean()).default({}),
   /**
    * Declarative residency notes only — **not** enforced by storage yet.
    * See `dataResidencyDeclarative()` in lib/markets/enforce.ts.
