@@ -50,7 +50,7 @@ describe("admin compliance console (ER-47 / Aloke Legal+CFO)", () => {
     const locked = rows.find((r) => r.key === "caTenantCardFee" && r.iso === "CA")
     expect(locked?.hardLocked).toBe(true)
     expect(locked?.effective).toBe(false)
-    expect(locked?.blurb).toBe(TENANT_CARD_FEE_POLICY_LABEL)
+    expect(locked?.blurb?.startsWith(TENANT_CARD_FEE_POLICY_LABEL)).toBe(true)
     for (const row of rows.filter((r) => !r.hardLocked)) {
       expect(row.signOffs.length).toBeGreaterThan(0)
     }

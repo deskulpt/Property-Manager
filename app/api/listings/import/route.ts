@@ -4,6 +4,7 @@ import { fetchAndParseListing } from "@/lib/import/fetch-listing"
 import { listingSiteIdSchema } from "@/lib/import/listing-schema"
 import { checkImportRateLimit } from "@/lib/import/rate-limit"
 import { guardApiCountry } from "@/lib/markets/api-country-guard"
+import { assertOntarioListingImportAllowed } from "@/lib/markets/enforce"
 import { z } from "zod"
 
 export const runtime = "nodejs"
@@ -38,6 +39,17 @@ export async function POST(request: Request) {
   }
   const guarded = await guardApiCountry({ session: actor.user })
   if (!guarded.ok) return guarded.response
+
+  const importGate = assertOntarioListingImportAllowed({
+    iso: guarded.requestIso,
+    siteId: parsed.data.siteId,
+  })
+  if (!importGate.ok) {
+    return Response.json(
+      { error: importGate.error, code: importGate.code },
+      { status: 403 },
+    )
+  }
 
   const rateKey = `${actor.user.id}:${actor.tenantId}`
   const rate = checkImportRateLimit(rateKey)

@@ -26,7 +26,17 @@ India money keys stay OFF while parked — enable/approve returns `india_parked`
 | `tgProductionLease` | IN | no |
 | `realPiiAiConnectorsMedia` | IN/CA | no |
 
-Hard-locked (not toggleable): **CA tenant card fee** (`caTenantCardFee`) — label `Disabled by product policy; Ontario residential legal risk`. Counsel review + code release to change.
+Hard-locked (not toggleable):
+
+| Key | Note |
+| --- | --- |
+| `caTenantCardFee` | Disabled by product policy; Ontario residential legal risk (RTA s134) |
+| `ontarioDamageDeposit` | No damage/security deposits — LMR ≤ 1 month + key at cost |
+| `ontarioMlsImport` | Landlord-direct only — no MLS / PropTx / REALTOR.ca |
+| `ontarioCommercialSales` | RTA residential only (TRESA s5(1)(j)) |
+| `ontarioAutomatedEviction` | Official LTB N-forms + human review only |
+
+Product enforce helpers: `lib/markets/ontario-rta.ts` + `assertOntario*` in `lib/markets/enforce.ts`.
 
 Money enables: second-admin approve · no self-approval · **24h expiry** · dual-admin alerts · single-admin **kill-switch OFF**.
 

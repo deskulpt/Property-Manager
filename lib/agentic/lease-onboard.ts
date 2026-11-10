@@ -14,6 +14,18 @@ import type {
   UpsertLeasePartyPayload,
   UpsertOccupantLedgerPayload,
 } from "@/lib/agentic/types"
+import { assertOntarioNoAutomatedEviction } from "@/lib/markets/enforce"
+import {
+  createOntarioFormDraft,
+  reviewOntarioFormDraft,
+  assertOntarioFormSendAllowed,
+  getOntarioFormDraft,
+  latestOntarioFormDraftForUnit,
+} from "@/lib/markets/ontario-forms"
+import {
+  isOntarioMarket,
+  ONTARIO_STANDARD_LEASE_TEMPLATE_ID,
+} from "@/lib/markets/ontario-rta"
 
 function asRow(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== "object") return undefined
@@ -446,8 +458,22 @@ export function draftRentalAgreement(input: {
     parties,
   })
 
+  const ontario = isOntarioMarket(country) && regionCode === "ON"
+  const templateId = ontario ? ONTARIO_STANDARD_LEASE_TEMPLATE_ID : "standard_rental_v1"
+  if (ontario) {
+    const formDraft = createOntarioFormDraft({
+      tenantId: input.tenantId,
+      countryIso: country,
+      formKind: "standard_lease",
+      formId: ONTARIO_STANDARD_LEASE_TEMPLATE_ID,
+      unitId: input.unitId,
+      payload: { region: regionCode, lawNotes },
+    })
+    if (!formDraft.ok) return { ok: false, error: formDraft.error }
+  }
+
   const documentJson = JSON.stringify({
-    template: "standard_rental_v1",
+    template: templateId,
     country,
     region: regionCode,
     regionName,
@@ -458,6 +484,7 @@ export function draftRentalAgreement(input: {
     ratePsf: Number(unit.rate_psf),
     sqft: Number(unit.sqft),
     disclaimer: "not_legal_advice",
+    humanReviewRequired: ontario,
   })
 
   const db = getDb()
@@ -522,10 +549,28 @@ export function markAgreementStatus(
     status: LeaseAgreementStatus
     esignProvider?: string | null
     esignEnvelopeId?: string | null
+    /** Ontario: human-reviewed form draft id required before send/esign. */
+    ontarioFormDraftId?: string | null
+    countryIso?: string | null
   },
 ): LeaseAgreement | null {
   const existing = leaseAgreementById(tenantId, agreementId)
   if (!existing) return null
+  const sending = patch.status === "ready_for_esign" || patch.status === "sent"
+  if (sending && isOntarioMarket(patch.countryIso ?? existing.country)) {
+    const countryIso = patch.countryIso ?? existing.country
+    const auto = assertOntarioNoAutomatedEviction(countryIso)
+    if (!auto.ok) return null
+    const draft = patch.ontarioFormDraftId
+      ? getOntarioFormDraft(tenantId, patch.ontarioFormDraftId)
+      : latestOntarioFormDraftForUnit(tenantId, existing.unitId, "standard_lease")
+    const sendGate = assertOntarioFormSendAllowed({
+      countryIso,
+      draft,
+      intent: "send",
+    })
+    if (!sendGate.ok) return null
+  }
   getDb()
     .prepare(
       `UPDATE lease_agreements
@@ -541,6 +586,20 @@ export function markAgreementStatus(
       tenantId,
     )
   return leaseAgreementById(tenantId, agreementId)
+}
+
+/** Approve Ontario Standard Lease / LTB form for send (human review). */
+export function approveOntarioLeaseFormForSend(input: {
+  tenantId: string
+  draftId: string
+  reviewerUserId: string
+}) {
+  return reviewOntarioFormDraft({
+    tenantId: input.tenantId,
+    draftId: input.draftId,
+    reviewerUserId: input.reviewerUserId,
+    decision: "approved",
+  })
 }
 
 /** Heuristic extractors for stub onboard prompts. */

@@ -3,22 +3,33 @@ import { SubmitButton } from "@/components/submit-button"
 import {
   consoleApproveComplianceFlag,
   consoleDisableComplianceFlag,
+  consoleRecordCaslConsent,
   consoleRejectComplianceFlag,
   consoleRequestEnableComplianceFlag,
+  consoleSaveOntarioPrivacy,
 } from "@/lib/actions"
 import { requirePlatformAdmin } from "@/lib/console-gate"
 import {
   GO_LIVE_BLOCKERS,
   INDIA_COMPLIANCE_PARKED,
+  ONTARIO_GO_LIVE_BLOCKERS,
   TENANT_CARD_FEE_POLICY_LABEL,
 } from "@/lib/markets/compliance-catalog"
 import { dataResidencyDeclarative } from "@/lib/markets/enforce"
+import { ONTARIO_TENANT_CARD_FEE } from "@/lib/markets/ontario-rta"
+import {
+  getOntarioPrivacyLead,
+  getOntarioRetentionRule,
+  listOntarioBreaches,
+} from "@/lib/markets/ontario-privacy"
 import {
   adminListConsoleCompliance,
   listComplianceAudit,
   listPendingComplianceProposals,
 } from "@/lib/markets/legal-overrides"
 import { getSessionUser } from "@/lib/session"
+
+const ONTARIO_PRIVACY_TENANT = "t_platform_ca"
 
 export const metadata = { title: "Compliance · Command center" }
 
@@ -33,6 +44,9 @@ export default async function ConsoleCompliancePage() {
   const audit = listComplianceAudit(25)
   const residencyCa = dataResidencyDeclarative("CA")
   const residencyIn = dataResidencyDeclarative("IN")
+  const privacyLead = getOntarioPrivacyLead(ONTARIO_PRIVACY_TENANT)
+  const retention = getOntarioRetentionRule(ONTARIO_PRIVACY_TENANT)
+  const breaches = listOntarioBreaches(ONTARIO_PRIVACY_TENANT)
 
   const byIso = {
     CA: rows.filter((r) => r.iso === "CA"),
@@ -109,6 +123,126 @@ export default async function ConsoleCompliancePage() {
             </p>
           </article>
         ))}
+      </section>
+
+      <section className="mb-8" data-testid="ontario-go-live-blockers">
+        <h2 className="mb-2 font-serif text-xl font-semibold text-brand">
+          Ontario go-live blockers (unchecked)
+        </h2>
+        <p className="mb-3 text-sm text-ink-soft">
+          Demo/staging only — counsel sign-off required before go-live. Do not mark these done here.
+        </p>
+        <ul className="grid gap-2">
+          {ONTARIO_GO_LIVE_BLOCKERS.map((item) => (
+            <li
+              key={item.id}
+              className="flex items-start gap-2 border border-brand/15 bg-card px-3 py-2 text-sm"
+              data-testid={`go-live-blocker-${item.id}`}
+            >
+              <input type="checkbox" disabled checked={false} aria-label={item.label} className="mt-1" />
+              <span>{item.label}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-3 font-mono text-[11px] text-ink-faint" data-testid="ontario-card-fee-policy">
+          Tenant card fee: {ONTARIO_TENANT_CARD_FEE.label}
+        </p>
+      </section>
+
+      <section className="mb-8" data-testid="ontario-pipeda-casl">
+        <h2 className="mb-2 font-serif text-xl font-semibold text-brand">
+          Ontario PIPEDA / CASL
+        </h2>
+        <p className="mb-3 text-sm text-ink-soft">
+          Privacy lead, retention/deletion, breach register (24 months), CASL marketing consent.
+          Demo/staging — synthetic data only; real PII blocked from AI connectors while flag OFF.
+        </p>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <form
+            action={consoleSaveOntarioPrivacy}
+            className="grid gap-2 border border-brand/15 bg-card p-4"
+          >
+            <input type="hidden" name="tenantId" value={ONTARIO_PRIVACY_TENANT} />
+            <p className="font-mono text-[10px] uppercase tracking-wider text-terra">Privacy lead</p>
+            <label className="grid gap-1 text-sm">
+              Name
+              <input
+                name="privacyLeadName"
+                required
+                defaultValue={privacyLead?.name ?? ""}
+                className="h-9 border border-ink/15 bg-paper px-2 text-sm"
+              />
+            </label>
+            <label className="grid gap-1 text-sm">
+              Email
+              <input
+                name="privacyLeadEmail"
+                type="email"
+                required
+                defaultValue={privacyLead?.email ?? ""}
+                className="h-9 border border-ink/15 bg-paper px-2 text-sm"
+              />
+            </label>
+            <label className="grid gap-1 text-sm">
+              Retention months
+              <input
+                name="retentionMonths"
+                type="number"
+                min={1}
+                defaultValue={retention.retentionMonths}
+                className="h-9 border border-ink/15 bg-paper px-2 text-sm"
+              />
+            </label>
+            <label className="grid gap-1 text-sm">
+              Deletion policy
+              <textarea
+                name="deletionPolicy"
+                rows={3}
+                defaultValue={retention.deletionPolicy}
+                className="border border-ink/15 bg-paper px-2 py-1 text-sm"
+              />
+            </label>
+            <SubmitButton pendingLabel="Saving…">Save privacy lead / retention</SubmitButton>
+          </form>
+          <div className="grid gap-3">
+            <article className="border border-brand/15 bg-card p-4">
+              <p className="font-mono text-[10px] uppercase tracking-wider text-terra">
+                Breach register · retain {24} months
+              </p>
+              {breaches.length === 0 ? (
+                <p className="mt-2 text-sm text-ink-soft">No breach records in retention window.</p>
+              ) : (
+                <ul className="mt-2 space-y-1 text-sm">
+                  {breaches.map((b) => (
+                    <li key={b.id}>
+                      {b.recordedAt.slice(0, 10)} · {b.summary}
+                      {b.synthetic ? " · synthetic" : ""}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </article>
+            <form
+              action={consoleRecordCaslConsent}
+              className="grid gap-2 border border-brand/15 bg-card p-4"
+            >
+              <p className="font-mono text-[10px] uppercase tracking-wider text-terra">
+                CASL marketing consent
+              </p>
+              <label className="grid gap-1 text-sm">
+                Email
+                <input
+                  name="email"
+                  type="email"
+                  required
+                  className="h-9 border border-ink/15 bg-paper px-2 text-sm"
+                />
+              </label>
+              <input type="hidden" name="granted" value="1" />
+              <SubmitButton pendingLabel="Recording…">Record consent</SubmitButton>
+            </form>
+          </div>
+        </div>
       </section>
 
       {(["CA", "IN"] as const).map((iso) => (
