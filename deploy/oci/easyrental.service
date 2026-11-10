@@ -1,0 +1,28 @@
+[Unit]
+Description=Easy Rental (Node/Next + SQLite)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=easyrental
+Group=easyrental
+WorkingDirectory=/opt/easyrental/app
+EnvironmentFile=-/etc/easyrental/production.env
+Environment=NODE_ENV=production
+Environment=HOSTED=1
+Environment=PORT=43123
+Environment=DESKULPT_DB_PATH=/data/deskulpt.sqlite
+Environment=DESKULPT_DEMO_SWITCHER=0
+Environment=EASYRENTAL_FLAG_CA_PAY=0
+Environment=EASYRENTAL_FLAG_IN_PAY=0
+ExecStart=/usr/bin/npm run start
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65535
+
+# SQLite + uploads live on /data
+ReadWritePaths=/data /opt/easyrental/app
+
+[Install]
+WantedBy=multi-user.target

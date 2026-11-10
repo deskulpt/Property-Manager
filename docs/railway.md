@@ -2,6 +2,8 @@
 
 Not deployed from this PR — checklist only.
 
+**Preferred public hosting (Nov 2026):** Cloudflare Free front door + **Canada** origin (India parked) — see [`hosting-cloudflare-oci.md`](./hosting-cloudflare-oci.md). Keep this Railway path as an optional alternate.
+
 ## Service
 
 1. New Railway project from this GitHub repo (Nixpacks via `railway.json`, or Dockerfile).

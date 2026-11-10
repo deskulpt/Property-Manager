@@ -1,0 +1,17 @@
+# Optional TLS terminator on the VM when Cloudflare SSL mode is Full (strict)
+# and you prefer origin certs via Caddy (or use Cloudflare Origin CA instead).
+#
+# Cloudflare Free already proxies HTTPS to visitors; this only speaks to CF→origin.
+
+{
+  email postmaster@easyrental.space
+}
+
+:443 {
+  reverse_proxy 127.0.0.1:43123
+  encode gzip
+}
+
+:80 {
+  reverse_proxy 127.0.0.1:43123
+}

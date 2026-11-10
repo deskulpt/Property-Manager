@@ -1,0 +1,22 @@
+# Cloudflare config for dedicated EasyRental account (NOT old DeSkulpt CF).
+# Account ID is public; API tokens stay in CI/secrets — never commit.
+#
+# Canada-first: zone DNS empty until Canada origin exists.
+# ca-pay Worker = stub focus, unpublished while ca-pay=OFF.
+# in-pay = PARKED (no Worker / no build).
+
+name = "easyrental-front-door-meta"
+account_id = "b2c682e130b734a072424bbf92367668"
+compatibility_date = "2026-11-07"
+
+# CA payment plane stub — DO NOT deploy until Admin flag ca-pay=ON + Legal/Finance.
+# [env.ca-pay]
+# name = "easyrental-ca-pay"
+# main = "workers/ca-pay/src/index.ts"
+# workers_dev = false
+# routes = [{ pattern = "ca-pay.easyrental.space/*", zone_name = "easyrental.space" }]
+# d1_databases = [{ binding = "LEDGER", database_name = "easyrental-ca-pay-eu", database_id = "REPLACE_WHEN_CREATED" }]
+
+[vars]
+EASYRENTAL_FLAG_CA_PAY = "0"
+EASYRENTAL_FLAG_IN_PAY = "0"

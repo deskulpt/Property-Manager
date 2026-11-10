@@ -1,0 +1,21 @@
+#cloud-config
+# First-boot for Easy Rental OCI Always Free India origin.
+# Idempotent-ish: bootstrap script is the source of truth for Node/systemd.
+
+package_update: true
+packages:
+  - ca-certificates
+  - curl
+  - git
+  - ufw
+  - jq
+
+runcmd:
+  - mkdir -p /data/uploads /opt/easyrental
+  - chmod 755 /data /data/uploads /opt/easyrental
+  - |
+    if ! id -u easyrental >/dev/null 2>&1; then
+      useradd --system --home /opt/easyrental --shell /usr/sbin/nologin easyrental
+    fi
+  - chown -R easyrental:easyrental /data /opt/easyrental
+  - echo "Run scripts/hosting/oci-bootstrap.sh as ubuntu/opc after SSH."
