@@ -54,6 +54,10 @@ export default defineConfig({
       KYC_LIVE: "0",
       OTP_SMS_PROVIDER: process.env.OTP_SMS_PROVIDER || "demo",
       KYC_PROVIDER: process.env.KYC_PROVIDER || "demo",
+      // CTO MCP gate: next start sets NODE_ENV=production; dual opt-in keeps
+      // demo:<userId> tokens working for synthetic e2e only (never live money).
+      ALLOW_DEMO_AUTH: "1",
+      EASYRENTAL_MCP_ALLOW_DEMO: "1",
     },
   },
 })
