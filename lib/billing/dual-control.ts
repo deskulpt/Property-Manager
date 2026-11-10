@@ -9,6 +9,8 @@
  * - Books-exportable audit log
  *
  * Eng Reject: not tamper-resistant / race-safe yet — productionReady stays false.
+ * Live money rails remain OFF (synthetic demo). These thresholds gate
+ * approval policy even when amounts are simulated.
  */
 
 export type DualControlAction =
@@ -25,6 +27,8 @@ export const DUAL_CONTROL_REFUND_THRESHOLD_CAD_CENTS = 50_000
 /** Finance: per-approver daily cap CAD 2,000 (cents). */
 export const DUAL_CONTROL_APPROVER_DAILY_CAP_CAD_CENTS = 200_000
 
+export const DUAL_CONTROL_FINANCE_POLICY_VERSION = "2026-11-07" as const
+
 export type DualControlDecision = {
   required: boolean
   reason: string
@@ -33,7 +37,7 @@ export type DualControlDecision = {
   labelledDemo: true
   /** Eng Reject open — Finance Approve does not make this production-ready */
   productionReady: false
-  financePolicyVersion: "2026-11-07"
+  financePolicyVersion: typeof DUAL_CONTROL_FINANCE_POLICY_VERSION
 }
 
 export function requiresDualControl(input: {
@@ -61,7 +65,7 @@ export function requiresDualControl(input: {
       amountCadCents: amount,
       labelledDemo: true,
       productionReady: false,
-      financePolicyVersion: "2026-11-07",
+      financePolicyVersion: DUAL_CONTROL_FINANCE_POLICY_VERSION,
     }
   }
 
@@ -74,7 +78,7 @@ export function requiresDualControl(input: {
         amountCadCents: amount,
         labelledDemo: true,
         productionReady: false,
-        financePolicyVersion: "2026-11-07",
+        financePolicyVersion: DUAL_CONTROL_FINANCE_POLICY_VERSION,
       }
     }
     if (amount != null && oneMo != null && oneMo > 0 && amount > oneMo) {
@@ -85,7 +89,7 @@ export function requiresDualControl(input: {
         amountCadCents: amount,
         labelledDemo: true,
         productionReady: false,
-        financePolicyVersion: "2026-11-07",
+        financePolicyVersion: DUAL_CONTROL_FINANCE_POLICY_VERSION,
       }
     }
   }
@@ -97,7 +101,7 @@ export function requiresDualControl(input: {
     amountCadCents: amount,
     labelledDemo: true,
     productionReady: false,
-    financePolicyVersion: "2026-11-07",
+    financePolicyVersion: DUAL_CONTROL_FINANCE_POLICY_VERSION,
   }
 }
 
