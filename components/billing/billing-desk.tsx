@@ -133,6 +133,22 @@ export function BillingDesk({
       ) : null}
 
       <section className="bg-card p-4 ring-1 ring-foreground/10 md:p-6">
+        <h2 className="font-sans text-lg font-extrabold">Canada rent · Connect (demo)</h2>
+        <p className="mt-1 text-sm text-ink-soft">
+          Ontario Stripe Connect DIRECT + optional PAD hosted Checkout E2E. Flags OFF — design/test
+          only; no live charges. India pay-plane parked.
+        </p>
+        <p className="mt-3 text-sm">
+          <Link
+            href="/landlord/billing/connect"
+            className="font-semibold text-terra hover:underline"
+          >
+            Open Connect E2E hub
+          </Link>
+        </p>
+      </section>
+
+      <section className="bg-card p-4 ring-1 ring-foreground/10 md:p-6">
         <h2 className="font-sans text-lg font-extrabold">History</h2>
         {history.length === 0 ? (
           <p className="mt-2 text-sm text-ink-soft">No subscription rows yet.</p>
