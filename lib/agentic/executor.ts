@@ -25,6 +25,7 @@ import type {
   UpsertLeasePartyPayload,
   UpsertOccupantLedgerPayload,
 } from "@/lib/agentic/types"
+import { assertDistinctApprover } from "@/lib/mcp/dual-control"
 
 /**
  * Hard gate: mutating tools run only after an approved proposal.
@@ -46,7 +47,13 @@ export type ExecuteResult =
   | {
       ok: false
       error: string
-      code: "not_found" | "not_approved" | "already_done" | "tool_error" | "forbidden"
+      code:
+        | "not_found"
+        | "not_approved"
+        | "already_done"
+        | "tool_error"
+        | "forbidden"
+        | "self_approval"
     }
 
 /**
@@ -412,6 +419,25 @@ export function approveProposal(input: {
   if (proposal.status !== "pending") {
     return { ok: false, error: `Cannot approve a ${proposal.status} proposal.`, code: "already_done" }
   }
+
+  // D09 — never-auto requires distinct approver (central hard gate).
+  const dual = assertDistinctApprover(proposal, input.actorUserId)
+  if (!dual.ok) {
+    writeAuditEvent({
+      tenantId: input.tenantId,
+      kind: "fail",
+      proposalId: input.proposalId,
+      summary: `Self-approval blocked for ${proposal.toolName}`,
+      detail: {
+        code: dual.code,
+        createdBy: proposal.createdBy,
+        actorUserId: input.actorUserId,
+      },
+      actorUserId: input.actorUserId,
+    })
+    return { ok: false, error: dual.error, code: "self_approval" }
+  }
+
   markProposal(input.tenantId, input.proposalId, {
     status: "approved",
     decidedBy: input.actorUserId,
@@ -421,6 +447,12 @@ export function approveProposal(input: {
     kind: "approve",
     proposalId: input.proposalId,
     summary: `Approved ${proposal.toolName}`,
+    detail: {
+      bindingHash: dual.bindingHash,
+      createdBy: proposal.createdBy,
+      decidedBy: input.actorUserId,
+      toolName: proposal.toolName,
+    },
     actorUserId: input.actorUserId,
   })
   return executeApprovedProposal(input)

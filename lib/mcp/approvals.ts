@@ -10,6 +10,7 @@ import {
   updateProposalPayload,
 } from "@/lib/agentic/proposals"
 import type { AgentProposal, ProposalStatus, ToolPayload } from "@/lib/agentic/types"
+import { assertDistinctApprover, proposalBindingHash } from "@/lib/mcp/dual-control"
 import { isNeverAuto, MCP_PROPOSE_SCOPE, neverAutoClassFor } from "@/lib/mcp/policy"
 import type { McpSession } from "@/lib/mcp/session"
 
@@ -252,6 +253,23 @@ function resolveApproval(session: McpSession, args: Record<string, unknown>): Mc
   }
 
   // approve → only path that mutates never-auto tools
+  // D09 pre-check (also enforced inside approveProposal) — surface binding + clear error.
+  const dual = assertDistinctApprover(existing, session.userId!)
+  if (!dual.ok) {
+    return {
+      ok: false,
+      tool: "approvals.resolve",
+      error: dual.error,
+      data: {
+        code: dual.code,
+        decision: "approve",
+        created_by: existing.createdBy,
+        actor_user_id: session.userId,
+        binding_hash: proposalBindingHash(existing),
+      },
+    }
+  }
+
   const executed: ExecuteResult = approveProposal({
     tenantId: session.tenantId!,
     proposalId,
@@ -274,7 +292,10 @@ function resolveApproval(session: McpSession, args: Record<string, unknown>): Mc
       proposal: after ? summarizeProposal(after) : { proposal_id: proposalId, status: "executed" },
       execute: executed,
       never_auto: isNeverAuto(existing.toolName),
-      note: "Approved and executed via shared Ask Easy hard gate.",
+      binding_hash: dual.bindingHash,
+      created_by: existing.createdBy,
+      decided_by: session.userId,
+      note: "Approved and executed via shared Ask Easy hard gate (D09 distinct approver).",
     },
   }
 }
