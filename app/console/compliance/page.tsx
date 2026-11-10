@@ -7,7 +7,11 @@ import {
   consoleRequestEnableComplianceFlag,
 } from "@/lib/actions"
 import { requirePlatformAdmin } from "@/lib/console-gate"
-import { INDIA_COMPLIANCE_PARKED } from "@/lib/markets/compliance-catalog"
+import {
+  GO_LIVE_BLOCKERS,
+  INDIA_COMPLIANCE_PARKED,
+  TENANT_CARD_FEE_POLICY_LABEL,
+} from "@/lib/markets/compliance-catalog"
 import { dataResidencyDeclarative } from "@/lib/markets/enforce"
 import {
   adminListConsoleCompliance,
@@ -38,10 +42,36 @@ export default async function ConsoleCompliancePage() {
   return (
     <div data-testid="console-compliance">
       <PageHeader
-        kicker="Canada focus · LEGAL / money / residency"
+        kicker="Canada focus · Ontario demo/staging · payments OFF"
         title="Compliance toggles"
-        lede="Canada is the active money surface. India money toggles stay OFF and are labelled parked. Defaults OFF; money enables need a distinct L0/L1 peer. Checkout / model / API still go through enforce*. dataResidency is declarative until storage pins regions. Open LEGAL/FINANCE/TECH questions held."
+        lede="Demo/staging only. Payments stay OFF until counsel. Money enables need a distinct L0/L1 peer (24h expiry, no self-approval). Kill-switch OFF is instant for any single admin. India money is parked with no enable path. dataResidency is a demo declaration — target vs actual unverified."
       />
+
+      <section className="mb-8" data-testid="go-live-blockers">
+        <h2 className="mb-2 font-serif text-xl font-semibold text-brand">Go-live blockers</h2>
+        <p className="mb-3 text-sm text-ink-soft">
+          Unchecked until counsel / ops close them outside this console. Do not mark done here.
+        </p>
+        <ul className="grid gap-2">
+          {GO_LIVE_BLOCKERS.map((item) => (
+            <li
+              key={item}
+              className="flex items-start gap-3 border border-brand/15 bg-card px-4 py-3"
+              data-testid="go-live-blocker"
+            >
+              <input
+                type="checkbox"
+                checked={false}
+                disabled
+                readOnly
+                aria-checked="false"
+                className="mt-1"
+              />
+              <span className="text-sm text-ink">{item}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
 
       <section className="mb-8 grid gap-3 sm:grid-cols-2">
         {[
@@ -54,15 +84,28 @@ export default async function ConsoleCompliancePage() {
             data-testid={`data-residency-${iso}`}
           >
             <p className="font-mono text-[10px] uppercase tracking-wider text-terra">
-              dataResidency · {iso} · declarative
+              dataResidency · {iso} · demo declaration
               {!focus && INDIA_COMPLIANCE_PARKED ? " · India parked" : focus ? " · Canada focus" : ""}
             </p>
-            <p className="mt-1 font-serif text-lg font-semibold text-brand">
-              Region {r.region ?? "—"}
+            <p className="mt-2 text-sm text-ink">
+              <span className="font-mono text-[10px] uppercase tracking-wider text-ink-faint">
+                Target location
+              </span>
+              <br />
+              <span className="font-serif text-lg font-semibold text-brand">
+                {r.targetLocation ?? "—"}
+              </span>
+            </p>
+            <p className="mt-2 text-sm text-ink" data-testid={`actual-location-${iso}`}>
+              <span className="font-mono text-[10px] uppercase tracking-wider text-ink-faint">
+                Actual location
+              </span>
+              <br />
+              <span className="font-serif text-lg font-semibold text-ink-soft">unverified</span>
             </p>
             <p className="mt-2 text-sm text-ink-soft">{r.notes ?? "No notes."}</p>
             <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-ink-faint">
-              enforcedByStorage: false
+              enforcedByStorage: false · not a compliance badge
             </p>
           </article>
         ))}
@@ -75,12 +118,12 @@ export default async function ConsoleCompliancePage() {
           </h2>
           {iso === "IN" && INDIA_COMPLIANCE_PARKED ? (
             <p className="mb-3 text-sm text-ink-soft" data-testid="india-parked-banner">
-              India money / pay-plane toggles are parked and forced OFF. Canada is the live compliance
-              focus. Non-money IN lease/AI rows may still be reviewed; money enables are blocked.
+              India money / pay-plane is parked and forced OFF with no enable path. Canada is the
+              live compliance focus. Non-money IN lease/AI rows may still be reviewed.
             </p>
           ) : (
             <p className="mb-3 text-sm text-ink-soft">
-              Active money surface — peer approve required to enable money flags.
+              Active money surface — peer approve required to enable; kill-switch OFF is instant.
             </p>
           )}
           <div className="grid gap-3">
@@ -94,6 +137,15 @@ export default async function ConsoleCompliancePage() {
                   <div className="min-w-0 flex-1">
                     <h3 className="font-serif text-lg font-semibold text-brand">{row.label}</h3>
                     <p className="text-sm text-ink-soft">{row.blurb}</p>
+                    {row.hardLocked ? (
+                      <p
+                        className="mt-2 text-sm text-terra"
+                        data-testid="tenant-card-fee-policy"
+                      >
+                        {TENANT_CARD_FEE_POLICY_LABEL}. Changing requires counsel review + code
+                        release — not a toggle.
+                      </p>
+                    ) : null}
                     <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-ink-faint">
                       {row.key}
                       {row.payPlane ? " · host-rail" : ""}
@@ -121,20 +173,21 @@ export default async function ConsoleCompliancePage() {
                         {session?.id === row.pendingProposal.requestedBy
                           ? " (you — cannot self-approve)"
                           : ""}
+                        {" · expires 24h after propose"}
                       </p>
                     ) : null}
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {row.hardLocked ? (
                       <span className="font-mono text-[11px] uppercase tracking-wider text-ink-faint">
-                        Locked OFF
+                        Locked OFF · policy
                       </span>
                     ) : row.indiaParked ? (
                       <span
                         className="font-mono text-[11px] uppercase tracking-wider text-ink-faint"
                         data-testid={`india-parked-${row.key}`}
                       >
-                        India parked · OFF
+                        India parked · OFF · no enable
                       </span>
                     ) : row.pendingProposal ? (
                       <>
@@ -160,7 +213,7 @@ export default async function ConsoleCompliancePage() {
                         <input type="hidden" name="iso" value={row.iso} />
                         <input type="hidden" name="key" value={row.key} />
                         <SubmitButton variant="outline" pendingLabel="…">
-                          Turn off
+                          {row.money ? "Kill switch off" : "Turn off"}
                         </SubmitButton>
                       </form>
                     ) : (
@@ -182,6 +235,10 @@ export default async function ConsoleCompliancePage() {
 
       <section className="mb-10" data-testid="compliance-pending">
         <h2 className="mb-3 font-serif text-xl font-semibold text-brand">Pending money enables</h2>
+        <p className="mb-3 text-sm text-ink-soft">
+          Approvals expire after 24 hours. Self-approval is blocked. Both admins are alerted on every
+          change.
+        </p>
         {pending.length === 0 ? (
           <p className="text-sm text-ink-soft">No open proposals.</p>
         ) : (
@@ -192,7 +249,7 @@ export default async function ConsoleCompliancePage() {
                 className="flex flex-wrap items-center justify-between gap-2 border border-brand/10 bg-card px-4 py-3"
               >
                 <span className="font-mono text-sm">
-                  {p.iso} · {p.flagKey} · by {p.requestedBy}
+                  {p.iso} · {p.flagKey} · by {p.requestedBy} · {p.createdAt}
                 </span>
                 <div className="flex gap-2">
                   {session?.id !== p.requestedBy ? (
@@ -214,6 +271,47 @@ export default async function ConsoleCompliancePage() {
         )}
       </section>
 
+      <section className="mb-10" data-testid="compliance-audit-export">
+        <h2 className="mb-3 font-serif text-xl font-semibold text-brand">Audit export (CSV)</h2>
+        <p className="mb-3 text-sm text-ink-soft">
+          UTF-8 · UTC timestamps · plain decimal amount + currency · tax column · append-only.
+          Export footer includes row count and sha256 hash.
+        </p>
+        <form
+          className="flex flex-wrap items-end gap-3"
+          method="get"
+          action="/api/console/compliance/audit"
+        >
+          <label className="grid gap-1 text-sm">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-ink-faint">
+              From (UTC)
+            </span>
+            <input
+              type="datetime-local"
+              name="from"
+              className="border border-brand/20 bg-card px-2 py-1 font-mono text-sm"
+            />
+          </label>
+          <label className="grid gap-1 text-sm">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-ink-faint">
+              To (UTC)
+            </span>
+            <input
+              type="datetime-local"
+              name="to"
+              className="border border-brand/20 bg-card px-2 py-1 font-mono text-sm"
+            />
+          </label>
+          <button
+            type="submit"
+            className="border border-brand/30 bg-brand px-4 py-2 text-sm text-white"
+            data-testid="audit-export-submit"
+          >
+            Download CSV
+          </button>
+        </form>
+      </section>
+
       <section data-testid="compliance-audit">
         <h2 className="mb-3 font-serif text-xl font-semibold text-brand">Audit log</h2>
         {audit.length === 0 ? (
@@ -222,7 +320,9 @@ export default async function ConsoleCompliancePage() {
           <ul className="grid gap-1">
             {audit.map((e) => (
               <li key={e.id} className="font-mono text-[11px] text-ink-soft">
-                {e.createdAt} · {e.iso} · {e.flagKey} · {e.action} · {e.summary}
+                {e.createdAt} · {e.iso} · {e.flagKey} · {e.action}
+                {e.actorUserId ? ` · actor ${e.actorUserId}` : ""}
+                {e.peerUserId ? ` · approver ${e.peerUserId}` : ""} · {e.summary}
               </li>
             ))}
           </ul>

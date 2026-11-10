@@ -216,11 +216,16 @@ export const COMPLIANCE_CATALOG: ReadonlyArray<ComplianceCatalogEntry> = [
   {
     key: "caTenantCardFee",
     label: "CA tenant card fee",
-    blurb: "Hard-locked OFF — Ontario RTA s134. Not toggleable.",
+    blurb: "Disabled by product policy; Ontario residential legal risk",
     countries: ["CA"],
     money: true,
     hardLocked: true,
-    signOffs: [{ role: "LEGAL", needed: "Permanent OFF (RTA s134) — non-toggleable" }],
+    signOffs: [
+      {
+        role: "LEGAL",
+        needed: "Counsel review + code release required to change (not a toggle)",
+      },
+    ],
   },
   {
     key: "eStore",
@@ -295,3 +300,22 @@ export function catalogEntryFor(
 ): ComplianceCatalogEntry | undefined {
   return COMPLIANCE_CATALOG.find((e) => e.key === key)
 }
+
+/**
+ * Go-live blockers for Ontario demo/staging — always unchecked in console.
+ * Do not mark done here; counsel / ops close these outside the product.
+ */
+export const GO_LIVE_BLOCKERS = [
+  "Ontario lawyer written review",
+  "Stripe money-flow doc plus RPAA/FINTRAC determination",
+  "Listing rights",
+  "RTA and privacy controls demonstrated",
+] as const
+
+export type GoLiveBlocker = (typeof GO_LIVE_BLOCKERS)[number]
+
+/** Money-enable proposals expire after 24h (Aloke Legal+CFO #50). */
+export const COMPLIANCE_PROPOSAL_TTL_MS = 24 * 60 * 60 * 1000
+
+export const TENANT_CARD_FEE_POLICY_LABEL =
+  "Disabled by product policy; Ontario residential legal risk"
