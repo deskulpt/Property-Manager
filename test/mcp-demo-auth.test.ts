@@ -27,15 +27,16 @@ describe("MCP demo auth fail-closed (CTO gate)", () => {
   })
 
   afterEach(() => {
+    vi.unstubAllEnvs()
     for (const k of envKeys) {
+      if (k === "NODE_ENV") continue
       if (prev[k] === undefined) delete process.env[k]
       else process.env[k] = prev[k]
     }
-    vi.unstubAllEnvs()
   })
 
   it("allows demo: tokens in local OSS by default", () => {
-    delete process.env.NODE_ENV
+    vi.stubEnv("NODE_ENV", "test")
     delete process.env.HOSTED
     delete process.env.EASYRENTAL_MCP_ALLOW_DEMO
     expect(mcpDemoTokensAllowed()).toBe(true)
