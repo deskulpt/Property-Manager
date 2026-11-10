@@ -4,17 +4,17 @@ const PROVIDERS: BillingProviderName[] = ["dodo", "stripe", "demo", "paypal"]
 
 export function parseBillingProviderName(
   raw: string | null | undefined,
-  fallback: BillingProviderName = "dodo",
+  fallback: BillingProviderName = "stripe",
 ): BillingProviderName {
   const name = (raw ?? "").trim().toLowerCase()
   return (PROVIDERS.includes(name as BillingProviderName) ? name : fallback) as BillingProviderName
 }
 
-/** ISO 3166-1 alpha-2; empty → IN (domestic default). */
+/** ISO 3166-1 alpha-2; empty → CA (Ontario launch default). */
 export function normalizeBillingCountry(raw: string | null | undefined): string {
   const c = (raw ?? "").trim().toUpperCase()
   if (/^[A-Z]{2}$/.test(c)) return c
-  return "IN"
+  return "CA"
 }
 
 export function isIndiaBillingCountry(country: string | null | undefined): boolean {
@@ -22,24 +22,23 @@ export function isIndiaBillingCountry(country: string | null | undefined): boole
 }
 
 /**
- * Route checkout:
- * - India (IN) → BILLING_PROVIDER (dodo / stripe / demo) — PayPal does not process domestic IN.
- * - Outside India → BILLING_INTL_PROVIDER (default paypal).
+ * Subscription checkout routing (Aloke Canada-first):
+ * - Default processor: **Stripe** (+ Stripe Tax). Deskulpt remits.
+ * - India money plane PARKED — do not special-case Razorpay/Route here.
+ * - Rent Connect DIRECT+PAD is separate (`ca-connect-checkout`), flag OFF.
  * Override: BILLING_FORCE_PROVIDER=… for ops / tests.
  */
 export function resolveProviderNameForPayer(
-  billingCountry: string | null | undefined,
+  _billingCountry: string | null | undefined,
 ): BillingProviderName {
   const force = process.env.BILLING_FORCE_PROVIDER?.trim()
   if (force) return parseBillingProviderName(force)
 
-  if (isIndiaBillingCountry(billingCountry)) {
-    return parseBillingProviderName(process.env.BILLING_PROVIDER, "dodo")
-  }
-  return parseBillingProviderName(process.env.BILLING_INTL_PROVIDER, "paypal")
+  // Canada-first subscription processor — Stripe (India SaaS MoR path parked)
+  return parseBillingProviderName(process.env.BILLING_PROVIDER, "stripe")
 }
 
-/** Primary / domestic provider (India path + default webhook fallback). */
+/** Primary subscription processor (Stripe). */
 export function resolvePrimaryProviderName(): BillingProviderName {
-  return parseBillingProviderName(process.env.BILLING_PROVIDER, "dodo")
+  return parseBillingProviderName(process.env.BILLING_PROVIDER, "stripe")
 }

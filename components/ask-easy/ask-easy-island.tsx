@@ -68,6 +68,8 @@ const STARTERS = [
 
 export type AskEasyIslandProps = {
   gated: boolean
+  /** D02 labelled soft-open when package is below Pro but demo gate allows Ask Easy. */
+  softOpenLabel?: boolean
   properties: { id: string; name: string; units: { id: string; code: string }[] }[]
   pending: AgentProposal[]
   drafts: ListingDraft[]
@@ -76,7 +78,8 @@ export type AskEasyIslandProps = {
 }
 
 export function AskEasyIsland(props: AskEasyIslandProps) {
-  const { gated, properties, pending, drafts, modelMode, onboardSeed } = props
+  const { gated, softOpenLabel = false, properties, pending, drafts, modelMode, onboardSeed } =
+    props
   const pathname = usePathname() || "/landlord"
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -331,8 +334,8 @@ export function AskEasyIsland(props: AskEasyIslandProps) {
         {gated ? (
           <div className="flex flex-1 flex-col gap-3 p-4" data-testid="ask-easy-gated">
             <p className="text-sm text-ink-soft">
-              Soft Pro+ gate applies when package columns are enforced. Review your plan to open
-              Ask Easy — API/MCP approval gates stay intact.
+              Ask Easy draft/propose requires Pro or Enterprise. Growth includes assistant.read
+              only — upgrade to open the approval desk. API/MCP stay package-gated.
             </p>
             <Link href="/landlord/settings" className="btn btn-secondary btn-sm rounded-sm">
               Review package in Settings
@@ -340,6 +343,16 @@ export function AskEasyIsland(props: AskEasyIslandProps) {
           </div>
         ) : (
           <>
+            {softOpenLabel ? (
+              <p
+                className="mx-3 mt-2 border border-warning/40 bg-warning/10 px-2 py-1.5 text-[11px] text-ink-soft"
+                data-testid="ask-easy-soft-open-label"
+                role="status"
+              >
+                Demo soft-open — package entitlements not enforced. Set{" "}
+                <code className="font-mono">ASK_EASY_REQUIRE_PRO=1</code> for hard Pro+ gate.
+              </p>
+            ) : null}
             <div role="tablist" className="tabs tabs-boxed mx-3 mt-2 rounded-sm bg-base-200 p-1">
               <button
                 type="button"

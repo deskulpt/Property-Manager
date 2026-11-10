@@ -40,15 +40,15 @@ export function PricingPage() {
               />
             </p>
             <p className="hero-rise mt-5 font-mono text-[11px] uppercase tracking-[0.18em] text-terra">
-              Landlord listing plans · proposed
+              Landlord packages · per billable unit / month
             </p>
             <h1 className="hero-rise mt-3 max-w-[18ch] font-serif text-3xl font-medium leading-snug tracking-tight text-ink md:text-4xl">
               List once. Lease direct.{" "}
               <span className="text-terra">No Broker!</span>
             </h1>
             <p className="hero-rise mt-4 max-w-[42ch] text-base leading-relaxed text-ink-soft md:text-lg">
-              Pay per active listed property for 12 months — not brokerage, not seeker contact
-              packs. Occupants browse, visit, and apply free.
+              Pay per billable unit each month (Homes / Retail &amp; Office / Industrial) — not
+              brokerage, not seeker contact packs. Occupants browse, visit, and apply free.
             </p>
             <div className="hero-rise mt-8 flex flex-wrap gap-3">
               <Link
@@ -73,7 +73,7 @@ export function PricingPage() {
               className="aspect-[4/3] h-full w-full object-cover"
             />
             <span className="absolute inset-x-0 bottom-0 bg-brand/85 px-4 py-3 text-sm text-paper">
-              Per property · annual · No Broker!
+              Per unit / month · No Broker!
             </span>
           </div>
         </div>
@@ -104,12 +104,12 @@ export function PricingPage() {
           Plans for landlords
         </p>
         <h2 className="reveal mt-3 max-w-[22ch] font-serif text-3xl font-semibold tracking-tight text-ink md:text-4xl">
-          Basic · Growth · Pro — annual per active listing
+          Free · Growth · Pro — packages on a unit metre
         </h2>
         <p className="reveal mt-3 max-w-[58ch] text-ink-soft">
-          Meter = active listed (published) properties. Drafts do not consume a seat until
-          published. Amounts are <strong className="font-semibold text-ink">proposed</strong>{" "}
-          until commercial sign-off; GST shown separately at checkout when billing goes live.
+          Canonical meter = billable unit / month (D01). Packages unlock entitlements (D02) —
+          they are not a second price book. Checkout adds India GST 18% when billing goes live;
+          demo activate only until MoR keys (ER-8).
         </p>
 
         <div className="reveal mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -137,15 +137,9 @@ export function PricingPage() {
               <p className="mt-3 font-serif text-3xl font-semibold tracking-tight text-brand">
                 {plan.priceLabel}
               </p>
-              {plan.priceInr != null ? (
-                <p className="mt-1 font-mono text-[11px] uppercase tracking-wider text-ink-faint">
-                  / active listed property / year · excl. GST
-                </p>
-              ) : (
-                <p className="mt-1 font-mono text-[11px] uppercase tracking-wider text-ink-faint">
-                  Volume + SSO / white-label
-                </p>
-              )}
+              <p className="mt-1 font-mono text-[11px] uppercase tracking-wider text-ink-faint">
+                {plan.meterLabel}
+              </p>
               <p className="mt-4 text-sm leading-relaxed text-ink-soft">{plan.blurb}</p>
               <ul className="mt-5 flex-1 space-y-2 text-sm text-ink">
                 {plan.highlights.map((item) => (
@@ -179,9 +173,9 @@ export function PricingPage() {
           ))}
         </div>
         <p className="reveal mt-6 text-xs text-ink-faint" data-testid="pricing-gst-note">
-          Prices excl. GST unless commercial owner decides inclusive display. Illustrative until
-          Razorpay Subscriptions billing is live — this page activates the package flag on your
-          org (demo purchase).
+          Unit prices excl. GST; India adapter adds 18% at checkout. Volume 6–20 −15%, 21–50 −25%;
+          &gt;50 units = enterprise quote. Demo package activate only — no live card charge in this
+          build.
         </p>
       </section>
 
@@ -222,15 +216,15 @@ export function PricingPage() {
         <p className="reveal font-mono text-xs uppercase tracking-[0.18em] text-terra">
           Feature matrix
         </p>
-        <h2 className="reveal mt-3 font-serif text-2xl font-semibold md:text-3xl">
-          Basic vs Growth vs Pro
+          <h2 className="reveal mt-3 font-serif text-2xl font-semibold md:text-3xl">
+          Free vs Growth vs Pro
         </h2>
         <div className="reveal mt-8 overflow-x-auto">
           <table className="w-full min-w-[720px] border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-ink/20 bg-paper-2 font-mono text-[11px] uppercase tracking-wider text-ink-faint">
                 <th className="px-3 py-3 font-medium">Feature</th>
-                <th className="px-3 py-3 font-medium">Basic</th>
+                <th className="px-3 py-3 font-medium">Free</th>
                 <th className="px-3 py-3 font-medium">Growth</th>
                 <th className="px-3 py-3 font-medium">Pro</th>
               </tr>
@@ -321,7 +315,7 @@ export function PricingPage() {
           <div>
             <h2 className="font-serif text-2xl font-semibold md:text-3xl">Ready to list?</h2>
             <p className="mt-2 max-w-[40ch] text-ink-soft">
-              Sign up as a landlord, pick Basic / Growth / Pro, then open the desk. Secure onboard
+              Sign up as a landlord, pick Free / Growth / Pro, then open the desk. Secure onboard
               may add a role step before this purchase page.
             </p>
           </div>

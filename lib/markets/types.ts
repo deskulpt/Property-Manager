@@ -14,8 +14,11 @@ export const CountryPackSchema = z.object({
   /**
    * Tax registration id for statements/invoices (e.g. CA GST/HST).
    * Optional — omit until registered. Live tax still gated by LEGAL_FEATURE_FLAGS.
+   * Source of truth for billing statement helpers — live tax still gated OFF.
    */
   taxRegistrationId: z.string().min(2).optional(),
+  /** Per-country legal/product gates — omit or false = fail-closed OFF. Canonical keys match Admin compliance console. */
+  legalFeatureFlags: z.record(z.string(), z.boolean()).default({}),
   locale: z.string().min(2),
   currency: z.string().min(3).max(3),
   minorExponent: z.number().int().min(0).max(4),
@@ -35,8 +38,6 @@ export const CountryPackSchema = z.object({
       notes: z.string().optional(),
     })
     .default({ kinds: [] }),
-  /** Per-country legal/product gates — omit or false = fail-closed OFF. */
-  legalFeatureFlags: z.record(z.string(), z.boolean()).default({}),
   /**
    * Declarative residency notes only — **not** enforced by storage yet.
    * See `dataResidencyDeclarative()` in lib/markets/enforce.ts.

@@ -46,42 +46,32 @@ describe("billing country routing", () => {
   stashEnvOnce()
   afterEach(() => restoreEnv())
 
-  it("normalizes country codes and defaults to IN", () => {
+  it("normalizes country codes and defaults to CA (Ontario launch)", () => {
     expect(normalizeBillingCountry("ca")).toBe("CA")
-    expect(normalizeBillingCountry("")).toBe("IN")
-    expect(normalizeBillingCountry("India")).toBe("IN")
+    expect(normalizeBillingCountry("")).toBe("CA")
+    expect(normalizeBillingCountry("in")).toBe("IN")
+    expect(normalizeBillingCountry("India")).toBe("CA") // invalid ISO → CA default
     expect(isIndiaBillingCountry("IN")).toBe(true)
     expect(isIndiaBillingCountry("US")).toBe(false)
   })
 
-  it("routes India to BILLING_PROVIDER (primary MoR)", () => {
-    process.env.BILLING_PROVIDER = "dodo"
-    process.env.BILLING_INTL_PROVIDER = "paypal"
-    delete process.env.BILLING_FORCE_PROVIDER
-    expect(resolveProviderNameForPayer("IN")).toBe("dodo")
-    expect(resolvePrimaryProviderName()).toBe("dodo")
-  })
-
-  it("routes outside India to PayPal by default", () => {
-    process.env.BILLING_PROVIDER = "dodo"
-    delete process.env.BILLING_INTL_PROVIDER
-    delete process.env.BILLING_FORCE_PROVIDER
-    expect(resolveProviderNameForPayer("CA")).toBe("paypal")
-    expect(resolveProviderNameForPayer("US")).toBe("paypal")
-    expect(resolveProviderNameForPayer("AE")).toBe("paypal")
-  })
-
-  it("allows configuring intl provider away from PayPal", () => {
-    process.env.BILLING_PROVIDER = "stripe"
-    process.env.BILLING_INTL_PROVIDER = "stripe"
+  it("defaults subscription routing to Stripe for all markets", () => {
+    delete process.env.BILLING_PROVIDER
     delete process.env.BILLING_FORCE_PROVIDER
     expect(resolveProviderNameForPayer("IN")).toBe("stripe")
-    expect(resolveProviderNameForPayer("GB")).toBe("stripe")
+    expect(resolveProviderNameForPayer("CA")).toBe("stripe")
+    expect(resolvePrimaryProviderName()).toBe("stripe")
+  })
+
+  it("honours BILLING_PROVIDER override (legacy adapters still selectable)", () => {
+    process.env.BILLING_PROVIDER = "paypal"
+    delete process.env.BILLING_FORCE_PROVIDER
+    expect(resolveProviderNameForPayer("CA")).toBe("paypal")
+    expect(resolveProviderNameForPayer("IN")).toBe("paypal")
   })
 
   it("honours BILLING_FORCE_PROVIDER over country", () => {
-    process.env.BILLING_PROVIDER = "dodo"
-    process.env.BILLING_INTL_PROVIDER = "paypal"
+    process.env.BILLING_PROVIDER = "stripe"
     process.env.BILLING_FORCE_PROVIDER = "demo"
     expect(resolveProviderNameForPayer("IN")).toBe("demo")
     expect(resolveProviderNameForPayer("CA")).toBe("demo")
@@ -89,7 +79,7 @@ describe("billing country routing", () => {
 
   it("parses provider names with fallback", () => {
     expect(parseBillingProviderName("paypal")).toBe("paypal")
-    expect(parseBillingProviderName("nope", "dodo")).toBe("dodo")
+    expect(parseBillingProviderName("nope", "stripe")).toBe("stripe")
   })
 })
 
@@ -171,6 +161,7 @@ describe("PayPal sandbox webhook signature", () => {
       standardSubtotalPaise: 299_00,
       chargedSubtotalPaise: 149_00,
       gstPaise: Math.round(149_00 * 0.18),
+      taxQuote: null,
       totalInclusivePaise: 149_00 + Math.round(149_00 * 0.18),
       savingsPaise: 0,
       pricingPath: "sale" as const,
@@ -180,6 +171,8 @@ describe("PayPal sandbox webhook signature", () => {
       strikeStandard: true,
       standardFromLabel: "Standard price (from 1 Apr 2027)",
       lockedUntilIso: null,
+      deferredRevenue: null,
+      discountsStacked: false as const,
     }
     const session = await paypalBillingProvider.createCheckoutSession({
       tenantId: "t1",

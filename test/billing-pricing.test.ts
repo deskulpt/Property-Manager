@@ -11,6 +11,7 @@ import {
   isSaleActive,
   lockRatesFromQuote,
   quotePlatformBilling,
+  requiresEnterpriseQuote,
   volumeDiscountPct,
 } from "@/lib/billing/pricing"
 
@@ -21,13 +22,28 @@ describe("platform billing pricing math", () => {
     expect(billableSegmentFromListing("warehouse")).toBe("industrial")
   })
 
-  it("applies volume tiers", () => {
+  it("applies volume tiers; >50 is enterprise quote not self-serve 0%", () => {
     expect(volumeDiscountPct(1)).toBe(0)
     expect(volumeDiscountPct(6)).toBe(15)
     expect(volumeDiscountPct(20)).toBe(15)
     expect(volumeDiscountPct(21)).toBe(25)
     expect(volumeDiscountPct(50)).toBe(25)
     expect(volumeDiscountPct(51)).toBe(0)
+    expect(requiresEnterpriseQuote(50)).toBe(false)
+    expect(requiresEnterpriseQuote(51)).toBe(true)
+  })
+
+  it("quotes enterprise path for >50 units (no silent catalogue charge)", () => {
+    const q = quotePlatformBilling({
+      mix: [{ segment: "industrial", count: 51 }],
+      cadence: "monthly",
+      nowMs: SALE_END_UTC + 86_400_000,
+      payingAccountCount: 0,
+    })
+    expect(q.pricingPath).toBe("enterprise_quote")
+    expect(q.chargedSubtotalPaise).toBe(0)
+    expect(q.totalInclusivePaise).toBe(0)
+    expect(q.standardSubtotalPaise).toBe(51 * STANDARD_MONTHLY_PAISE.industrial)
   })
 
   it("sale window and 500-account cap", () => {
@@ -81,8 +97,13 @@ describe("platform billing pricing math", () => {
     expect(q.volumeDiscountPct).toBe(0)
   })
 
-  it("applies volume after the sale window (no stacking)", () => {
-    const volumeTotal = Math.round(25 * STANDARD_MONTHLY_PAISE.industrial * 0.75)
+  it("applies graduated volume after the sale window (no stacking, not all-units %)", () => {
+    // 1–5 full + 6–20 @15% + 21–25 @25%
+    const volumeTotal =
+      5 * STANDARD_MONTHLY_PAISE.industrial +
+      Math.round(15 * STANDARD_MONTHLY_PAISE.industrial * 0.85) +
+      Math.round(5 * STANDARD_MONTHLY_PAISE.industrial * 0.75)
+    const flatAllUnits = Math.round(25 * STANDARD_MONTHLY_PAISE.industrial * 0.75)
     const q = quotePlatformBilling({
       mix: [{ segment: "industrial", count: 25 }],
       cadence: "monthly",
@@ -92,6 +113,8 @@ describe("platform billing pricing math", () => {
     expect(q.pricingPath).toBe("volume")
     expect(q.volumeDiscountPct).toBe(25)
     expect(q.chargedSubtotalPaise).toBe(volumeTotal)
+    expect(q.chargedSubtotalPaise).not.toBe(flatAllUnits)
+    expect(q.discountsStacked).toBe(false)
   })
 
   it("never multiplies sale rates by volume percent", () => {

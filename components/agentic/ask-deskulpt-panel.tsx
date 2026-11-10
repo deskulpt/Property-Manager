@@ -36,9 +36,9 @@ export function AskDeskulptPanel({
       <div className="border border-ink/10 bg-paper-2 p-4">
         <p className="font-sans text-lg font-extrabold">Ask Easy (Pro)</p>
         <p className="mt-2 text-sm text-ink-soft">
-          Draft listings and propose desk actions with a human approval gate. Basic and Growth
-          organisations see this upgrade path — switch to Nadia (BBM · Pro) in the Demo identity menu
-          to try the stub agent, or upgrade below.
+          Draft listings and propose desk actions with a human approval gate. Free and Growth
+          organisations see this upgrade path (Growth has assistant.read only) — switch to Nadia
+          (BBM · Pro) in the Demo identity menu to try the stub agent, or upgrade below.
         </p>
         <Link
           href={subscribeHref("pro", { from: "ask-easy" })}

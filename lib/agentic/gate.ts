@@ -1,41 +1,56 @@
 import "server-only"
 import { getDb } from "@/lib/db"
+import { packageHasAskEasy, parsePlanId, planHasEntitlement, type PlanId } from "@/lib/plans"
 
 /**
- * Pro+ gate for Ask Easy (PRD §21.8).
+ * Ask Easy / assistant entitlements gate (D02).
  *
- * TODO(Slice A): when `subscription_package` lands on tenants (see
- * `lib/auth/packages.ts` on the auth branch — `askEasy: true` for pro/enterprise),
- * replace this soft path with `packageLimits(parsePackage(...)).askEasy`.
+ * Schema column is `tenants.package` (not `subscription_package`).
  *
- * Until then: OSS demo landlords are treated as Pro-capable so evaluators can
- * exercise the approval UI without hosted packages. Set `ASK_EASY_REQUIRE_PRO=1`
- * to force a hard deny (upgrade CTA) for every tenant.
+ * Soft-open demo (labelled): when `ASK_EASY_SOFT_OPEN` is unset/1 and
+ * `ASK_EASY_REQUIRE_PRO` is not set, evaluators may exercise the approval UI
+ * without a paid package. Production / hard gate uses package entitlements:
+ * Pro+ for draft/propose (`askEasy`).
  */
 
-const PRO_PLUS = new Set(["pro", "enterprise", "portfolio"])
-
-function tenantsHavePackageColumn(): boolean {
-  const cols = getDb().prepare("PRAGMA table_info(tenants)").all() as { name: string }[]
-  return cols.some((col) => col.name === "subscription_package")
+function readTenantPackage(tenantId: string): PlanId {
+  const row = getDb()
+    .prepare("SELECT package AS pkg FROM tenants WHERE id = ?")
+    .get(tenantId) as { pkg?: string } | undefined
+  return parsePlanId(row?.pkg)
 }
 
-export function tenantHasAskEasy(tenantId: string): boolean {
-  if (process.env.ASK_EASY_REQUIRE_PRO === "1") {
-    if (!tenantsHavePackageColumn()) return false
-  }
-  if (!tenantsHavePackageColumn()) {
-    // Soft-open: Slice A packages not on this checkout.
+/** Soft-open allowed unless hard-require is on. */
+export function askEasySoftOpenEnabled(): boolean {
+  if (process.env.ASK_EASY_REQUIRE_PRO === "1") return false
+  if (process.env.ASK_EASY_SOFT_OPEN === "0") return false
+  // Default: soft-open for demo/evaluators (labelled in UI).
+  return true
+}
+
+export function tenantPackageId(tenantId: string): PlanId {
+  return readTenantPackage(tenantId)
+}
+
+export function tenantHasEntitlement(
+  tenantId: string,
+  key: "assistant.read" | "assistant.draft" | "assistant.propose" | "automation.policies" | "mcp.access" | "api.access",
+): boolean {
+  if (askEasySoftOpenEnabled() && (key === "assistant.read" || key === "assistant.draft" || key === "assistant.propose")) {
+    // Soft-open demo: allow assistant surface so evaluators can exercise approve UI.
     return true
   }
-  const row = getDb()
-    .prepare("SELECT subscription_package AS pkg FROM tenants WHERE id = ?")
-    .get(tenantId) as { pkg?: string } | undefined
-  const pkg = String(row?.pkg ?? "starter").toLowerCase()
-  if (pkg === "basic") return false
-  return PRO_PLUS.has(pkg)
+  return planHasEntitlement(readTenantPackage(tenantId), key)
 }
 
-export function askEasyGateReason(tenantId: string): "ok" | "upgrade" {
-  return tenantHasAskEasy(tenantId) ? "ok" : "upgrade"
+/** Pro+ Ask Easy draft/propose desk (or labelled soft-open). */
+export function tenantHasAskEasy(tenantId: string): boolean {
+  if (askEasySoftOpenEnabled()) return true
+  return packageHasAskEasy(readTenantPackage(tenantId))
+}
+
+export function askEasyGateReason(tenantId: string): "ok" | "upgrade" | "soft_open" {
+  if (packageHasAskEasy(readTenantPackage(tenantId))) return "ok"
+  if (askEasySoftOpenEnabled()) return "soft_open"
+  return "upgrade"
 }

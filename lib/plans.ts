@@ -1,13 +1,30 @@
 /**
- * Landlord listing plans — PRD §7 / brief-pricing-plans-mvp.
- * Public ladder: Basic → Growth → Pro (+ Enterprise sales).
- * Code id `starter` is the Basic successor (Slice A / Ask Easy gate compatible).
+ * Landlord packages — entitlements + public cards (D01/D02).
+ * Money meter is per billable unit / month in `lib/billing/pricing.ts`.
+ * Packages gate features; they are not a second charging meter.
  */
+
+import {
+  FREE_PLAN_MAX_UNITS,
+  SALE_MONTHLY_PAISE,
+  STANDARD_MONTHLY_PAISE,
+  formatInrPaise,
+} from "@/lib/billing/pricing"
 
 export type PlanId = "starter" | "growth" | "pro" | "enterprise"
 
 /** @deprecated Prefer PlanId — alias kept for existing PackageTier call sites. */
 export type PackageTier = PlanId
+
+/** Split AI / automation / API entitlements (D02). */
+export type PlanEntitlements = {
+  "assistant.read": boolean
+  "assistant.draft": boolean
+  "assistant.propose": boolean
+  "automation.policies": boolean
+  "mcp.access": boolean
+  "api.access": boolean
+}
 
 export type PlanLimits = {
   id: PlanId
@@ -16,27 +33,70 @@ export type PlanLimits = {
   maxProperties: number
   maxUnitsPerProperty: number
   maxSeats: number
+  /**
+   * @deprecated D15 NOT Aloke-approved — Matterport/360 is paid add-on or BYO, not base.
+   * Kept for display migration; prefer `matterportIncluded: false` + add-on SKU.
+   */
   matterportTours: number | "unlimited"
+  /** D15 CFO: Matterport not in base plans until Aloke approves. */
+  matterportIncluded: false
+  /** Soft media storage cap (MB) — D15. */
+  mediaStorageCapMb: number
   customDomain: boolean
+  /**
+   * Legacy Ask Easy desk/draft gate — true when draft or propose entitled.
+   * Prefer `entitlements` for new checks.
+   */
   askEasy: boolean
   liveRazorpay: boolean
+  entitlements: PlanEntitlements
 }
 
 export type PublicPlanCard = {
   id: PlanId
   label: string
-  /** Annual INR per active listed property; null = custom / sales. */
+  /** Illustrative monthly INR for card display; null = free / custom / sales. */
   priceInr: number | null
   priceLabel: string
+  /** Meter copy under the price (never per-property/year after D01). */
+  meterLabel: string
   blurb: string
   highlights: string[]
   cta: string
   href: string
   featured?: boolean
+  /** True while live MoR charge is not active (demo activate only). */
   proposed: boolean
 }
 
 export const DEFAULT_PLAN: PlanId = "starter"
+
+const ENTITLE_NONE: PlanEntitlements = {
+  "assistant.read": false,
+  "assistant.draft": false,
+  "assistant.propose": false,
+  "automation.policies": false,
+  "mcp.access": false,
+  "api.access": false,
+}
+
+const ENTITLE_GROWTH: PlanEntitlements = {
+  ...ENTITLE_NONE,
+  "assistant.read": true,
+}
+
+const ENTITLE_PRO: PlanEntitlements = {
+  ...ENTITLE_GROWTH,
+  "assistant.draft": true,
+  "assistant.propose": true,
+}
+
+const ENTITLE_ENTERPRISE: PlanEntitlements = {
+  ...ENTITLE_PRO,
+  "automation.policies": true,
+  "mcp.access": true,
+  "api.access": true,
+}
 
 export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
   starter: {
@@ -45,10 +105,13 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     maxProperties: 50,
     maxUnitsPerProperty: 1,
     maxSeats: 2,
-    matterportTours: 1,
+    matterportTours: 0,
+    matterportIncluded: false,
+    mediaStorageCapMb: 256,
     customDomain: false,
     askEasy: false,
     liveRazorpay: false,
+    entitlements: ENTITLE_NONE,
   },
   growth: {
     id: "growth",
@@ -56,10 +119,13 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     maxProperties: 10,
     maxUnitsPerProperty: 80,
     maxSeats: 5,
-    matterportTours: 3,
+    matterportTours: 0,
+    matterportIncluded: false,
+    mediaStorageCapMb: 2_048,
     customDomain: false,
     askEasy: false,
     liveRazorpay: true,
+    entitlements: ENTITLE_GROWTH,
   },
   pro: {
     id: "pro",
@@ -67,10 +133,13 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     maxProperties: 50,
     maxUnitsPerProperty: 200,
     maxSeats: 15,
-    matterportTours: "unlimited",
+    matterportTours: 0,
+    matterportIncluded: false,
+    mediaStorageCapMb: 10_240,
     customDomain: true,
     askEasy: true,
     liveRazorpay: true,
+    entitlements: ENTITLE_PRO,
   },
   enterprise: {
     id: "enterprise",
@@ -78,45 +147,54 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     maxProperties: 10_000,
     maxUnitsPerProperty: 10_000,
     maxSeats: 500,
-    matterportTours: "unlimited",
+    matterportTours: 0,
+    matterportIncluded: false,
+    mediaStorageCapMb: 102_400,
     customDomain: true,
     askEasy: true,
     liveRazorpay: true,
+    entitlements: ENTITLE_ENTERPRISE,
   },
 }
 
-/** Public pricing cards (excl. GST; amounts proposed until commercial sign-off). */
+const homesFromInr = Math.round(SALE_MONTHLY_PAISE.homes / 100)
+const homesStdInr = Math.round(STANDARD_MONTHLY_PAISE.homes / 100)
+
+/** Public pricing cards — package entitlements; money = per-unit catalogue (D01). */
 export const PUBLIC_PLANS: PublicPlanCard[] = [
   {
     id: "starter",
-    label: "Basic",
-    priceInr: 499,
-    priceLabel: "₹499",
-    blurb: "One active listing seat — publish, tours, QR, and direct apply.",
+    label: "Free",
+    priceInr: 0,
+    priceLabel: "₹0",
+    meterLabel: `${FREE_PLAN_MAX_UNITS} billable unit · no AI entitlements`,
+    blurb: "Try the desk on one unit. Seekers browse and apply free — No Broker!",
     highlights: [
-      "1 active listed property seat",
+      `${FREE_PLAN_MAX_UNITS} billable unit (Homes / Retail & Office / Industrial meter)`,
       "Public listings + OSM map",
       "Applications + visit booking",
-      "1 Matterport tour / property",
+      "Matterport/360 = paid add-on or BYO (not base — D15 pending)",
+      `Media storage cap ${PLAN_LIMITS.starter.mediaStorageCapMb} MB`,
       "Standard QR print posters",
-      "Demo shop only",
+      "Demo shop only · no Ask Easy",
     ],
-    cta: "Start with Basic",
+    cta: "Start free",
     href: "/pricing/subscribe?plan=starter",
     proposed: true,
   },
   {
     id: "growth",
     label: "Growth",
-    priceInr: 1499,
-    priceLabel: "₹1,499",
-    blurb: "Scale seats as you publish — live Razorpay shop when keys are set.",
+    priceInr: homesFromInr,
+    priceLabel: formatInrPaise(SALE_MONTHLY_PAISE.homes),
+    meterLabel: `from / unit / month · excl. GST · sale Homes (std ${formatInrPaise(STANDARD_MONTHLY_PAISE.homes)})`,
+    blurb: "Paid unit metre + assistant.read. Live Razorpay shop when keys are set.",
     highlights: [
-      "N seats × per-property price",
-      "Up to 3 Matterport tours / property",
+      "Pay per billable unit (Homes / Retail & Office / Industrial)",
+      "assistant.read entitlement",
+      "Matterport/360 add-on or BYO (not included)",
       "QR + logo lockup",
       "Live Razorpay when keys set",
-      "Ask Easy stub / limited",
       "Partner request + landlord approve",
     ],
     cta: "Choose Growth",
@@ -127,14 +205,15 @@ export const PUBLIC_PLANS: PublicPlanCard[] = [
   {
     id: "pro",
     label: "Pro",
-    priceInr: 2999,
-    priceLabel: "₹2,999",
-    blurb: "Custom domain, Ask Easy, and priority partner match.",
+    priceInr: homesFromInr,
+    priceLabel: formatInrPaise(SALE_MONTHLY_PAISE.homes),
+    meterLabel: "from / unit / month · excl. GST · + Ask Easy draft/propose",
+    blurb: "Custom domain and Ask Easy draft/propose with human approval.",
     highlights: [
-      "N seats × per-property price",
-      "Unlimited fair-use Matterport",
+      "Same per-unit metre as Growth",
+      "assistant.draft + assistant.propose",
+      "Matterport/360 add-on or BYO (not included)",
       "Custom domain (1 hostname)",
-      "Ask Easy (fair-use)",
       "Multi-unit QR batch",
       "Priority email support",
     ],
@@ -147,9 +226,11 @@ export const PUBLIC_PLANS: PublicPlanCard[] = [
     label: "Enterprise",
     priceInr: null,
     priceLabel: "Custom",
-    blurb: "Volume seats, SSO / white-label later — sales-led.",
+    meterLabel: ">50 units = sales quote · MCP / API / automation policies",
+    blurb: "Volume portfolios, SSO / white-label later — sales-led. Self-serve volume stops at 50 units.",
     highlights: [
-      "Flexible volume pricing",
+      "Enterprise quote (not self-serve 0% volume)",
+      "automation.policies + mcp.access + api.access",
       "Dedicated onboarding",
       "SLA + priority support",
       "White-label options (roadmap)",
@@ -169,10 +250,10 @@ export type FeatureMatrixRow = {
 
 export const FEATURE_MATRIX: FeatureMatrixRow[] = [
   {
-    feature: "Active listed properties",
-    starter: "1 seat / purchase",
-    growth: "N seats (per-property)",
-    pro: "N seats",
+    feature: "Billable units",
+    starter: `${FREE_PLAN_MAX_UNITS} unit`,
+    growth: "Per-unit metre",
+    pro: "Per-unit metre",
   },
   {
     feature: "Public listings + OSM map",
@@ -187,10 +268,10 @@ export const FEATURE_MATRIX: FeatureMatrixRow[] = [
     pro: "Yes",
   },
   {
-    feature: "Matterport iframe tour",
-    starter: "1 / property",
-    growth: "Up to 3 / property",
-    pro: "Unlimited fair-use",
+    feature: "Matterport / 360",
+    starter: "Add-on or BYO (not base)",
+    growth: "Add-on or BYO (not base)",
+    pro: "Add-on or BYO (not base)",
   },
   {
     feature: "QR print posters",
@@ -211,10 +292,16 @@ export const FEATURE_MATRIX: FeatureMatrixRow[] = [
     pro: "Live + more SKU slots",
   },
   {
-    feature: "Ask Easy",
-    starter: "Upgrade CTA",
-    growth: "Stub / limited",
-    pro: "Yes (fair-use)",
+    feature: "assistant.read",
+    starter: "—",
+    growth: "Yes",
+    pro: "Yes",
+  },
+  {
+    feature: "assistant.draft / propose",
+    starter: "—",
+    growth: "Upgrade to Pro",
+    pro: "Yes (human approve)",
   },
   {
     feature: "Partner & Service Network",
@@ -230,7 +317,7 @@ export const FEATURE_MATRIX: FeatureMatrixRow[] = [
   },
   {
     feature: "Units soft cap / property",
-    starter: "25",
+    starter: "1",
     growth: "80",
     pro: "200",
   },
@@ -258,9 +345,9 @@ export type FabRow = { feature: string; advantage: string; benefit: string }
 
 export const FAB_ROWS: FabRow[] = [
   {
-    feature: "Per-property annual price",
-    advantage: "Pay only for what is live",
-    benefit: "No unlimited-portfolio tax on empty shells",
+    feature: "Per-unit monthly metre",
+    advantage: "Pay for Homes / Retail & Office / Industrial stock you operate",
+    benefit: "No per-property-year double meter; free seekers stay free",
   },
   {
     feature: "Direct apply (no contact paywall)",
@@ -284,8 +371,8 @@ export const FAB_ROWS: FabRow[] = [
   },
   {
     feature: "Ask Easy (Pro)",
-    advantage: "Listing autofill + assist",
-    benefit: "Less time writing C&I copy",
+    advantage: "Draft + propose with human approve",
+    benefit: "Less time writing C&I copy — never-auto intact",
   },
   {
     feature: "Partner network",
@@ -306,13 +393,13 @@ export const COMPARE_ROWS: CompareRow[] = [
     dimension: "Who pays",
     brokerage: "Usually landlord and/or tenant via agent",
     contactPacks: "Seeker and/or owner (tier packs)",
-    easyRental: "Landlord (SaaS)",
+    easyRental: "Landlord (SaaS per billable unit)",
   },
   {
     dimension: "Typical cost shape",
     brokerage: "~0.5–1 month rent (market practice)",
     contactPacks: "~₹999 / ₹2,999 / ₹5,499 one-shots (approx.)",
-    easyRental: "₹499 / ₹1,499 / ₹2,999 per active listing / year",
+    easyRental: `Homes from ${formatInrPaise(SALE_MONTHLY_PAISE.homes)}/unit/mo sale (std ${formatInrPaise(STANDARD_MONTHLY_PAISE.homes)}); +18% GST India`,
   },
   {
     dimension: "Brokerage",
@@ -324,7 +411,7 @@ export const COMPARE_ROWS: CompareRow[] = [
     dimension: "Validity",
     brokerage: "Per deal",
     contactPacks: "Often short windows",
-    easyRental: "12 months",
+    easyRental: "Monthly or annual (10×) · 12-month price lock on paid join",
   },
   {
     dimension: "Occupant apply",
@@ -336,7 +423,7 @@ export const COMPARE_ROWS: CompareRow[] = [
     dimension: "Portfolio meter",
     brokerage: "Commission scales with rent",
     contactPacks: "Packs ≠ portfolio SaaS",
-    easyRental: "Pay per property listed",
+    easyRental: "Pay per billable unit / month (not per-property/year)",
   },
 ]
 
@@ -353,6 +440,14 @@ export function planLimits(id: PlanId): PlanLimits {
   return PLAN_LIMITS[id]
 }
 
+export function planEntitlements(id: PlanId): PlanEntitlements {
+  return PLAN_LIMITS[id].entitlements
+}
+
+export function planHasEntitlement(id: PlanId, key: keyof PlanEntitlements): boolean {
+  return PLAN_LIMITS[id].entitlements[key]
+}
+
 export function planLabel(id: PlanId): string {
   return PLAN_LIMITS[id].label
 }
@@ -361,6 +456,7 @@ export function packageHasCustomDomain(id: PlanId): boolean {
   return PLAN_LIMITS[id].customDomain
 }
 
+/** True when package may use Ask Easy draft/propose desk (Pro+). */
 export function packageHasAskEasy(id: PlanId): boolean {
   return PLAN_LIMITS[id].askEasy
 }
@@ -388,3 +484,7 @@ export function subscribeHref(plan: PlanId, extras?: { seats?: number; from?: st
   if (extras?.from) params.set("from", extras.from)
   return `${SUBSCRIBE_PATH}?${params.toString()}`
 }
+
+/** Illustrative Homes sale/standard INR for tests and copy (D01). */
+export const PUBLIC_HOMES_SALE_INR = homesFromInr
+export const PUBLIC_HOMES_STANDARD_INR = homesStdInr

@@ -83,10 +83,10 @@ export function BillingDesk({
         <section className="bg-card p-4 ring-1 ring-foreground/10 md:p-6">
           <h2 className="font-sans text-lg font-extrabold">Checkout (test mode)</h2>
           <p className="mt-1 text-sm text-ink-soft">
-            No live keys — adapters open an in-app confirm step. India payers use{" "}
-            <code className="font-mono text-xs">BILLING_PROVIDER</code> (Dodo/Stripe). Outside India,
-            PayPal sandbox (Deskulpt Inc CA) via <code className="font-mono text-xs">BILLING_INTL_PROVIDER</code>
-            — INR total converted to CAD/USD. Sale vs volume: better discount wins (never stacked).
+            Canada-first: Stripe (+ Stripe Tax) for Deskulpt Inc subscriptions. Ontario rent uses
+            Stripe Connect hosted Checkout (DIRECT + PAD) behind{" "}
+            <code className="font-mono text-xs">ontarioConnectDirectPad</code> (OFF). India money
+            plane is parked — Route / Razorpay stay OFF.
           </p>
           <form action={startCheckoutAction} className="mt-4 grid gap-3">
             <label className="grid gap-1 text-sm">
@@ -94,15 +94,14 @@ export function BillingDesk({
               <select
                 name="billing_country"
                 className="h-10 border border-ink/20 bg-paper px-3"
-                defaultValue="IN"
+                defaultValue="CA"
               >
-                <option value="IN">India (Dodo / primary MoR)</option>
-                <option value="CA">Canada (PayPal — CAD)</option>
-                <option value="US">United States (PayPal — USD/CAD)</option>
-                <option value="GB">United Kingdom (PayPal)</option>
-                <option value="AE">UAE (PayPal)</option>
-                <option value="SG">Singapore (PayPal)</option>
-                <option value="AU">Australia (PayPal)</option>
+                <option value="CA">Canada (Stripe — CAD)</option>
+                <option value="US">United States (Stripe / PayPal)</option>
+                <option value="GB">United Kingdom</option>
+                <option value="IN" disabled>
+                  India (parked)
+                </option>
               </select>
             </label>
             <label className="grid gap-1 text-sm">

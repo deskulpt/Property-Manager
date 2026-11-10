@@ -10,6 +10,7 @@ import {
   type UnitMix,
 } from "@/lib/billing/pricing"
 import { getBillingProviderByName, resolveBillingProviderForPayer } from "@/lib/billing"
+import { evaluateGoLiveGate } from "@/lib/billing/go-live-gate"
 import { normalizeBillingCountry } from "@/lib/billing/routing"
 import type { BillingProviderName, BillingSubscriptionRow, SubscriptionStatus } from "@/lib/billing/types"
 
@@ -149,10 +150,14 @@ export async function startBillingCheckout(input: {
     return { ok: false as const, error: "Add at least one unit to the mix." }
   }
   const billingCountry = normalizeBillingCountry(input.billingCountry)
+  let provider = resolveBillingProviderForPayer(billingCountry)
+  // D10 fail-closed: never route live MoR/processor until go-live gate passes (demo OK).
+  const gate = evaluateGoLiveGate()
+  if (!gate.readyForLiveMoney && provider.name !== "demo") {
+    provider = getBillingProviderByName("demo")
+  }
   const { assertOntarioConnectPadAllowed } = await import("@/lib/markets/enforce")
-  const provider = resolveBillingProviderForPayer(billingCountry)
   // Fail-closed: Connect DIRECT+PAD never charged while ontarioConnectDirectPad OFF.
-  // Match by name string — provider union may not list Connect PAD until later stack PRs.
   if (/connect.*pad/i.test(String(provider.name))) {
     const pad = assertOntarioConnectPadAllowed(billingCountry)
     if (!pad.ok) return { ok: false as const, error: pad.error }

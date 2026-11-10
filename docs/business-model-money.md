@@ -2,7 +2,8 @@
 
 **Product:** Easy Rental (easyrental.space) · **Operator:** DeSkulpt Inc.  
 **Audience:** L0/L1 product + eng · Admin sibling · billing slices  
-**Tip source of truth:** tip `87d4c57` (`lib/billing/pricing.ts`, `lib/plans.ts`, `lib/markets/*`, prefs) — not older dual-market brochure copy alone.  
+**Tip source of truth:** Origin `7808188`+ (`lib/billing/pricing.ts`, `lib/plans.ts`, `lib/markets/*`) after D01/D02 reconcile.  
+**Decisions:** [prd-decisions-d01-d15.md](./prd-decisions-d01-d15.md) · unified [prd-unified-v1.md](./prd-unified-v1.md)  
 **Companion:** [country-schema-switch.md](./country-schema-switch.md)
 
 ---
@@ -49,7 +50,7 @@ In product language, SaaS **tenant** = landlord org or PM company (prefs: tenanc
 | `retail_office` | `commercial` | ₹699 | ₹349 |
 | `industrial` | warehouse / industrial / storage-class | ₹1,999 | ₹999 |
 
-Sale window (code): **1 Dec 2026 → 31 Mar 2027 IST**, capped at **500** paying accounts. Volume discount (does **not** stack with sale — better path wins): **6–20** units → 15% off standard; **21–50** → 25%. **Annual = 10 × monthly**. Free plan: **1 unit** org-wide until paid (`FREE_PLAN_MAX_UNITS`).
+Sale window (code): **1 Dec 2026 → 31 Mar 2027 IST**, capped at **500** paying accounts. Volume discount (does **not** stack with sale — better path wins): **6–20** units → 15% off standard; **21–50** → 25%. **>50 units = enterprise quote** (not self-serve 0%). **Annual = 10 × monthly**. Free plan: **1 unit** org-wide until paid (`FREE_PLAN_MAX_UNITS`).
 
 ### Non-paying (demand side)
 
@@ -77,28 +78,37 @@ Sale window (code): **1 Dec 2026 → 31 Mar 2027 IST**, capped at **500** paying
 | Rule | Tip fact |
 | --- | --- |
 | Meter | **Units** in portfolio, mixed by segment |
-| Currency of record | **INR paise** for quote math + GST **18%** (`GST_BPS = 1800`) |
-| Checkout UI | `/landlord/billing` · `components/billing/billing-desk.tsx` |
-| Providers | IN → `BILLING_PROVIDER` (**dodo** default / stripe / demo); non-IN → `BILLING_INTL_PROVIDER` (**paypal** default) — `lib/billing/routing.ts` |
-| Intl settlement | PayPal converts GST-inclusive INR → **CAD/USD** via env FX (`lib/billing/fx.ts`) — NRI / CA payer path, **not** a full CA ledger |
-| Price lock | 12 months from join (`lockRatesFromQuote`) |
+| Currency of record | Catalogue still INR paise for unit metre; **tax via Stripe Tax stub** (`lib/billing/tax.ts`). Deskulpt Inc = **Canadian**. Launch: **Ontario + Telangana** (TG gated). |
+| Volume | **Graduated** bands; sale/volume/affiliate **do not stack** |
+| Subscriptions | **Stripe** processor; Deskulpt files/remits tax via Stripe Tax (ON HST; IN RC + GSTIN) |
+| Rent | Landlord-owned **UPI / Razorpay** — Deskulpt **never touches rent**. **No Route / linked accounts / splits.** |
+| Surcharge | **% after rent settles** — separate Stripe invoice (card/mandate); not Route |
+| Deposits | **Not held** by Deskulpt — landlord or licensed escrow only |
+| Checkout UI | `/landlord/billing` · fail-closed until `go-live-gate.ts` |
+| Price lock | 12 months from join |
+| Annual | Prepay = deferred revenue, recognize monthly (stub) |
 | Cancel | One-click → Free (1 unit) |
 
-**Do not invent seeker SKUs.** Platform MoR is landlord subscription only.
+**Do not invent seeker SKUs.** D11/D12/D13/D15 not Aloke-approved. Affiliate inactive. Matterport add-on/BYO.
 
-### 4.2 Public ladder still in tip — per-property annual (marketing / package gates)
+### 4.2 Package ladder (entitlements) — D01/D02 reconciled
 
-`lib/plans.ts` + [brief-pricing-plans-mvp.md](./brief-pricing-plans-mvp.md) still expose **Basic / Growth / Pro** as **proposed ₹499 / ₹1,499 / ₹2,999 per active listed property / year** (feature matrix, Ask Easy, custom domain, Razorpay shop gates). Landlord settings still show package usage.
+**DECIDED:** one charging meter = per billable unit / month. `PUBLIC_PLANS` no longer sells a per-property/year second book. Free/Growth/Pro/Enterprise are **package entitlements** on top of the unit catalogue.
 
-**Reconciliation for eng:**
+| Package | Money | Entitlements (D02) |
+| --- | --- | --- |
+| Free (`starter`) | 1 unit | none AI |
+| Growth | per-unit metre | `assistant.read` |
+| Pro | per-unit metre | draft + propose (+ custom domain, etc.) |
+| Enterprise | sales quote (&gt;50 units) | + `automation.policies` + `mcp.access` + `api.access` |
 
-| Layer | What it controls today |
+| Layer | What it controls |
 | --- | --- |
-| `quotePlatformBilling` | Money charged at billing desk (per-unit) |
-| `PLAN_LIMITS` / `tenants.package` | Soft caps + feature flags (domain, Ask Easy, live Razorpay) |
-| Public `/pricing` | Marketing cards from `PUBLIC_PLANS` (still **proposed** amounts) |
+| `quotePlatformBilling` | Money charged at billing desk (per-unit; `enterprise_quote` when units ≥ 51) |
+| `PLAN_LIMITS` / `tenants.package` | Soft caps + split entitlements |
+| Public `/pricing` | Unit-metre cards + package highlights (demo activate; no live MoR) |
 
-Product decision still open for commercial sign-off: keep **both** meters (unit SaaS + property seats) or collapse public copy to match per-unit tip. Until then, docs and UI must not silently charge seekers.
+Historical Project-store brief `brief-pricing-plans-mvp.md` is research only — do not reintroduce per-property/year cards.
 
 ### 4.3 India vs Canada vs future
 

@@ -4,8 +4,10 @@
 
 - Next.js 16 App Router, React 19, TypeScript
 - SQLite via `node:sqlite` (`lib/db.ts`, seed in `lib/seed-demo.ts`)
-- Zod validation, Tailwind 4, shadcn/Base UI
+- Zod validation, Tailwind 4, **DaisyUI + PWA** desks (D14; residual shadcn primitives OK until migrated)
 - Hosting target: **Railway** (Node 22+)
+- Persistence: **SQLite** for demo/pilot with risk label (D05); Postgres = spike/migration path, not big-bang
+- Billing metre: per billable unit / month (`lib/billing/pricing.ts`); packages in `lib/plans.ts` (D01/D02)
 
 ## Multi-tenancy
 

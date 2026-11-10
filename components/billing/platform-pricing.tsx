@@ -78,7 +78,10 @@ export function PlatformPricing({ nowMs }: { nowMs: number }) {
         <h2 className="font-sans text-lg font-extrabold text-ink">Also included</h2>
         <ul className="list-disc space-y-1 pl-5">
           <li>Free: 1 unit. Cancel anytime from Billing — as easy as signing up.</li>
-          <li>Volume: 6–20 units −15%, 21–50 units −25% (does not stack with sale; we apply the better deal).</li>
+          <li>
+            Volume: 6–20 units −15%, 21–50 units −25% (does not stack with sale; better deal wins).
+            Portfolios above 50 units require an enterprise quote (not self-serve 0%).
+          </li>
           <li>12-month price lock from the day you join a paid plan.</li>
           <li>Test-mode checkout only — no live payment keys in this build.</li>
           <li>
