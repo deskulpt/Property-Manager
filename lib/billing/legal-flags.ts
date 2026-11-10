@@ -90,8 +90,9 @@ export function assertIndiaMoneyParked(): void {
   }
 }
 
+/** D13 Legal Reject CLEARED (2026-11-10) — India demo only; CA/ON Stripe first. */
 export const D13_LEGAL_WORDING =
-  "Telangana and Ontario selected; synthetic demos allowed; production gated by feature."
+  "India demo only; production pending documented country/state/feature gates; Canada/Ontario on Stripe = first demo market."
 
 export const ALOKE_ENTITY_NAMES = {
   canada: DESKULPT_CANADA_LEGAL_NAME,
@@ -185,13 +186,17 @@ export function razorpayRouteRuntimeAllowed(): boolean {
 }
 
 export function depositHoldsRuntimeAllowed(): boolean {
-  return evaluateRouteDepositGates().depositHoldsAllowed === true
+  // Aloke Nov10: deposit-holding hard OFF — ignore env/gate unlock until code release.
+  return false
 }
 
 /** Legal Ontario commission — design/test only until live gates clear. */
 export const ONTARIO_COMMISSION_LEGAL = {
   status: "approve_with_changes_design_test_only" as const,
   live: false,
+  /** Aloke Nov10: landlord-paid % fee capped (tenant card fees hard OFF). */
+  feePayer: "landlord_paid_percent" as const,
+  landlordPaidPercentCapped: true as const,
   landlordPaidPercentRange: [100, 200] as const,
   landlordPaidPercentMin: 1,
   landlordPaidPercentMax: 2,

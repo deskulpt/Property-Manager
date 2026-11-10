@@ -216,7 +216,7 @@ describe("AI meter + caps (D02/D06)", () => {
   })
 })
 
-describe("dual-control Finance Approve policy (D09) — Eng still not productionReady", () => {
+describe("dual-control Finance Approve policy (D09) — engControlsReady; liveMoneyReady false", () => {
   it("refunds > CAD500 or >1 mo sub; payouts always; no self-approve", () => {
     expect(
       requiresDualControl({ action: "large_refund", amountCadCents: 60_000 }).required,
@@ -307,7 +307,8 @@ describe("D11 BM — Stripe subscriptions; no Route; surcharge separate", () => 
     expect(LEGAL_FEATURE_FLAGS.razorpayIndianEntity).toBe(false)
     expect(LEGAL_FEATURE_FLAGS.affiliate).toBe(false)
     expect(LEGAL_FEATURE_FLAGS.realPiiAiConnectorsMedia).toBe(false)
-    expect(D13_LEGAL_WORDING).toContain("Telangana and Ontario selected")
+    expect(D13_LEGAL_WORDING).toContain("India demo only")
+    expect(D13_LEGAL_WORDING).toMatch(/Canada\/Ontario on Stripe/)
     expect(LEGAL_CFO_RENT_RAIL_CONFLICT.status).toBe("OPEN")
     expect(LEGAL_CFO_RENT_RAIL_CONFLICT.codeFollows).toBe(
       "aloke_indian_entity_razorpay_design_flags_off",

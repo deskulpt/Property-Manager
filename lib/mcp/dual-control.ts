@@ -29,8 +29,54 @@ export function proposalExpiresAtIso(createdAtIso: string, toolName: string): st
   return new Date(created + proposalTtlHours() * 3_600_000).toISOString()
 }
 
+/**
+ * Explicit D09 bind fields (Legal): amount / payee / scope / text.
+ * Derived from payload + summary so approve views can show + re-hash.
+ */
+export function proposalBindFields(proposal: AgentProposal): {
+  amountCadCents: number | null
+  payee: string | null
+  scope: string
+  text: string
+} {
+  const payload = proposal.payload as Record<string, unknown>
+  const amountCandidates = [
+    payload.seedRentCents,
+    payload.amountCadCents,
+    payload.amountCents,
+    proposal.amountCadCents,
+  ]
+  let amountCadCents: number | null = null
+  for (const c of amountCandidates) {
+    if (typeof c === "number" && Number.isFinite(c) && c >= 0) {
+      amountCadCents = Math.floor(c)
+      break
+    }
+  }
+  const payeeRaw =
+    payload.payee ??
+    payload.providerId ??
+    payload.connectedAccountId ??
+    payload.landlordUserId ??
+    null
+  const payee = payeeRaw == null ? null : String(payeeRaw)
+  const scopeParts = [
+    proposal.tenantId,
+    proposal.toolName,
+    typeof payload.propertyId === "string" ? payload.propertyId : null,
+    typeof payload.unitId === "string" ? payload.unitId : null,
+  ].filter(Boolean)
+  return {
+    amountCadCents,
+    payee,
+    scope: scopeParts.join(":"),
+    text: proposal.promptSummary,
+  }
+}
+
 /** Stable digest of the proposal identity + payload (content binding). */
 export function proposalContentDigest(proposal: AgentProposal): string {
+  const bind = proposalBindFields(proposal)
   const canonical = JSON.stringify({
     id: proposal.id,
     tenantId: proposal.tenantId,
@@ -39,6 +85,11 @@ export function proposalContentDigest(proposal: AgentProposal): string {
     createdAt: proposal.createdAt,
     payload: proposal.payload,
     promptSummary: proposal.promptSummary,
+    // Legal D09 bind surface — amount / payee / scope / text
+    amountCadCents: bind.amountCadCents,
+    payee: bind.payee,
+    scope: bind.scope,
+    text: bind.text,
   })
   return createHash("sha256").update(canonical).digest("hex")
 }

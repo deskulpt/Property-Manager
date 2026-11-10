@@ -200,13 +200,17 @@ export const COMPLIANCE_CATALOG: ReadonlyArray<ComplianceCatalogEntry> = [
   {
     key: "depositHolds",
     label: "Deposit holds",
-    blurb: "Platform holding deposits — OFF until licensed escrow.",
+    blurb:
+      "Hard-locked OFF (Aloke Nov10) — platform must never hold rent/deposits. Counsel + code release to change.",
     countries: ["IN", "CA"],
     money: true,
-    hardLocked: false,
+    hardLocked: true,
     signOffs: [
-      { role: "LEGAL", needed: "Licensed escrow definition" },
-      { role: "FINANCE", needed: "CFO reject unless escrow licensed" },
+      {
+        role: "LEGAL",
+        needed: "Permanent OFF until licensed escrow + Aloke/counsel code release",
+      },
+      { role: "FINANCE", needed: "CFO HARD — deposits never on Deskulpt books" },
     ],
   },
   {

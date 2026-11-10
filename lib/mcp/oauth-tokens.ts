@@ -268,17 +268,42 @@ export function listMcpAccessTokensForTenant(tenantId: string): McpAccessTokenRo
 }
 
 export function mcpOauthMetadata() {
+  const pkceOn = process.env.EASYRENTAL_MCP_OAUTH_PKCE === "1"
   return {
     issuer: MCP_OAUTH_ISSUER,
+    authorization_endpoint: "/api/mcp/oauth/authorize",
     token_endpoint: "/api/mcp/oauth/token",
     revocation_endpoint: "/api/mcp/oauth/revoke",
     introspection_endpoint: "/api/mcp/oauth/introspect",
-    grant_types_supported: ["client_credentials", "urn:easyrental:session_exchange"],
+    grant_types_supported: [
+      "client_credentials",
+      "urn:easyrental:session_exchange",
+      ...(pkceOn ? (["authorization_code"] as const) : []),
+    ],
+    code_challenge_methods_supported: ["S256"],
     token_endpoint_auth_methods_supported: ["none"],
     scopes_supported: [MCP_READ_SCOPE, MCP_PROPOSE_SCOPE, MCP_EXECUTE_PREAUTH_SCOPE],
-    response_types_supported: ["token"],
-    /** Full auth-code + PKCE discovery still Pending (host cert matrix). */
-    authorization_code_pending: true,
+    response_types_supported: pkceOn ? ["code", "token"] : ["token"],
+    /**
+     * Auth-code + PKCE implemented server-side behind EASYRENTAL_MCP_OAUTH_PKCE.
+     * Host UX / certified hosts still Pending — zero false certs.
+     */
+    authorization_code_pending: !pkceOn,
+    pkce_required: true,
     audience: MCP_TOKEN_AUDIENCE_DEFAULT,
+    resource: MCP_TOKEN_AUDIENCE_DEFAULT,
+  }
+}
+
+/** RFC 9728-shaped protected-resource metadata (D07). */
+export function mcpProtectedResourceMetadata() {
+  return {
+    resource: MCP_TOKEN_AUDIENCE_DEFAULT,
+    authorization_servers: [MCP_OAUTH_ISSUER],
+    scopes_supported: [MCP_READ_SCOPE, MCP_PROPOSE_SCOPE, MCP_EXECUTE_PREAUTH_SCOPE],
+    bearer_methods_supported: ["header"],
+    resource_documentation: "https://easyrental.space/docs/mcp-host-cert-matrix",
+    /** Honest: no certified external hosts yet. */
+    certified_hosts: [] as string[],
   }
 }

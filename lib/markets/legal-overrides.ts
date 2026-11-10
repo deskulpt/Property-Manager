@@ -444,7 +444,8 @@ export function adminListConsoleCompliance(isos: string[] = ["CA", "IN"]) {
           blurb: entry.blurb,
           money: entry.money,
           hardLocked: true,
-          indiaParked: false,
+          // Aloke Nov10 hard-locks (e.g. depositHolds) may still be India-parked on IN.
+          indiaParked,
           payPlane: false,
           signOffs: entry.signOffs,
           pendingProposal: null,
