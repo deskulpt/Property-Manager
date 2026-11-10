@@ -53,12 +53,13 @@ describe("platform billing pricing math", () => {
     expect(isSaleActive(SALE_START_UTC, 500)).toBe(false)
   })
 
-  it("quotes one home monthly with sale (GST inclusive)", () => {
+  it("quotes one home monthly with sale (catalogue GST display helper)", () => {
     const q = quotePlatformBilling({
       mix: [{ segment: "homes", count: 1 }],
       cadence: "monthly",
       nowMs: SALE_START_UTC + 1000,
       payingAccountCount: 0,
+      catalogueDisplayGst: true,
     })
     expect(q.pricingPath).toBe("sale")
     expect(q.chargedSubtotalPaise).toBe(SALE_MONTHLY_PAISE.homes)

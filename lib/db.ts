@@ -14,6 +14,7 @@ import {
   type Trade,
   type UnitStatus,
 } from "@/lib/format"
+import { affiliateAccrualAllowed } from "@/lib/billing/affiliate-terms"
 import { normalizeSlug } from "@/lib/rust/money"
 import {
   gstAppliesForUnit,
@@ -5973,17 +5974,39 @@ export function advanceIndicationStatus(
     )
     .run(to, now, opts?.reason ?? null, opts?.leasedRentPaise ?? null, indicationId)
 
-  if (to === "published") {
-    insertReward({
-      indicationId,
-      referrerId: ind.referrerId,
-      kind: "publish",
-      amountPaise: PUBLISH_REWARD_PAISE,
-      status: "accrued",
-      eventAt: now,
-    })
-  }
-  if (to === "leased") {
+  // D12: Refer & Earn accrual gated behind affiliate LEGAL flag (fail-closed OFF).
+  if (affiliateAccrualAllowed()) {
+    if (to === "published") {
+      insertReward({
+        indicationId,
+        referrerId: ind.referrerId,
+        kind: "publish",
+        amountPaise: PUBLISH_REWARD_PAISE,
+        status: "accrued",
+        eventAt: now,
+      })
+    }
+    if (to === "leased") {
+      const rent =
+        opts?.leasedRentPaise ??
+        ind.leasedRentPaise ??
+        ind.askingRentPaise ??
+        0
+      if (rent > 0) {
+        getDb()
+          .prepare("UPDATE indications SET leased_rent_paise = ? WHERE id = ?")
+          .run(rent, indicationId)
+        insertReward({
+          indicationId,
+          referrerId: ind.referrerId,
+          kind: "lease",
+          amountPaise: leaseRewardPaise(rent),
+          status: "accrued",
+          eventAt: now,
+        })
+      }
+    }
+  } else if (to === "leased") {
     const rent =
       opts?.leasedRentPaise ??
       ind.leasedRentPaise ??
@@ -5993,14 +6016,6 @@ export function advanceIndicationStatus(
       getDb()
         .prepare("UPDATE indications SET leased_rent_paise = ? WHERE id = ?")
         .run(rent, indicationId)
-      insertReward({
-        indicationId,
-        referrerId: ind.referrerId,
-        kind: "lease",
-        amountPaise: leaseRewardPaise(rent),
-        status: "accrued",
-        eventAt: now,
-      })
     }
   }
   return { ok: true }

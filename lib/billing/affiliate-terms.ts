@@ -1,7 +1,9 @@
 /**
- * Affiliate terms — DOCUMENTED ONLY, not active (D12 — NOT Aloke-approved).
- * Eng: disable real reward accrual until activation gates close.
+ * Affiliate terms — DOCUMENTED ONLY until LEGAL_FEATURE_FLAGS.affiliate ON (D12).
+ * Eng: reward accrual is gated by affiliateAccrualAllowed() at insertReward sites.
  */
+
+import { legalFlag } from "@/lib/markets/legal-flags"
 
 export const AFFILIATE_PROGRAM_ACTIVE = false
 
@@ -17,6 +19,11 @@ export const AFFILIATE_DOCUMENTED_TERMS = {
   active: false as const,
 }
 
-export function affiliateAccrualAllowed(): false {
-  return false
+/**
+ * Fail-closed: true only when CountryPack / override sets `affiliate` ON.
+ * Refer & Earn ledger inserts must call this before accrual.
+ */
+export function affiliateAccrualAllowed(iso = "CA"): boolean {
+  if (AFFILIATE_PROGRAM_ACTIVE) return legalFlag(iso, "affiliate")
+  return legalFlag(iso, "affiliate") === true
 }

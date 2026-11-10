@@ -1,6 +1,7 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
 import { createEasyRentalMcpServer } from "@/lib/mcp/server"
 import { sessionFromRequestHeaders } from "@/lib/mcp/session"
+import { mcpEdgeBlocked, mcpEdgeDenyResponse } from "@/lib/mcp/edge-gate"
 import { guardApiCountry } from "@/lib/markets/api-country-guard"
 
 export const dynamic = "force-dynamic"
@@ -9,8 +10,12 @@ export const runtime = "nodejs"
 /**
  * MCP Streamable HTTP endpoint (M0 reads + M1 propose/approvals; JSON, stateless).
  * Auth: Authorization: Bearer demo:u_nadia  (or x-easyrental-mcp-token)
+ *
+ * Production/HOSTED: denied at edge + here until EASYRENTAL_MCP_EDGE_ALLOW=1.
+ * Local/dev: public with anonymous reads + country guard.
  */
 async function handle(req: Request): Promise<Response> {
+  if (mcpEdgeBlocked()) return mcpEdgeDenyResponse()
   const session = sessionFromRequestHeaders(req.headers)
   const guarded = await guardApiCountry({
     session: session.user

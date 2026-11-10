@@ -7,6 +7,7 @@ import "server-only"
  * live in meta `compliance.pay_plane.*` (not CountryPack keys).
  */
 import { createHash, createHmac } from "node:crypto"
+import { appendLedgerEntry, ensureAppendOnlyLedgerSchema } from "@/lib/audit/append-only-ledger"
 import { getDb } from "@/lib/db"
 import {
   catalogEntryFor,
@@ -58,7 +59,9 @@ function ensureComplianceAuditSchema() {
   ensureLegalFlagOverridesRegistered()
   const dbPath = process.env.DESKULPT_DB_PATH ?? ":memory:"
   if (schemaDbPath === dbPath) return
-  getDb().exec(`
+  const db = getDb()
+  ensureAppendOnlyLedgerSchema(db)
+  db.exec(`
     CREATE TABLE IF NOT EXISTS compliance_audit_events (
       id TEXT PRIMARY KEY,
       iso TEXT NOT NULL,
@@ -124,6 +127,8 @@ function writeAudit(input: {
   ensureComplianceAuditSchema()
   const id = crypto.randomUUID()
   const createdAt = new Date().toISOString()
+  const detailJson =
+    input.detail === undefined ? null : JSON.stringify(input.detail)
   getDb()
     .prepare(
       `INSERT INTO compliance_audit_events
@@ -138,10 +143,23 @@ function writeAudit(input: {
       input.actorUserId ?? null,
       input.peerUserId ?? null,
       input.summary,
-      input.detail === undefined ? null : JSON.stringify(input.detail),
+      detailJson,
       input.bindingHash ?? null,
       createdAt,
     )
+  // D09: also append to hash-chained, UPDATE/DELETE-blocked ledger (not plain table alone).
+  appendLedgerEntry(getDb(), {
+    domain: "compliance",
+    action: input.action,
+    summary: input.summary,
+    actorUserId: input.actorUserId ?? null,
+    peerUserId: input.peerUserId ?? null,
+    entityType: "legal_flag",
+    entityId: `${input.iso.toUpperCase()}:${input.flagKey}`,
+    detail: input.detail,
+    bindingHash: input.bindingHash ?? null,
+    correlationId: id,
+  })
   if (input.alertAdmins !== false) {
     alertPlatformAdmins({
       title: `Compliance · ${input.action}`,
@@ -517,8 +535,9 @@ export type ComplianceActionResult =
   | { ok: false; error: string; code?: string; auditId?: string }
 
 /**
- * Request enable. Money LEGAL flags + pay-planes → pending peer approve.
- * Non-money → set override immediately.
+ * Request enable. ALL LEGAL flags + pay-planes require a distinct second approver
+ * (CTO priority — non-money legal flags no longer flip with a single L0).
+ * Hard-locked flags stay blocked. Kill-switch OFF remains instant.
  */
 export function adminRequestEnableFlag(input: {
   iso: string
@@ -556,54 +575,39 @@ export function adminRequestEnableFlag(input: {
     : adminListComplianceFlags([iso]).find((r) => r.key === entry.key)?.effective === true
   if (currentlyOn) return { ok: false, error: "Flag already ON.", code: "already_on" }
 
-  if (entry.money) {
-    getDb()
-      .prepare(
-        `UPDATE compliance_flag_proposals
-         SET status = 'cancelled', resolved_at = ?, resolved_by = ?
-         WHERE iso = ? AND flag_key = ? AND status = 'pending'`,
-      )
-      .run(new Date().toISOString(), input.actorUserId, iso, entry.key)
+  getDb()
+    .prepare(
+      `UPDATE compliance_flag_proposals
+       SET status = 'cancelled', resolved_at = ?, resolved_by = ?
+       WHERE iso = ? AND flag_key = ? AND status = 'pending'`,
+    )
+    .run(new Date().toISOString(), input.actorUserId, iso, entry.key)
 
-    const id = crypto.randomUUID()
-    const createdAt = new Date().toISOString()
-    const hash = bindingHash({
-      iso,
-      flagKey: entry.key,
-      requestedBy: input.actorUserId,
-      createdAt,
-    })
-    getDb()
-      .prepare(
-        `INSERT INTO compliance_flag_proposals
-          (id, iso, flag_key, requested_by, status, binding_hash, created_at, resolved_at, resolved_by)
-         VALUES (?, ?, ?, ?, 'pending', ?, ?, NULL, NULL)`,
-      )
-      .run(id, iso, entry.key, input.actorUserId, hash, createdAt)
-    const audit = writeAudit({
-      iso,
-      flagKey: entry.key,
-      action: "propose_enable",
-      actorUserId: input.actorUserId,
-      summary: `Proposed enable ${entry.key} for ${iso} (awaits peer)`,
-      bindingHash: hash,
-      detail: { proposalId: id, signOffs: entry.signOffs },
-    })
-    return { ok: true, auditId: audit.id, proposalId: id }
-  }
-
-  // Non-money LEGAL — set override ON immediately.
-  const set = adminSetLegalFlag(iso, entry.key as LegalFeatureFlagKey, true)
-  if (!set.ok) return set
+  const id = crypto.randomUUID()
+  const createdAt = new Date().toISOString()
+  const hash = bindingHash({
+    iso,
+    flagKey: entry.key,
+    requestedBy: input.actorUserId,
+    createdAt,
+  })
+  getDb()
+    .prepare(
+      `INSERT INTO compliance_flag_proposals
+        (id, iso, flag_key, requested_by, status, binding_hash, created_at, resolved_at, resolved_by)
+       VALUES (?, ?, ?, ?, 'pending', ?, ?, NULL, NULL)`,
+    )
+    .run(id, iso, entry.key, input.actorUserId, hash, createdAt)
   const audit = writeAudit({
     iso,
     flagKey: entry.key,
-    action: "enable",
+    action: "propose_enable",
     actorUserId: input.actorUserId,
-    summary: `Enabled ${entry.key} for ${iso}`,
-    detail: { signOffs: entry.signOffs },
+    summary: `Proposed enable ${entry.key} for ${iso} (awaits peer)`,
+    bindingHash: hash,
+    detail: { proposalId: id, signOffs: entry.signOffs, money: entry.money },
   })
-  return { ok: true, auditId: audit.id }
+  return { ok: true, auditId: audit.id, proposalId: id }
 }
 
 export function adminApproveEnableProposal(input: {
@@ -633,13 +637,13 @@ export function adminApproveEnableProposal(input: {
       flagKey: proposal.flagKey,
       action: "self_approval_blocked",
       actorUserId: input.actorUserId,
-      summary: `Self-approval blocked for money flag ${proposal.flagKey}`,
+      summary: `Self-approval blocked for flag ${proposal.flagKey}`,
       bindingHash: proposal.bindingHash,
       detail: { proposalId: proposal.id },
     })
     return {
       ok: false,
-      error: "Self-approval blocked for money flags. A distinct L0/L1 peer must approve.",
+      error: "Self-approval blocked. A distinct L0/L1 peer must approve legal flag enables.",
       code: "self_approval",
       auditId: audit.id,
     }

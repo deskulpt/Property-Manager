@@ -11,6 +11,8 @@ import {
   type TaxCustomer,
   type TaxQuote,
 } from "@/lib/billing/tax"
+import { featureGate } from "@/lib/billing/go-live-gate"
+import { computeCountryTax } from "@/lib/markets/tax-adapters"
 
 export type BillableSegment = "homes" | "retail_office" | "industrial"
 
@@ -267,13 +269,102 @@ export type QuoteInput = {
    * exclusive best path wins (D01 CFO). Affiliate program itself is inactive (D12).
    */
   affiliateDiscountBps?: number
-  /** When set, tax lines come from tax adapter (preferred). */
+  /**
+   * When set, tax lines come from gated adapters (preferred for live invoices).
+   * Without a customer, live tax is 0 — never invent fixed 18% GST on invoices.
+   */
   taxCustomer?: TaxCustomer | null
+  /**
+   * Catalogue / marketing display only — may apply deprecated India GST_BPS helper.
+   * Live checkout and invoices must omit this and pass taxCustomer instead.
+   */
+  catalogueDisplayGst?: boolean
+}
+
+/**
+ * Live invoice tax: gated country adapters + per-feature evidence.
+ * Never falls back to fixed 18% GST_BPS.
+ */
+export function quoteLiveInvoiceTax(input: {
+  exclusiveMinor: number
+  customer: TaxCustomer
+}): TaxQuote {
+  const exclusive = Math.max(0, Math.round(input.exclusiveMinor))
+  const evidence = featureGate("live_invoice_tax")
+  const country = (input.customer.country ?? "").trim().toUpperCase()
+  const adapter = computeCountryTax({
+    iso: country || "CA",
+    taxableMinor: exclusive,
+  })
+
+  if (!evidence.allowed || !adapter.ok) {
+    // Fail-closed: zero tax line + dependency notes (demo catalogue uses catalogueDisplayGst).
+    const blocked = quoteSubscriptionTax({
+      exclusiveMinor: exclusive,
+      customer: { ...input.customer, stripeTaxEnabled: false },
+    })
+    return {
+      ...blocked,
+      taxMinor: 0,
+      totalInclusiveMinor: exclusive,
+      lines: [],
+      dependencies: [
+        ...blocked.dependencies,
+        ...(evidence.allowed ? [] : evidence.blockers),
+        adapter.ok ? "" : adapter.reason,
+      ].filter(Boolean),
+      notes: [
+        ...blocked.notes,
+        "Live invoice tax gated — adapters/evidence OFF; no fixed 18% GST applied",
+      ],
+    }
+  }
+
+  const base = quoteSubscriptionTax({
+    exclusiveMinor: exclusive,
+    customer: input.customer,
+  })
+  // Prefer adapter amount when flag-enabled; keep Stripe Tax treatment metadata.
+  return {
+    ...base,
+    taxMinor: adapter.taxMinor,
+    totalInclusiveMinor: exclusive + adapter.taxMinor,
+    lines:
+      adapter.taxMinor > 0
+        ? [
+            {
+              code: `ADAPTER_${adapter.kind}`,
+              label: adapter.label,
+              rateBps:
+                exclusive > 0
+                  ? Math.round((adapter.taxMinor * 10_000) / exclusive)
+                  : 0,
+              amountMinor: adapter.taxMinor,
+              calculatedBy: "stripe_tax_stub",
+            },
+          ]
+        : [],
+    notes: [
+      ...base.notes,
+      `Gated tax adapter ${adapter.kind} (registration ${adapter.taxRegistrationId ?? "n/a"})`,
+    ],
+  }
 }
 
 function emptyTax(exclusive: number, customer: TaxCustomer | null | undefined): TaxQuote | null {
   if (!customer) return null
-  return quoteSubscriptionTax({ exclusiveMinor: exclusive, customer })
+  return quoteLiveInvoiceTax({ exclusiveMinor: exclusive, customer })
+}
+
+function resolveGstPaise(
+  chargedSubtotalPaise: number,
+  taxQuote: TaxQuote | null,
+  catalogueDisplayGst: boolean | undefined,
+): number {
+  if (taxQuote) return taxQuote.taxMinor
+  // Catalogue/marketing helper only — never for live invoices.
+  if (catalogueDisplayGst) return applyBps(chargedSubtotalPaise, GST_BPS)
+  return 0
 }
 
 /**
@@ -362,7 +453,11 @@ export function quotePlatformBilling(input: QuoteInput): PricingQuote {
     const standardSubtotalPaise = subtotalAtRates(mix, STANDARD_MONTHLY_PAISE, cadence)
     const chargedSubtotalPaise = subtotalAtRates(mix, rates, cadence)
     const taxQuote = emptyTax(chargedSubtotalPaise, input.taxCustomer)
-    const gstPaise = taxQuote ? taxQuote.taxMinor : applyBps(chargedSubtotalPaise, GST_BPS)
+    const gstPaise = resolveGstPaise(
+      chargedSubtotalPaise,
+      taxQuote,
+      input.catalogueDisplayGst,
+    )
     const lines: QuoteLine[] = mix.map((row) => {
       const unitStandardPaise = STANDARD_MONTHLY_PAISE[row.segment] * factor
       const unitChargedPaise = rates[row.segment] * factor
@@ -489,7 +584,11 @@ export function quotePlatformBilling(input: QuoteInput): PricingQuote {
   const best = candidates[0]!
   const chargedSubtotalPaise = enforceMinNet(standardSubtotalPaise, best.subtotal, best.path)
   const taxQuote = emptyTax(chargedSubtotalPaise, input.taxCustomer)
-  const gstPaise = taxQuote ? taxQuote.taxMinor : applyBps(chargedSubtotalPaise, GST_BPS)
+  const gstPaise = resolveGstPaise(
+    chargedSubtotalPaise,
+    taxQuote,
+    input.catalogueDisplayGst,
+  )
 
   return {
     cadence,

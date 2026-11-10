@@ -60,7 +60,7 @@ describe("Refer & Earn (§19A)", () => {
     if (!self.ok) expect(self.error).toMatch(/Self-referral/i)
   })
 
-  it("creates indication new with consent; Published and Leased accrue rewards", async () => {
+  it("creates indication new with consent; rewards stay OFF while affiliate flag OFF", async () => {
     const {
       createIndication,
       getReferrerByCode,
@@ -93,31 +93,23 @@ describe("Refer & Earn (§19A)", () => {
     advanceIndicationStatus(created.id, "awaiting_media")
     const pub = advanceIndicationStatus(created.id, "published")
     expect(pub.ok).toBe(true)
-    let rewards = rewardsForReferrer(asha.id)
+    // D12: affiliateAccrualAllowed() false — no publish/lease reward rows.
     expect(
-      rewards.some(
-        (r) =>
-          r.indicationId === created.id &&
-          r.kind === "publish" &&
-          r.amountPaise === PUBLISH_REWARD_PAISE &&
-          r.status === "accrued",
-      ),
-    ).toBe(true)
+      rewardsForReferrer(asha.id).some((r) => r.indicationId === created.id),
+    ).toBe(false)
 
     advanceIndicationStatus(created.id, "in_negotiation")
     const leased = advanceIndicationStatus(created.id, "leased", {
       leasedRentPaise: 1_000_000_00,
     })
     expect(leased.ok).toBe(true)
-    rewards = rewardsForReferrer(asha.id)
+    expect(getIndication(created.id)?.leasedRentPaise).toBe(1_000_000_00)
     expect(
-      rewards.some(
-        (r) =>
-          r.indicationId === created.id &&
-          r.kind === "lease" &&
-          r.amountPaise === leaseRewardPaise(1_000_000_00),
-      ),
-    ).toBe(true)
+      rewardsForReferrer(asha.id).some((r) => r.indicationId === created.id),
+    ).toBe(false)
+    // Keep reward math helpers covered without accruing.
+    expect(PUBLISH_REWARD_PAISE).toBeGreaterThan(0)
+    expect(leaseRewardPaise(1_000_000_00)).toBeGreaterThan(0)
   })
 
   it("expires unpublished indications past attribution window", async () => {
