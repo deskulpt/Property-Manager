@@ -91,9 +91,17 @@ export function proxy(request: NextRequest) {
 
   const consentRaw = request.cookies.get(COUNTRY_CONSENT_COOKIE)?.value
   const consentIso = consentRaw ? normalizeMarketIso(consentRaw) : null
+  const isSafeRedirectMethod = request.method === "GET" || request.method === "HEAD"
 
   if (consentIso && isoForPathSegment(pathSegmentForIso(consentIso))) {
-    // 301 legacy URLs → /{segment}/...
+    // Never 301 Server Action / form POSTs — browsers drop the body and Next
+    // actions then loop (ERR_TOO_MANY_REDIRECTS) on /onboarding/role etc.
+    if (!isSafeRedirectMethod) {
+      const headers = withCountryHeaders(request, consentIso)
+      const response = NextResponse.next({ request: { headers } })
+      return applyCountryCookies(response, consentIso, true)
+    }
+    // 301 legacy GET URLs → /{segment}/...
     const segment = pathSegmentForIso(consentIso)
     const url = request.nextUrl.clone()
     url.pathname = `/${segment}${pathname === "/" ? "" : pathname}`
@@ -101,7 +109,10 @@ export function proxy(request: NextRequest) {
     return applyCountryCookies(response, consentIso, true)
   }
 
-  // No consent — send to picker with return path (never geo auto-redirect).
+  // No consent — send GET navigations to picker; keep mutating methods on path.
+  if (!isSafeRedirectMethod) {
+    return NextResponse.next()
+  }
   const picker = request.nextUrl.clone()
   picker.pathname = "/"
   picker.searchParams.set("next", pathname + (request.nextUrl.search || ""))
