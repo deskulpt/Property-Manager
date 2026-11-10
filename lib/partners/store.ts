@@ -486,6 +486,7 @@ export function partnerNetworkEnabled() {
   if (process.env.PARTNER_NETWORK === "0") return false
   try {
     // Lazy import avoids circular init with platform-ops → db → partners.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- sync ops flag
     const { isOpsFlagOn } = require("@/lib/platform-ops") as typeof import("@/lib/platform-ops")
     return isOpsFlagOn("partner_network")
   } catch {

@@ -1829,6 +1829,8 @@ export function resetSeedDatabase() {
 /** Close the process-wide SQLite handle so the next getDb() reopens (tests). */
 export function closeDatabase() {
   try {
+    // Lazy CJS require avoids circular init during test teardown.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- sync teardown
     const { resetCountryPacksCache } = require("@/lib/markets/store") as typeof import("@/lib/markets/store")
     resetCountryPacksCache()
   } catch {
@@ -4756,6 +4758,7 @@ export function publicFormCountries(): { iso: string; name: string; live: boolea
   const byIso = new Map<string, { iso: string; name: string; live: boolean }>()
   byIso.set(LIVE_MARKET.iso, { iso: LIVE_MARKET.iso, name: LIVE_MARKET.name, live: true })
   try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- sync pack lookup
     const { listLiveCountryPacks } = require("@/lib/markets/store") as typeof import("@/lib/markets/store")
     for (const pack of listLiveCountryPacks()) {
       byIso.set(pack.iso, { iso: pack.iso, name: pack.name, live: true })

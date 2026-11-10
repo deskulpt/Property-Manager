@@ -121,19 +121,21 @@ export function AskEasyIsland(props: AskEasyIslandProps) {
     )
     const ask = searchParams.get("ask")
     const askTab = searchParams.get("askTab")
-    if (ask === "open" || ask === "1") {
-      persistMode("open")
-      if (askTab === "approvals") setTab("approvals")
-      // Clear query so refresh doesn't force-open after user minimizes
-      const next = new URLSearchParams(searchParams.toString())
-      next.delete("ask")
-      next.delete("askTab")
-      const q = next.toString()
-      router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false })
-    } else {
-      setMode(stored)
-    }
-    setHydrated(true)
+    queueMicrotask(() => {
+      if (ask === "open" || ask === "1") {
+        persistMode("open")
+        if (askTab === "approvals") setTab("approvals")
+        // Clear query so refresh doesn't force-open after user minimizes
+        const next = new URLSearchParams(searchParams.toString())
+        next.delete("ask")
+        next.delete("askTab")
+        const q = next.toString()
+        router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false })
+      } else {
+        setMode(stored)
+      }
+      setHydrated(true)
+    })
   }, [pathname, persistMode, router, searchParams])
 
   useEffect(() => {

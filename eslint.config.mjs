@@ -14,7 +14,16 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated wasm bindings (CJS require + unused eslint-disable noise).
+    "packages/easyrent-wasm/**",
   ]),
+  {
+    // Vitest helper `useTempDatabase` is not a React Hook.
+    files: ["test/**/*.{ts,tsx}"],
+    rules: {
+      "react-hooks/rules-of-hooks": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

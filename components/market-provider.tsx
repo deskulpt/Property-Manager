@@ -69,8 +69,11 @@ export function MarketProvider({
     const fromPath = stripCountryPrefix(pathname)
     if (fromPath) {
       const iso = normalizeMarketIso(fromPath.iso)
-      setMarketState(iso)
-      persistMarket(iso, true)
+      // Defer setState — sync path/cookie into React without cascading render in effect body.
+      queueMicrotask(() => {
+        setMarketState(iso)
+        persistMarket(iso, true)
+      })
       return
     }
     const fromCookie = readCookieMarket()
@@ -85,9 +88,11 @@ export function MarketProvider({
       : allowed.has(fromStorage)
         ? fromStorage
         : normalizeMarketIso(initialMarket)
-    setMarketState(preferred)
-    // Do not invent consent on root picker — only persist market preference.
-    persistMarket(preferred, pathname !== "/")
+    queueMicrotask(() => {
+      setMarketState(preferred)
+      // Do not invent consent on root picker — only persist market preference.
+      persistMarket(preferred, pathname !== "/")
+    })
   }, [allowed, initialMarket, pathname])
 
   const setMarket = useCallback(
