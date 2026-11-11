@@ -58,6 +58,8 @@ export default defineConfig({
       // demo:<userId> tokens working for synthetic e2e only (never live money).
       ALLOW_DEMO_AUTH: "1",
       EASYRENTAL_MCP_ALLOW_DEMO: "1",
+      // Edge-block /api/mcp in production until Eng clears — allow for synthetic e2e only.
+      EASYRENTAL_MCP_EDGE_ALLOW: "1",
     },
   },
 })
