@@ -11,6 +11,7 @@ import {
   pathSegmentForIso,
   stripCountryPrefix,
 } from "@/lib/markets/path-segments"
+import { mcpEdgeBlocked } from "@/lib/mcp/edge-gate"
 
 /** Set on rewrite so a second proxy pass does not 301 the internal path back onto itself. */
 const REWRITE_FLAG = "x-easyrental-country-rewritten"
@@ -50,6 +51,28 @@ function rewriteToInternal(request: NextRequest, iso: string, internalPath: stri
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
+
+  // CTO D07: block MCP HTTP at edge in production/HOSTED until Eng clears.
+  if (
+    (pathname === "/api/mcp" || pathname.startsWith("/api/mcp/")) &&
+    mcpEdgeBlocked()
+  ) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          "MCP HTTP endpoint blocked at edge until Eng clears (set EASYRENTAL_MCP_EDGE_ALLOW=1).",
+        code: "mcp_edge_blocked",
+      },
+      {
+        status: 403,
+        headers: {
+          "cache-control": "no-store",
+          "x-easyrental-mcp-edge": "blocked",
+        },
+      },
+    )
+  }
 
   // Second pass after country rewrite — serve the internal route as-is.
   if (request.headers.get(REWRITE_FLAG) === "1") {

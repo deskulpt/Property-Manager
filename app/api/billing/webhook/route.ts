@@ -1,4 +1,5 @@
 import { getBillingProviderByName, resolveBillingProvider } from "@/lib/billing"
+import { featureGate } from "@/lib/billing/go-live-gate"
 import {
   activateBillingSubscription,
   getBillingSubscriptionById,
@@ -38,6 +39,25 @@ function signatureForProvider(request: Request, provider: BillingProviderName): 
 export async function POST(request: Request) {
   const rawBody = await request.text()
   const providerName = detectWebhookProvider(request)
+
+  // CTO: webhooks check the go-live / per-feature evidence gate themselves.
+  // Demo provider may settle in labelled-demo mode; live processors require evidence.
+  if (providerName !== "demo") {
+    const settleGate = featureGate("billing_webhook_settle")
+    if (!settleGate.allowed) {
+      return Response.json(
+        {
+          ok: false,
+          error: "Billing webhook settle blocked — feature evidence gate closed.",
+          code: "go_live_gate_closed",
+          feature: settleGate.feature,
+          blockers: settleGate.blockers,
+        },
+        { status: 403 },
+      )
+    }
+  }
+
   const provider = getBillingProviderByName(providerName)
   const verified = await provider.verifyAndParseWebhook({
     rawBody,
