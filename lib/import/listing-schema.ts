@@ -115,14 +115,16 @@ export function siteById(id: ListingSiteId): ListingSiteMeta {
   return site
 }
 
-/** Ontario / CA: landlord-direct only — hide MLS / REALTOR.ca / LoopNet scrape paths. */
+/**
+ * Ontario / CA: landlord-direct only (Aloke Nov10 / D15).
+ * Hide all CA scrape paths (MLS / REALTOR.ca / LoopNet / Kijiji / DDF).
+ * India sites remain listed for cross-market tooling; import enforce still
+ * blocks Ontario-scoped scrape IDs.
+ */
 export function listingSitesForMarket(iso: string | null | undefined): ListingSiteMeta[] {
   const market = String(iso ?? "").toUpperCase()
   if (market !== "CA") return LISTING_SITES
-  return LISTING_SITES.filter((site) => {
-    if (site.market !== "CA") return true
-    return site.id === "kijiji"
-  })
+  return LISTING_SITES.filter((site) => site.market !== "CA")
 }
 
 export function hostMatchesSite(hostname: string, site: ListingSiteMeta) {

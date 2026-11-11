@@ -29,7 +29,7 @@ export default async function AgentImportPage() {
         title="Import listing"
         lede={
           iso === "CA"
-            ? "Ontario landlord-direct only — MLS / PropTx / REALTOR.ca imports disabled for the managed organisation."
+            ? "Ontario landlord-direct only — scrape / MLS / DDF / Kijiji imports disabled for the managed organisation."
             : "Same URL import tools as the landlord desk, scoped to the active managed organisation."
         }
       />

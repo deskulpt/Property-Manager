@@ -47,6 +47,24 @@ export const ALOKE_NOV10_LOCKS = {
   labelledDemo: true as const,
 } as const
 
+/**
+ * Landlord-paid % fee schedule structure (Aloke Nov10 / D11).
+ * Numeric rates stay Pending with the price list — structure exists; live OFF.
+ */
+export const LANDLORD_PERCENT_FEE_SCHEDULE = {
+  version: ALOKE_NOV10_LOCKS_VERSION,
+  feePayer: "landlord_paid_percent" as const,
+  capped: true as const,
+  /** Numeric % / cap Pending with Aloke price list — do not invent live rates. */
+  numericScheduleStatus: "pending_with_price_list" as const,
+  percentBps: null,
+  capCadCents: null,
+  /** Design band only (from Ontario commission legal) — not live pricing. */
+  designBandBps: [100, 200] as const,
+  live: false as const,
+  labelledDemo: true as const,
+} as const
+
 /** Fail-closed: deposit holding must never enable under Nov10 locks. */
 export function assertDepositHoldingHardOff(enabled: boolean): {
   ok: true

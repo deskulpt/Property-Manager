@@ -250,8 +250,9 @@ export const COMPLIANCE_CATALOG: ReadonlyArray<ComplianceCatalogEntry> = [
   },
   {
     key: "ontarioMlsImport",
-    label: "MLS / PropTx / REALTOR.ca import",
-    blurb: "Hard-locked OFF — Ontario listings are landlord-direct only.",
+    label: "MLS / PropTx / DDF / scrape import",
+    blurb:
+      "Hard-locked OFF (Aloke Nov10) — Ontario listings are landlord-direct only; no scrape / MLS / DDF / Kijiji.",
     countries: ["CA"],
     money: false,
     hardLocked: true,
@@ -259,12 +260,18 @@ export const COMPLIANCE_CATALOG: ReadonlyArray<ComplianceCatalogEntry> = [
   },
   {
     key: "ontarioCommercialSales",
-    label: "Commercial leases / sales flows",
-    blurb: "Hard-locked OFF — RTA residential only (TRESA s5(1)(j) exemption).",
+    label: "Commercial leases (own flag)",
+    blurb:
+      "Hard-locked OFF (Aloke Nov10) — commercial behind own flag until counsel; residential RTA protections un-bypassable; sales brokerage never enabled.",
     countries: ["CA"],
     money: false,
     hardLocked: true,
-    signOffs: [{ role: "LEGAL", needed: "Permanent OFF for Ontario demo/staging scope" }],
+    signOffs: [
+      {
+        role: "LEGAL",
+        needed: "Counsel classifies commercial/mixed/storage before code release",
+      },
+    ],
   },
   {
     key: "ontarioAutomatedEviction",

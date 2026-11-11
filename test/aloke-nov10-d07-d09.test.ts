@@ -2,10 +2,12 @@ import { beforeEach, describe, expect, it } from "vitest"
 import { useTempDatabase } from "./helpers/temp-db"
 import {
   ALOKE_NOV10_LOCKS,
+  LANDLORD_PERCENT_FEE_SCHEDULE,
   assertDepositHoldingHardOff,
   assertNoGlobalGoLive,
   assertRentCollectAtLaunchOff,
 } from "@/lib/billing/aloke-nov10-locks"
+import { ontarioCommercialRuntimeAllowed } from "@/lib/markets/ontario-rta"
 import {
   assertDirectChargeOnly,
   assertRentNeverOnDeskulptBooks,
@@ -41,7 +43,14 @@ describe("Aloke Nov10 locks + D07/D09 alignment", () => {
     expect(ALOKE_NOV10_LOCKS.rentCollectAtLaunch).toBe(false)
     expect(ALOKE_NOV10_LOCKS.globalGoLive).toBe(false)
     expect(ALOKE_NOV10_LOCKS.commercialFlag).toBe(false)
+    expect(ontarioCommercialRuntimeAllowed()).toBe(false)
     expect(ALOKE_NOV10_LOCKS.feePayer).toBe("landlord_paid_percent")
+    expect(LANDLORD_PERCENT_FEE_SCHEDULE.capped).toBe(true)
+    expect(LANDLORD_PERCENT_FEE_SCHEDULE.live).toBe(false)
+    expect(LANDLORD_PERCENT_FEE_SCHEDULE.numericScheduleStatus).toBe(
+      "pending_with_price_list",
+    )
+    expect(LANDLORD_PERCENT_FEE_SCHEDULE.percentBps).toBeNull()
     expect(assertDepositHoldingHardOff(true).ok).toBe(false)
     expect(assertDepositHoldingHardOff(false).ok).toBe(true)
     expect(assertRentCollectAtLaunchOff(true).ok).toBe(false)
