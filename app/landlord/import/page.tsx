@@ -18,7 +18,7 @@ export default async function LandlordImportPage() {
         title="Import listing"
         lede={
           iso === "CA"
-            ? "Ontario landlord-direct only — MLS, PropTx, and REALTOR.ca scrape/import paths are disabled. Kijiji classifieds remain for demo drafts."
+            ? "Ontario landlord-direct only — scrape / MLS / PropTx / DDF / Kijiji / REALTOR.ca import paths are disabled. Create listings on the landlord desk."
             : "Pull public fields from a pre-identified India or Canada listing URL into a draft bay for this organisation."
         }
       />

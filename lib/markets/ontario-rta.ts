@@ -1,32 +1,48 @@
 /**
  * Ontario residential (RTA) product policy — CA pack only.
- * Demo/staging scope per docs/ontario-demo-approval-nov7.md.
+ * Demo/staging scope per docs/ontario-demo-approval-nov7.md + Aloke Nov10.
  * Hard rules live here; toggleable LEGAL flags stay in legal-flags.ts.
+ *
+ * Aloke Nov10: residential AND commercial build; commercial behind own flag
+ * (OFF until counsel); residential RTA protections un-bypassable; direct
+ * landlord listings only (no scrape / MLS / DDF).
  */
 
+import { ALOKE_NOV10_LOCKS } from "@/lib/billing/aloke-nov10-locks"
 import type { ListingSiteId } from "@/lib/import/listing-schema"
 import type { PropertySegment } from "@/lib/listing-schemas"
 
-/** TRESA s5(1)(j): we do residential tenancies only — not commercial brokerage / sales. */
+/** Always allowed in Ontario — RTA residential protections never bypassable. */
 export const ONTARIO_ALLOWED_SEGMENTS: readonly PropertySegment[] = ["residential"]
 
-export const ONTARIO_BLOCKED_SEGMENTS: readonly PropertySegment[] = [
+/**
+ * Commercial / warehouse segments — gated by `ontarioCommercialRuntimeAllowed()`
+ * (Aloke Nov10 own flag; OFF until counsel + code release).
+ */
+export const ONTARIO_COMMERCIAL_SEGMENTS: readonly PropertySegment[] = [
   "warehouse",
   "commercial",
 ]
 
-/** MLS / board / PropTx / REALTOR.ca scrape paths — landlord-direct only. */
+/** @deprecated Prefer ONTARIO_COMMERCIAL_SEGMENTS + ontarioCommercialRuntimeAllowed. */
+export const ONTARIO_BLOCKED_SEGMENTS: readonly PropertySegment[] = ONTARIO_COMMERCIAL_SEGMENTS
+
+/** Scrape / board import paths — landlord-direct only (Aloke Nov10 / D15). */
 export const ONTARIO_BLOCKED_LISTING_IMPORT_SITES: readonly ListingSiteId[] = [
   "realtor-ca",
   "loopnet-ca",
+  "kijiji",
 ]
 
 /** Extra scrape identifiers that must never be enabled for Ontario (no adapters yet). */
 export const ONTARIO_BLOCKED_IMPORT_ALIASES = [
   "mls",
   "proptx",
+  "ddf",
+  "crea-ddf",
   "realtor.ca",
   "realtor-ca",
+  "kijiji",
   "treb",
   "crea",
 ] as const
@@ -83,12 +99,26 @@ export function isOntarioMarket(iso: string | null | undefined): boolean {
     .toUpperCase() === "CA"
 }
 
+/**
+ * Aloke Nov10 commercial own-flag — hard OFF until counsel + code release.
+ * Mirrors depositHoldsRuntimeAllowed: not a soft console toggle.
+ * Catalog key `ontarioCommercialSales` stays hardLocked.
+ */
+export function ontarioCommercialRuntimeAllowed(): boolean {
+  // Keep lock constant referenced so product policy and runtime stay aligned.
+  return ALOKE_NOV10_LOCKS.commercialFlag
+}
+
 export function ontarioAllowsSegment(
   iso: string | null | undefined,
   segment: string,
 ): boolean {
   if (!isOntarioMarket(iso)) return true
-  return (ONTARIO_ALLOWED_SEGMENTS as readonly string[]).includes(segment)
+  if ((ONTARIO_ALLOWED_SEGMENTS as readonly string[]).includes(segment)) return true
+  if ((ONTARIO_COMMERCIAL_SEGMENTS as readonly string[]).includes(segment)) {
+    return ontarioCommercialRuntimeAllowed()
+  }
+  return false
 }
 
 export function ontarioBlocksListingImportSite(

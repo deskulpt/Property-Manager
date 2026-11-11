@@ -156,7 +156,11 @@ export function caTaxRegistrationForStatements(iso = "CA"): string | null {
   return taxRegistrationIdForIso(iso)
 }
 
-/** RTA residential only — block commercial / warehouse / sales for Ontario (CA). */
+/**
+ * Ontario scope — residential always OK; commercial/warehouse only when
+ * `ontarioCommercialRuntimeAllowed()` (Aloke Nov10 own flag, OFF until counsel).
+ * Sales brokerage always blocked. Residential RTA protections stay un-bypassable.
+ */
 export function assertOntarioResidentialOnly(input: {
   iso: string | null | undefined
   segment?: string | null
@@ -169,7 +173,7 @@ export function assertOntarioResidentialOnly(input: {
       ok: false,
       code: "ontario_sales_blocked",
       error:
-        "Ontario EasyRental is RTA residential rentals only (TRESA s5(1)(j) — no sales brokerage).",
+        "Ontario EasyRental does not do sales brokerage (TRESA s5(1)(j)). Commercial leases stay behind the commercial flag until counsel.",
     }
   }
   if (input.segment && !ontarioAllowsSegment(input.iso, input.segment)) {
@@ -177,13 +181,13 @@ export function assertOntarioResidentialOnly(input: {
       ok: false,
       code: "ontario_commercial_blocked",
       error:
-        "Ontario demo/staging allows Residential Tenancies Act residential listings only — commercial and warehouse are blocked.",
+        "Ontario commercial / warehouse listings are behind the commercial flag (OFF until counsel). Residential RTA protections remain un-bypassable.",
     }
   }
   return { ok: true }
 }
 
-/** Landlord-direct listings only — block MLS / PropTx / REALTOR.ca / LoopNet imports. */
+/** Landlord-direct listings only — block scrape / MLS / DDF / Kijiji / LoopNet (Aloke Nov10). */
 export function assertOntarioListingImportAllowed(input: {
   iso: string | null | undefined
   siteId: string
@@ -193,7 +197,7 @@ export function assertOntarioListingImportAllowed(input: {
     ok: false,
     code: "ontario_import_blocked",
     error:
-      "Ontario listings are landlord-direct only. MLS, PropTx, REALTOR.ca, and commercial board scrape/import paths are disabled.",
+      "Ontario listings are landlord-direct only. Scrape / MLS / PropTx / DDF / Kijiji / REALTOR.ca / LoopNet import paths are disabled.",
   }
 }
 

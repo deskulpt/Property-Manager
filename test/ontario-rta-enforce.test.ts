@@ -36,7 +36,7 @@ import { NEVER_AUTO_TOOLS } from "@/lib/mcp/policy"
 installTempDatabase()
 
 describe("Ontario RTA product enforcement", () => {
-  it("blocks commercial / sales for CA and allows residential", () => {
+  it("allows residential; commercial own-flag OFF; sales always blocked", () => {
     expect(
       assertOntarioResidentialOnly({ iso: "CA", segment: "commercial" }).ok,
     ).toBe(false)
@@ -52,9 +52,10 @@ describe("Ontario RTA product enforcement", () => {
     expect(
       assertOntarioResidentialOnly({ iso: "IN", segment: "commercial" }).ok,
     ).toBe(true)
+    expect(catalogEntryFor("ontarioCommercialSales")?.hardLocked).toBe(true)
   })
 
-  it("blocks MLS / REALTOR.ca / LoopNet imports for CA; keeps Kijiji", () => {
+  it("blocks scrape / MLS / DDF / Kijiji / LoopNet for CA (landlord-direct only)", () => {
     expect(assertOntarioListingImportAllowed({ iso: "CA", siteId: "realtor-ca" }).ok).toBe(
       false,
     )
@@ -62,11 +63,11 @@ describe("Ontario RTA product enforcement", () => {
       false,
     )
     expect(assertOntarioListingImportAllowed({ iso: "CA", siteId: "proptx" }).ok).toBe(false)
-    expect(assertOntarioListingImportAllowed({ iso: "CA", siteId: "kijiji" }).ok).toBe(true)
-    expect(listingSitesForMarket("CA").map((s) => s.id)).toEqual(
-      expect.arrayContaining(["kijiji", "nobroker"]),
-    )
-    expect(listingSitesForMarket("CA").some((s) => s.id === "realtor-ca")).toBe(false)
+    expect(assertOntarioListingImportAllowed({ iso: "CA", siteId: "ddf" }).ok).toBe(false)
+    expect(assertOntarioListingImportAllowed({ iso: "CA", siteId: "kijiji" }).ok).toBe(false)
+    expect(listingSitesForMarket("CA").some((s) => s.market === "CA")).toBe(false)
+    expect(listingSitesForMarket("CA").some((s) => s.id === "nobroker")).toBe(true)
+    expect(catalogEntryFor("ontarioMlsImport")?.hardLocked).toBe(true)
   })
 
   it("caps LMR at one month and blocks damage deposits", () => {
