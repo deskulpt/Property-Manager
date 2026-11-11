@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { installTempDatabase } from "./helpers/temp-db"
 import {
   appendLedgerEntry,
@@ -20,19 +20,15 @@ import { legalFlag } from "@/lib/markets/legal-flags"
 installTempDatabase()
 
 describe("CTO Eng priorities (stacked on D07/D09)", () => {
-  const prev = { ...process.env }
   afterEach(() => {
-    for (const key of Object.keys(process.env)) {
-      if (!(key in prev)) delete process.env[key]
-    }
-    Object.assign(process.env, prev)
+    vi.unstubAllEnvs()
   })
 
   it("blocks MCP at edge in production/HOSTED until Eng clears", () => {
-    process.env.NODE_ENV = "production"
-    delete process.env.EASYRENTAL_MCP_EDGE_ALLOW
+    vi.stubEnv("NODE_ENV", "production")
+    vi.stubEnv("EASYRENTAL_MCP_EDGE_ALLOW", "")
     expect(mcpEdgeBlocked()).toBe(true)
-    process.env.EASYRENTAL_MCP_EDGE_ALLOW = "1"
+    vi.stubEnv("EASYRENTAL_MCP_EDGE_ALLOW", "1")
     expect(mcpEdgeBlocked()).toBe(false)
   })
 
