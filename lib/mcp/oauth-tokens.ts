@@ -8,14 +8,18 @@
  */
 import { createHash, randomBytes } from "node:crypto"
 import { getDb, getUser, type SessionUser } from "@/lib/db"
-import { MCP_EXECUTE_PREAUTH_SCOPE, MCP_PROPOSE_SCOPE } from "@/lib/mcp/policy"
+import {
+  MCP_EXECUTE_PREAUTH_SCOPE,
+  MCP_PROPOSE_SCOPE,
+  MCP_READ_SCOPE,
+} from "@/lib/mcp/policy"
 import { roleLevelFor } from "@/lib/mcp/role-level"
 import type { McpSession } from "@/lib/mcp/session"
 
 export const MCP_TOKEN_PREFIX = "er_pat_" as const
 export const MCP_TOKEN_AUDIENCE_DEFAULT = "easyrental.mcp" as const
 export const MCP_OAUTH_ISSUER = "https://easyrental.space/mcp/oauth" as const
-export const MCP_READ_SCOPE = "read:*" as const
+export { MCP_READ_SCOPE }
 
 /** Default access-token lifetime (1 hour). Override with EASYRENTAL_MCP_TOKEN_TTL_SECONDS. */
 export function mcpAccessTokenTtlSeconds(): number {

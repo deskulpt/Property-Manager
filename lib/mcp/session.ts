@@ -1,7 +1,11 @@
 import { getUser, type SessionUser } from "@/lib/db"
 import type { Role } from "@/lib/format"
 import { MCP_TOKEN_PREFIX, resolveStoredMcpToken } from "@/lib/mcp/oauth-tokens"
-import { MCP_EXECUTE_PREAUTH_SCOPE, MCP_PROPOSE_SCOPE } from "@/lib/mcp/policy"
+import {
+  MCP_EXECUTE_PREAUTH_SCOPE,
+  MCP_PROPOSE_SCOPE,
+  MCP_READ_SCOPE,
+} from "@/lib/mcp/policy"
 import { roleLevelFor, type RoleLevel } from "@/lib/mcp/role-level"
 
 /**
@@ -21,8 +25,7 @@ export type McpSession = {
   user: SessionUser | null
 }
 
-export const MCP_READ_SCOPE = "read:*" as const
-export { MCP_PROPOSE_SCOPE, MCP_EXECUTE_PREAUTH_SCOPE }
+export { MCP_READ_SCOPE, MCP_PROPOSE_SCOPE, MCP_EXECUTE_PREAUTH_SCOPE }
 
 export function anonymousSession(): McpSession {
   return {
