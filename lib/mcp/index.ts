@@ -24,6 +24,7 @@ export {
   assertDualControlApprove,
   proposalBindingHash,
   proposalContentDigest,
+  proposalBindFields,
   proposalExpiresAtIso,
   amountCadCentsFromProposal,
   dualControlAuditCsvHeader,
@@ -38,9 +39,17 @@ export {
   resolveStoredMcpToken,
   listMcpAccessTokensForTenant,
   mcpOauthMetadata,
+  mcpProtectedResourceMetadata,
   MCP_TOKEN_PREFIX,
   MCP_TOKEN_AUDIENCE_DEFAULT,
 } from "@/lib/mcp/oauth-tokens"
+export {
+  issueMcpAuthCode,
+  exchangeMcpAuthCode,
+  pkceChallengeS256,
+  mcpPkceEnabled,
+  MCP_PKCE_METHOD_S256,
+} from "@/lib/mcp/oauth-pkce"
 export {
   MCP_HOST_CERT_MATRIX,
   hostCertById,

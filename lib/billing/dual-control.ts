@@ -1,17 +1,25 @@
 /**
- * Dual-control stubs (D09 — Finance APPROVE 7 Nov; Eng still REJECT production).
+ * Dual-control (D09) — Aloke Nov10 locked Finance thresholds.
  *
- * Finance policy:
+ * Policy (Aloke locked 2026-11-10):
  * - Refunds > CAD 500 OR > 1 month of subscription → dual control
  * - Every payout / deposit release → two people
  * - No self-approval
- * - CAD 2,000 / day / approver cap
+ * - CAD 2,000 / day / approver cap (non-weakenable)
  * - Books-exportable audit log
  *
- * Eng Reject: not tamper-resistant / race-safe yet — productionReady stays false.
- * Live money rails remain OFF (synthetic demo). These thresholds gate
- * approval policy even when amounts are simulated.
+ * Eng race/binding/expiry/distinct controls ship in `lib/mcp/dual-control.ts`.
+ * Append-only tamper-resistant ledger strengthening is owned by sibling
+ * CTO Eng priority fixes — stack, do not duplicate WORM here.
+ *
+ * Live money rails remain OFF (synthetic demo). Deposit holding hard OFF.
  */
+
+import {
+  ALOKE_APPROVER_DAILY_CAP_CAD_CENTS,
+  ALOKE_NOV10_LOCKS_VERSION,
+  ALOKE_REFUND_DUAL_CONTROL_CAD_CENTS,
+} from "@/lib/billing/aloke-nov10-locks"
 
 export type DualControlAction =
   | "payout"
@@ -21,13 +29,13 @@ export type DualControlAction =
   | "legal_notice"
   | "other_money"
 
-/** Finance: refunds above CAD 500 (cents). */
-export const DUAL_CONTROL_REFUND_THRESHOLD_CAD_CENTS = 50_000
+/** Aloke Nov10 lock: refunds above CAD 500 (cents). Non-weakenable. */
+export const DUAL_CONTROL_REFUND_THRESHOLD_CAD_CENTS = ALOKE_REFUND_DUAL_CONTROL_CAD_CENTS
 
-/** Finance: per-approver daily cap CAD 2,000 (cents). */
-export const DUAL_CONTROL_APPROVER_DAILY_CAP_CAD_CENTS = 200_000
+/** Aloke Nov10 lock: per-approver daily cap CAD 2,000 (cents). Non-weakenable. */
+export const DUAL_CONTROL_APPROVER_DAILY_CAP_CAD_CENTS = ALOKE_APPROVER_DAILY_CAP_CAD_CENTS
 
-export const DUAL_CONTROL_FINANCE_POLICY_VERSION = "2026-11-07" as const
+export const DUAL_CONTROL_FINANCE_POLICY_VERSION = ALOKE_NOV10_LOCKS_VERSION
 
 export type DualControlDecision = {
   required: boolean
@@ -35,9 +43,24 @@ export type DualControlDecision = {
   thresholdCadCents: number
   amountCadCents: number | null
   labelledDemo: true
-  /** Eng Reject open — Finance Approve does not make this production-ready */
+  /**
+   * Eng dual-control machinery (distinct / binding / expiry / race) is ready
+   * for demo + fail-closed policy. Live money still OFF.
+   */
+  engControlsReady: true
+  /** Live money / WORM ledger — false until sibling CTO append-only + go-live evidence. */
   productionReady: false
+  liveMoneyReady: false
   financePolicyVersion: typeof DUAL_CONTROL_FINANCE_POLICY_VERSION
+  alokeThresholdsLocked: true
+}
+
+function lockedThreshold(requested?: number): number {
+  // Never allow a higher (weaker) threshold than Aloke lock.
+  if (requested == null || !Number.isFinite(requested)) {
+    return DUAL_CONTROL_REFUND_THRESHOLD_CAD_CENTS
+  }
+  return Math.min(Math.floor(requested), DUAL_CONTROL_REFUND_THRESHOLD_CAD_CENTS)
 }
 
 export function requiresDualControl(input: {
@@ -46,11 +69,23 @@ export function requiresDualControl(input: {
   amountCadCents?: number | null
   /** One month of subscription fee in CAD cents (for “> 1 mo sub” rule) */
   oneMonthSubscriptionCadCents?: number | null
+  /** May only tighten (lower) the Aloke-locked CAD 500 threshold. */
   thresholdCadCents?: number
 }): DualControlDecision {
-  const threshold = input.thresholdCadCents ?? DUAL_CONTROL_REFUND_THRESHOLD_CAD_CENTS
+  const threshold = lockedThreshold(input.thresholdCadCents)
   const amount = input.amountCadCents ?? null
   const oneMo = input.oneMonthSubscriptionCadCents ?? null
+
+  const base = {
+    thresholdCadCents: threshold,
+    amountCadCents: amount,
+    labelledDemo: true as const,
+    engControlsReady: true as const,
+    productionReady: false as const,
+    liveMoneyReady: false as const,
+    financePolicyVersion: DUAL_CONTROL_FINANCE_POLICY_VERSION,
+    alokeThresholdsLocked: true as const,
+  }
 
   if (
     input.action === "payout" ||
@@ -60,12 +95,8 @@ export function requiresDualControl(input: {
   ) {
     return {
       required: true,
-      reason: `Action ${input.action} always dual-control (Finance D09)`,
-      thresholdCadCents: threshold,
-      amountCadCents: amount,
-      labelledDemo: true,
-      productionReady: false,
-      financePolicyVersion: DUAL_CONTROL_FINANCE_POLICY_VERSION,
+      reason: `Action ${input.action} always dual-control (Finance D09 / Aloke Nov10)`,
+      ...base,
     }
   }
 
@@ -73,35 +104,23 @@ export function requiresDualControl(input: {
     if (amount != null && amount > threshold) {
       return {
         required: true,
-        reason: `Amount ${amount} CAD cents > threshold ${threshold}`,
-        thresholdCadCents: threshold,
-        amountCadCents: amount,
-        labelledDemo: true,
-        productionReady: false,
-        financePolicyVersion: DUAL_CONTROL_FINANCE_POLICY_VERSION,
+        reason: `Amount ${amount} CAD cents > threshold ${threshold} (Aloke Nov10 lock)`,
+        ...base,
       }
     }
     if (amount != null && oneMo != null && oneMo > 0 && amount > oneMo) {
       return {
         required: true,
-        reason: `Amount ${amount} > one month subscription ${oneMo} CAD cents`,
-        thresholdCadCents: threshold,
-        amountCadCents: amount,
-        labelledDemo: true,
-        productionReady: false,
-        financePolicyVersion: DUAL_CONTROL_FINANCE_POLICY_VERSION,
+        reason: `Amount ${amount} > one month subscription ${oneMo} CAD cents (Aloke Nov10)`,
+        ...base,
       }
     }
   }
 
   return {
     required: false,
-    reason: "Below Finance dual-control thresholds",
-    thresholdCadCents: threshold,
-    amountCadCents: amount,
-    labelledDemo: true,
-    productionReady: false,
-    financePolicyVersion: DUAL_CONTROL_FINANCE_POLICY_VERSION,
+    reason: "Below Aloke-locked Finance dual-control thresholds",
+    ...base,
   }
 }
 
@@ -118,7 +137,7 @@ export function assertDistinctApprover(input: {
   return { ok: true }
 }
 
-/** Remaining headroom under CAD 2k/day/approver (stub). */
+/** Remaining headroom under CAD 2k/day/approver (Aloke Nov10 lock). */
 export function approverDailyHeadroomCadCents(input: {
   alreadyApprovedCadCentsToday: number
 }): number {
@@ -137,10 +156,15 @@ export type DualControlAuditRow = {
   decidedAtIso: string
   decision: "approved" | "rejected"
   exportable: true
+  financePolicyVersion: typeof DUAL_CONTROL_FINANCE_POLICY_VERSION
 }
 
 export function buildDualControlAuditRow(
-  input: Omit<DualControlAuditRow, "exportable">,
+  input: Omit<DualControlAuditRow, "exportable" | "financePolicyVersion">,
 ): DualControlAuditRow {
-  return { ...input, exportable: true }
+  return {
+    ...input,
+    exportable: true,
+    financePolicyVersion: DUAL_CONTROL_FINANCE_POLICY_VERSION,
+  }
 }

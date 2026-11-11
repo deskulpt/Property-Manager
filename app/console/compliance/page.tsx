@@ -56,9 +56,9 @@ export default async function ConsoleCompliancePage() {
   return (
     <div data-testid="console-compliance">
       <PageHeader
-        kicker="Canada focus · Ontario demo/staging · payments OFF"
+        kicker="Canada/Ontario Stripe first demo · India demo only · payments OFF"
         title="Compliance toggles"
-        lede="Demo/staging only. Payments stay OFF until counsel. Money enables need a distinct L0/L1 peer (24h expiry, no self-approval). Kill-switch OFF is instant for any single admin. India money is parked with no enable path. dataResidency is a demo declaration — target vs actual unverified."
+        lede="Demo/staging only — no global go-live. India demo only; production pending documented country/state/feature gates. Money enables need a distinct L0/L1 peer (24h expiry, no self-approval). Kill-switch OFF is instant. Deposit holding hard OFF (Aloke Nov10). Rent collect OFF at launch. Commercial flag OFF until counsel. dataResidency: target vs actual unverified — not a compliance badge."
       />
 
       <section className="mb-8" data-testid="go-live-blockers">

@@ -33,7 +33,15 @@ against the current MCP transport + tenant-bound token model.
 | Demo tokens | Fail-closed in `production` / `HOSTED` unless dual opt-in |
 | Live money | Flags OFF — synthetic demo only |
 
-Full OAuth 2.1 authorization-code + PKCE + protected-resource metadata remains **Pending**.
+Auth-code + PKCE (S256) is implemented behind `EASYRENTAL_MCP_OAUTH_PKCE=1` (default **OFF**).  
+Protected-resource metadata: `GET /.well-known/oauth-protected-resource`.  
+Host UX / certified hosts remain **Pending** — matrix stays zero certified.
+
+**Sibling ownership:** production edge-block of `/api/mcp` is owned by CTO Eng priority fixes — stack, do not duplicate here.
+
+## Aloke Nov10 locks (dual-control / money)
+
+Deposit holding hard OFF · refund dual-control CAD500/1mo + CAD2k/day · landlord-paid % · rent collect OFF at launch · commercial flag OFF · no global go-live.
 
 ## Cannot be toggled off
 

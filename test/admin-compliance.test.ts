@@ -175,9 +175,10 @@ describe("admin compliance console (ER-47 / Aloke Legal+CFO)", () => {
 
   it("exports UTF-8 CSV audit with required columns, hash, and row count", () => {
     ensureLegalFlagOverridesRegistered()
+    // depositHolds is Aloke Nov10 hard-locked — use a non-locked money flag for audit rows.
     adminRequestEnableFlag({
       iso: "CA",
-      key: "depositHolds",
+      key: "ontarioConnectDirectPad",
       actorUserId: "u_export_actor",
     })
     const exported = exportComplianceAuditCsv()

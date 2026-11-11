@@ -10,6 +10,13 @@
  * India money plane is PARKED — do not route rent/Razorpay/Route here.
  */
 
+import {
+  assertDepositHoldingHardOff,
+  assertRentCollectAtLaunchOff,
+  ALOKE_NOV10_LOCKS,
+} from "@/lib/billing/aloke-nov10-locks"
+import { assertCfoHardConnectRentPlan } from "@/lib/billing/cfo-hard-invariants"
+import { deskulptCanadaAppFeeTaxIdentity } from "@/lib/billing/invoice-tax-identity"
 import { isLegalFeatureEnabled } from "@/lib/billing/legal-flags"
 import {
   ONTARIO_CONNECT_FEATURE,
@@ -204,10 +211,46 @@ export function buildCanadaConnectHostedCheckout(
     },
   }
 
+  // Aloke Nov10 + CFO HARD — rent collect OFF at launch; DIRECT only; deposits never Deskulpt.
+  const rentLaunch = assertRentCollectAtLaunchOff(ALOKE_NOV10_LOCKS.rentCollectAtLaunch)
+  const depositHard = assertDepositHoldingHardOff(false)
+  const cfoHard = assertCfoHardConnectRentPlan({
+    chargeType: CANADA_CONNECT_CHECKOUT.chargeType,
+    stripeBody: stripeCheckoutSessionBody as unknown as Record<string, unknown>,
+    rentSettlementAccount: "landlord_connected",
+    depositHeldByDeskulpt: false,
+    taxIdentity: deskulptCanadaAppFeeTaxIdentity({ customerProvinceOrState: "ON" }),
+  })
+  if (!rentLaunch.ok || !depositHard.ok || !cfoHard.ok) {
+    const reason = !rentLaunch.ok
+      ? rentLaunch.error
+      : !depositHard.ok
+        ? depositHard.error
+        : !cfoHard.ok
+          ? cfoHard.error
+          : blockedReason
+    return {
+      ok: true,
+      liveEnabled: false,
+      blockedReason: reason ?? blockedReason,
+      quote,
+      stripeCheckoutSessionBody,
+      stripeAccountHeader: input.connectedAccountId,
+      demoHostedCheckoutUrl: demoHostedUrl(input, quote),
+      sellerLegalName: DESKULPT_CANADA_LEGAL_NAME,
+      gstHstNumber: DESKULPT_CANADA_TAX.gstHstNumber,
+      indiaMoneyParked: true,
+      labelledDemo: true,
+    }
+  }
+
   return {
     ok: true,
-    liveEnabled: false, // hard fail-closed in this slice — even if flag flipped without Legal keys
-    blockedReason,
+    // Aloke Nov10: rent collect OFF at launch — always demo even if Connect flag flipped.
+    liveEnabled: false,
+    blockedReason:
+      blockedReason ??
+      "Aloke Nov10: rent collection OFF at launch — landlord subscriptions only; per-feature evidence required",
     quote,
     stripeCheckoutSessionBody,
     stripeAccountHeader: input.connectedAccountId,

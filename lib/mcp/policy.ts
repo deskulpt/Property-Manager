@@ -5,6 +5,7 @@
  * even when the session carries `execute:preauthorized` (M2 narrow drafts only).
  */
 
+export const MCP_READ_SCOPE = "read:*" as const
 export const MCP_PROPOSE_SCOPE = "propose:*" as const
 export const MCP_EXECUTE_PREAUTH_SCOPE = "execute:preauthorized" as const
 
